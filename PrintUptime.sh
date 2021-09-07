@@ -1,0 +1,2 @@
+uptime -s
+uptime -p
