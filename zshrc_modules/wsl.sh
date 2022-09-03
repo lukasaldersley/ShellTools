@@ -1,5 +1,6 @@
-#!/bin/sh
-echo "Sourcing WSL specifics"
+#!/bin/false
+# shellcheck shell=sh
+echo "Sourcing WSL $WSL_VERSION specifics"
 export DISPLAY=:0
 
 { WinUser=$(cmd.exe /c "echo %USERNAME%"|rev|cut -c2-|rev); } 2> /dev/null
@@ -18,7 +19,7 @@ export WinUser
 
 alias shutdown='{ /mnt/c/Windows/System32/cmd.exe /C shutdown /s /t 00 } 2> /dev/null'
 alias reboot='{ /mnt/c/Windows/System32/cmd.exe /C shutdown /r /t 00 } 2> /dev/null'
-alias hibernate='{ /mnt/c/Windows/System32/cmd.exe /C shutdown /h /t 00 } 2> /dev/null'
+alias hibernate='{ /mnt/c/Windows/System32/cmd.exe /C shutdown /h } 2> /dev/null'
 alias sshSync='rm -rf "/mnt/c/Users/$WinUser/.ssh"; cp -r ~/.ssh "/mnt/c/Users/$WinUser/.ssh"'
 
 _netsh_retrieve_ssid_list () {
