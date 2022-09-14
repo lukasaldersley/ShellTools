@@ -23,12 +23,12 @@
 #### Time Taken for Command Helper functions
 #just declare vars in a script local scope
 local CmdStartTime=""
-local CmdDur="0"
+local CmdDur="0s"
 
 GetTimeStart (){
     #this function is executed via zsh hook on preexec (ie just before the command is actually executed)
     #%s is seconds since UNIX TIME; %3N gives the first three digits of the current Nanoseconds
-    CmdStartTime="$(date +"%s.%1N")"
+    CmdStartTime="$(~/timer-zsh.elf START)"
 }
 
 CalcTimeDiff (){
@@ -36,7 +36,7 @@ CalcTimeDiff (){
     #this function is automatically called via zsh hook on precmd (ie immediatly after the last command execution finishes
     #but before the next prompt is prepared)
     if [ "$CmdStartTime" ]; then
-        CmdDur="$(bc <<<"$(date +"%s.%1N")-$CmdStartTime")"
+        CmdDur="$(~/timer-zsh.elf STOP $CmdStartTime)"
         CmdStartTime=""
     fi
     #passion theme had another if [ "${#CmdDur}" = "2" ]; then CmdDur="0$CmdDur" fi to make sure to have 0.X and not just .X for sub 1 second commands
@@ -80,6 +80,28 @@ function GetGitRemoteInformation (){
     fi
 }
 
+#adapted from various answers from https://stackoverflow.com/questions/44544385/how-to-find-primary-ip-address-on-my-linux-machine (the double grep)
+#and https://unix.stackexchange.com/questions/14961/how-to-find-out-which-interface-am-i-using-for-connecting-to-the-internet (the bit about ip route ls |grep defult (the sed is my own work))
+#another way would be to cause a dns lookup like so and grep that ip route get 8.8.8.8
+function GetLocalIP (){
+    IpAddrList=""
+    for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices for any 'default routes'
+    do
+        #lookup the IP for those devices
+        #the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
+        isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
+        if [ "$isupstate" ]; then
+            IpAddrList="$IpAddrList $i:$isupstate"
+        fi
+    done
+
+    if [ ! "$IpAddrList" ]; then
+        IpAddrList=" NC"
+    fi
+
+    echo "$IpAddrList"|cut -c2- #bin the first space
+}
+
 local user_at_host="%F{010}%n%F{007}@%F{033}%m:/dev/%y%f"               # 'user@host:/dev/terminaldevice'
 local WorkingDirectory='%F{cyan}%B%c%b%f'                           # 'directory'
 
@@ -88,6 +110,6 @@ ZSH_THEME_GIT_PROMPT_PREFIX="%F{001}git:(%F{009}"
 ZSH_THEME_GIT_PROMPT_SUFFIX="%f "
 ZSH_THEME_GIT_PROMPT_DIRTY="%F{001}) %F{011}\u2573"
 ZSH_THEME_GIT_PROMPT_CLEAN="%F{001})"
-PROMPT='${user_at_host} $(git_prompt_info)$(GetGitRemoteInformation)$WorkingDirectory %B%(?:%F{green}:%F{red})[${CmdDur}s:%?]➜%f%b '
+PROMPT='${user_at_host} $(git_prompt_info)$(GetGitRemoteInformation)$WorkingDirectory %B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b '
 RPROMPT='%*$(GetBackgroundTaskInfo) $(GetLocalIP)'
 echo "SetupDone"
