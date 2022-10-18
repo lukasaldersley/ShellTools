@@ -1,7 +1,13 @@
 #!/bin/false
-# shellcheck shell=sh
+# shellcheck shell=bash
 echo "Sourcing WSL $WSL_VERSION specifics"
-export DISPLAY=:0
+export DISPLAY=localhost:0.0
+
+function SetupRemoteX11 (){
+	echo "On the remote server you might need to install the following and reboot: xauth"
+	sudo apt install xauth
+	xauth generate :0 . trusted
+}
 
 { WinUser=$(cmd.exe /c "echo %USERNAME%"|rev|cut -c2-|rev); } 2> /dev/null
 export WinUser
@@ -23,35 +29,29 @@ alias hibernate='{ /mnt/c/Windows/System32/cmd.exe /C shutdown /h } 2> /dev/null
 alias sshSync='rm -rf "/mnt/c/Users/$WinUser/.ssh"; cp -r ~/.ssh "/mnt/c/Users/$WinUser/.ssh"'
 
 _netsh_retrieve_ssid_list () {
-   netsh.exe wlan show profiles | grep ":" | cut -d':' -f2 | cut -c2-
+	netsh.exe wlan show profiles | grep ":" | cut -d':' -f2 | cut -c2-
 }
 
 _netsh_get_password_for_known_ssid () {
-   #cat -A <<<"$1" #for debugging purposes to print ALL characters, especially invisible ones
-   netsh.exe wlan show profile name="$1" key=clear | grep 'Schlüsselinhalt' | cut -d':' -f2 | cut -c2-
+	#cat -A <<<"$1" #for debugging purposes to print ALL characters, especially invisible ones
+	netsh.exe wlan show profile name="$1" key=clear | grep 'Schlüsselinhalt' | cut -d':' -f2 | cut -c2-
 }
 
 lswlanpw () {
-   _netsh_retrieve_ssid_list | tail -n +2 | while read -r ssid ; do
-      ssid=${ssid%?} # trim newline
-      passwd=$(_netsh_get_password_for_known_ssid "$ssid") #call function and capture stdout to variable
-      echo "$ssid -> $passwd"
-   done
+	_netsh_retrieve_ssid_list | tail -n +2 | while read -r ssid ; do
+		ssid=${ssid%?} # trim newline
+		passwd=$(_netsh_get_password_for_known_ssid "$ssid") #call function and capture stdout to variable
+		echo "$ssid -> $passwd"
+	done
 }
 
 alias lswifipw=lswlanpw
 
 #Windows shorthands
-alias vs19="\"/mnt/c/Program Files (x86)/Microsoft Visual Studio/2019/Community/Common7/IDE/devenv.exe\""
-alias vs22="\"/mnt/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/devenv.exe\""
-alias VS19=vs19
-alias VS22=vs22
-alias vs=vs22
-alias VS=vs
-
 alias npp="\"/mnt/c/Program Files (x86)/Notepad++/Notepad++.exe\""
 
 alias desk='/mnt/c/Users/$WinUser/Desktop'
 alias winHome='/mnt/c/Users/$WinUser'
 alias home=winHome
 alias dt=desk
+alias dl=down

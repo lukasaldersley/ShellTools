@@ -17,9 +17,9 @@
 #this is a command that's EXPECTED to fail every time this is run on a non-WSL installation, so the stderr redirect and masking of the return code are intentional
 { WSL_VERSION="$(/mnt/c/Windows/System32/wsl.exe -l -v | iconv -f unicode|grep -E "\b$WSL_DISTRO_NAME\s+Running" | awk '{print $NF}' | cut -c-1)"; } 2> /dev/null || true
 if [ -z "$WSL_VERSION" ]; then
-    echo "native -> don't source WSL"
+	echo "native -> don't source WSL"
 else
-    export WSL_VERSION
-    # shellcheck source=./wsl.sh
-    . "$CODE_LOC/ZSH/wsl.sh"
+	export WSL_VERSION
+	# shellcheck source=./wsl.sh
+	. "$CODE_LOC/ZSH/wsl.sh"
 fi
