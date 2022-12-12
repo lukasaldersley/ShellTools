@@ -59,8 +59,28 @@ function enableProxy(){
 	fi
 }
 
+function SetGitBase(){
+	if [ -z "$1" ]; then
+		echo "You MUST supply th NAME of the desired repo acces type (currently none, internal, local, global)"
+		echo "such as 'SetGitBase general' or 'SetGitBase none /path/to/repo'"
+		return
+	fi
+	ActionBase="${2:-"$CODE_LOC"}"
+	echo "setting $ActionBase and all submodules to $1"
+	pushd "$ActionBase" || exit
+	git submodule status --recursive | sed -n 's|.[0-9a-fA-F]\+ \([^ ]\+\)\( .*\)\?|\1|p' | ~/repotools.elf "$ActionBase" SET "$1"
+	popd || return
+}
+
+function lsRepo(){
+	ActionBase="${1:-"$(pwd)"}"
+	pushd "$ActionBase" || exit
+	~/repotools.elf "$ActionBase" SHOW
+	popd || return
+}
+
 function disableProxy(){
-	unset {http,https,ftp}_proxy
+	unset {http,https,ftp,no}_proxy
 	echo "">/etc/apt/apt.conf.d/proxy
 	echo "disabled proxy"
 }

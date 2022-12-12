@@ -32,17 +32,14 @@ GetTimeStart (){
 }
 
 GetProxyInfo(){
-	#{http,https,ftp}_proxy: are they set?
-	#/etc/apt/apt.conf.d/proxy is HTTPS::proxy and HTTP::proxy present?
-	#possible: All active http(s), apt_Http(s), ftp, no_proxy set
-	#jeweils state: off, http, https, both
-	#OFF: white, http: red, https: orange, both: green
 	local PROXY_STATE_RES
 	if [ -r /etc/apt/apt.conf.d/proxy ]; then
 		local apt_proxy_state_http
 		local apt_proxy_state_https
-		apt_proxy_state_http=$(cat /etc/apt/apt.conf.d/proxy|grep 'HTTP::proxy')
-		apt_proxy_state_https=$(cat /etc/apt/apt.conf.d/proxy|grep 'HTTPS::proxy')
+		local valthing
+        valthing=$(tr -d '\n' < /etc/apt/apt.conf.d/proxy)
+		apt_proxy_state_http=$(echo "$valthing"  | grep -G 'Acquire.*{.*HTTP::proxy.*;}')
+		apt_proxy_state_https=$(echo "$valthing" | grep -G 'Acquire.*{.*HTTPS::proxy.*;}')
 		if [ "$apt_proxy_state_http" ]; then
 			if [ "$apt_proxy_state_https" ]; then
 				PROXY_STATE_RES="$PROXY_STATE_RES%F{green}A%f" #both
@@ -134,21 +131,22 @@ function GetGitRemoteInformation (){
 	#at the moment port isn't implemented
 	#if it's not a repo, do nothing
 	#local repoinfo="$(git remote -v|head -1|sed 's~^.*\([ssh|http.]\?\).*@\([a-zA-Z0-9\.\-\_]*\).*$~\1:\2~')"
-	local fulltextremote
-	fulltextremote="$(git ls-remote --get-url origin)"
+	##local fulltextremote
+	##fulltextremote="$(~/repotools.elf "$(git ls-remote --get-url origin)" "$(pwd)")"
 	if [ "$fulltextremote" != 'origin' ]; then
-		local localrepos
-		# this used to work, but an update to realpath broke it, since realpath started to spit out something that's neither an URI nor a direct path
-		#localrepos="$(realpath -q -s --relative-to="$(pwd)" "$fulltextremote")" 
-		#the grep -v is to remove the contents of fulltextremote if it starts with something://, the final "" is there as a kind of default value for realpath since realpath complains about missing argument if grep fully removes the fulltextremote
-		# a remote of git@127.0.0.1:/data/repos/somerepo (as seen in fulltextremote) breaks
-		#if I have something of the type of user@host or user@url -> prepend ssh://
-		localrepos="$(realpath -q -s --relative-to="$(pwd)" "$( echo "$fulltextremote" | grep -v ".\+://")" "")"
-		local remoteRepos
-		remoteRepos="$(sed -n 's|^\([a-zA-Z0-9]\+\)://\([a-zA-Z0-9]\+@\)\?\([a-zA-Z0-9._\-]\+\).*$|\1:\3|p' <<< "$fulltextremote")"
-		local repoName
-		repoName="$(echo "$fulltextremote" | rev | cut -f 1 -d '/' | rev)"
-		echo "%F{009}$repoName %F{001}from %F{009}$localrepos$remoteRepos %f"
+	##	local localrepos
+	##	# this used to work, but an update to realpath broke it, since realpath started to spit out something that's neither an URI nor a direct path
+	##	#localrepos="$(realpath -q -s --relative-to="$(pwd)" "$fulltextremote")" 
+	##	#the grep -v is to remove the contents of fulltextremote if it starts with something://, the final "" is there as a kind of default value for realpath since realpath complains about missing argument if grep fully removes the fulltextremote
+	##	# a remote of git@127.0.0.1:/data/repos/somerepo (as seen in fulltextremote) breaks
+	##	#if I have something of the type of user@host or user@url -> prepend ssh://
+	##	localrepos="$(realpath -q -s --relative-to="$(pwd)" "$( echo "$fulltextremote" | grep -v ".\+://")" "")"
+	##	local remoteRepos
+	##	remoteRepos="$(sed -n 's|^\([a-zA-Z0-9]\+\)://\([a-zA-Z0-9]\+@\)\?\([a-zA-Z0-9._\-]\+\).*$|\1:\3|p' <<< "$fulltextremote")"
+	##	local repoName
+	##	repoName="$(echo "$fulltextremote" | rev | cut -f 1 -d '/' | rev)"
+	##	echo "%F{009}$repoName %F{001}from %F{009}$localrepos$remoteRepos %f"
+	echo "$(~/repotools.elf "$(git ls-remote --get-url origin)")"
 	else
 		echo ""
 	fi
