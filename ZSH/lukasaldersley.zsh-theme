@@ -20,17 +20,6 @@
 #conditional: the seperator doesn't need to be . it is arbitrary
 
 
-#### Time Taken for Command Helper functions
-#just declare vars in a script local scope
-local CmdStartTime=""
-local CmdDur="0s"
-
-GetTimeStart (){
-	#this function is executed via zsh hook on preexec (ie just before the command is actually executed)
-	#%s is seconds since UNIX TIME; %3N gives the first three digits of the current Nanoseconds
-	CmdStartTime="$(~/timer-zsh.elf START)"
-}
-
 GetProxyInfo(){
 	local PROXY_STATE_RES
 	if [ -r /etc/apt/apt.conf.d/proxy ]; then
@@ -77,6 +66,17 @@ GetProxyInfo(){
 	fi
 }
 
+#### Time Taken for Command Helper functions
+#just declare vars in a script local scope
+local CmdStartTime=""
+local CmdDur="0s"
+
+GetTimeStart (){
+	#this function is executed via zsh hook on preexec (ie just before the command is actually executed)
+	#%s is seconds since UNIX TIME; %3N gives the first three digits of the current Nanoseconds
+	CmdStartTime="$(~/timer-zsh.elf START)"
+}
+
 CalcTimeDiff (){
 	#this function takes the previously stored start time and calculates the time difference to now
 	#this function is automatically called via zsh hook on precmd (ie immediatly after the last command execution finishes
@@ -88,6 +88,7 @@ CalcTimeDiff (){
 	#passion theme had another if [ "${#CmdDur}" = "2" ]; then CmdDur="0$CmdDur" fi to make sure to have 0.X and not just .X for sub 1 second commands
 	#echo "$CmdDur"
 }
+
 setopt prompt_subst # das wird von oh-my-zsh ohnehin gesetzt, es schadet aber nicht
 #die funktion hiervon ist dass prompt substitution überhaupt geht und der promprt nicht ein vorher definierter statischer string ist
 autoload -Uz add-zsh-hook # load add-zsh-hook with zsh (-z) and suppress aliases (-U)
@@ -136,7 +137,7 @@ function GetGitRemoteInformation (){
 	if [ "$fulltextremote" != 'origin' ]; then
 	##	local localrepos
 	##	# this used to work, but an update to realpath broke it, since realpath started to spit out something that's neither an URI nor a direct path
-	##	#localrepos="$(realpath -q -s --relative-to="$(pwd)" "$fulltextremote")" 
+	##	#localrepos="$(realpath -q -s --relative-to="$(pwd)" "$fulltextremote")"
 	##	#the grep -v is to remove the contents of fulltextremote if it starts with something://, the final "" is there as a kind of default value for realpath since realpath complains about missing argument if grep fully removes the fulltextremote
 	##	# a remote of git@127.0.0.1:/data/repos/somerepo (as seen in fulltextremote) breaks
 	##	#if I have something of the type of user@host or user@url -> prepend ssh://
@@ -159,6 +160,8 @@ function GetLocalIP (){
 	IpAddrList=""
 	for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices for any 'default routes'
 	do
+		#TODO possibly display metric (lower is better) or mark lowest metric route with a star
+		#TODO find out what metrics I get if a system has two valid conns (eg serenity)
 		#lookup the IP for those devices
 		#the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
 		isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
@@ -174,7 +177,7 @@ function GetLocalIP (){
 	echo "$IpAddrList"|cut -c2- #bin the first space
 }
 
-#/sys/class/power_supply/battery/status Discharging/Full/Charging -> 
+#/sys/class/power_supply/battery/status Discharging/Full/Charging ->
 #/sys/class/power_supply/battery/capacity Percentage
 #↯≻▽▲
 #possibly, depending on the system it'd be BAT0 or BAT1 instead of battery

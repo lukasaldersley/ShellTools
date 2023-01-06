@@ -21,11 +21,17 @@ alias gitlog="git log --branches --remotes --tags --graph --oneline --decorate -
 alias qqq=exit
 alias dotnet=~/.dotnet/dotnet
 
+alias lscolour='echo -e "\e[30m30 \e[90m90 \e[31m31 \e[91m91 \e[32m32 \e[92m92 \e[33m33 \e[93m93 \e[34m34 \e[94m94 \e[35m35 \e[95m95 \e[36m36 \e[96m96 \e[37m37 \e[97m97  \e[40m40 \e[100m100 \e[41m41 \e[101m101 \e[42m42 \e[102m102 \e[43m43 \e[103m103 \e[44m44 \e[104m104 \e[45m45 \e[105m105 \e[46m46 \e[106m106 \e[47m47 \e[107m107"'
+alias ansicolour=lscolour
+alias ansicolor=ansicolour
+alias lscolor=lscolour
+
 function UpdateZSH (){
 	pushd "$CODE_LOC" || return
 	git pull
 	#compile all c files in the folder ZSH using the self-compile trick
 	find "$CODE_LOC/ZSH" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
+	find "$CODE_LOC/ZSH" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
 	if [ -w ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme ]; then #if file exists and write permission is granted
 		rm ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
 	fi
@@ -67,17 +73,35 @@ function SetGitBase(){
 	fi
 	ActionBase="${2:-"$CODE_LOC"}"
 	echo "setting $ActionBase and all submodules to $1"
-	pushd "$ActionBase" || exit
+	local needDirChange=false
+	if [ "$(pwd)" != "$ActionBase" ]; then
+		needDirChange=true
+		#only push if I'm not already at the destination
+		pushd "$ActionBase" || return
+	fi
 	git submodule status --recursive | sed -n 's|.[0-9a-fA-F]\+ \([^ ]\+\)\( .*\)\?|\1|p' | ~/repotools.elf "$ActionBase" SET "$1"
-	popd || return
+	if [ $needDirChange ]; then
+		popd || return
+	fi
 }
 
 function lsRepo(){
 	ActionBase="${1:-"$(pwd)"}"
-	pushd "$ActionBase" || exit
+	if [ -n "$1" ]; then
+		#if I called this without param -> no dir change necessary -> skip -> only call this if $1 is nonzero in length
+		pushd "$ActionBase" || exit
+	fi
 	~/repotools.elf "$ActionBase" SHOW
-	popd || return
+	if [ -n "$1" ]; then
+		popd || return
+	fi
 }
+
+alias lsgit=lsRepo
+alias lsrepo=lsRepo
+alias lsGit=lsRepo
+
+alias lsorigin="~/repotools.elf LIST ORIGINS"
 
 function disableProxy(){
 	unset {http,https,ftp,no}_proxy

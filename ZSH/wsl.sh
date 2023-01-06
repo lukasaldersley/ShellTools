@@ -9,6 +9,11 @@ function SetupRemoteX11 (){
 	xauth generate :0 . trusted
 }
 
+function SSHServer(){
+	sudo service ssh --full-restart
+}
+alias StartSSH=SSHServer
+
 { WinUser=$(cmd.exe /c "echo %USERNAME%"|rev|cut -c2-|rev); } 2> /dev/null
 export WinUser
 #the whole crap about |rev|cut -c2-|rev is to remove the \r\n Windows' echo adds
@@ -26,18 +31,42 @@ export WinUser
 alias shutdown='{ /mnt/c/Windows/System32/cmd.exe /C shutdown /s /t 00 } 2> /dev/null'
 alias reboot='{ /mnt/c/Windows/System32/cmd.exe /C shutdown /r /t 00 } 2> /dev/null'
 alias hibernate='{ /mnt/c/Windows/System32/cmd.exe /C shutdown /h } 2> /dev/null'
-alias sshSync='rm -rf "/mnt/c/Users/$WinUser/.ssh"; cp -r ~/.ssh "/mnt/c/Users/$WinUser/.ssh"'
 
-_netsh_retrieve_ssid_list () {
+function sshSync_int(){
+	if [ ! -e "$1" ] || [ -z "$(ls "$1")" ]; then
+		echo "ssh folder didn't exist on $1 or was empty"
+		mkdir -p "$1"
+		return
+	fi
+	for f in "$1"/*
+	do
+		otherfile="$2/$(basename "$f")"
+		if [ ! -e "$otherfile" ] || [ "$f" -nt "$otherfile" ]; then
+			#echo "$f exists in $1 but not in $2 or is newer in $1"
+			cp "$f" "$otherfile"
+		fi
+	done
+}
+
+function sshSync(){
+	sshSync_int "/mnt/c/Users/$WinUser/.ssh/" "$HOME/.ssh/"
+	sshSync_int "$HOME/.ssh/" "/mnt/c/Users/$WinUser/.ssh/"
+}
+alias SyncSSH=sshSync
+alias syncssh=sshSync
+alias sshsync=sshSync
+alias SSHSync=sshSync
+
+function _netsh_retrieve_ssid_list () {
 	netsh.exe wlan show profiles | grep ":" | cut -d':' -f2 | cut -c2-
 }
 
-_netsh_get_password_for_known_ssid () {
+function _netsh_get_password_for_known_ssid () {
 	#cat -A <<<"$1" #for debugging purposes to print ALL characters, especially invisible ones
-	netsh.exe wlan show profile name="$1" key=clear | grep 'Schlüsselinhalt' | cut -d':' -f2 | cut -c2-
+	netsh.exe wlan show profile name="$1" key=clear | grep 'Schlüsselinhalt\|Key Content' | cut -d':' -f2 | cut -c2-
 }
 
-lswlanpw () {
+function lswlanpw () {
 	_netsh_retrieve_ssid_list | tail -n +2 | while read -r ssid ; do
 		ssid=${ssid%?} # trim newline
 		passwd=$(_netsh_get_password_for_known_ssid "$ssid") #call function and capture stdout to variable
@@ -46,6 +75,34 @@ lswlanpw () {
 }
 
 alias lswifipw=lswlanpw
+
+function mountWinDrive(){
+	local DriveLetter
+	DriveLetter=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+	if [ ! "$DriveLetter" ]; then
+		echo "Please provide Windows Drive Letter like: mountWinDrive E"
+		return 255
+	fi
+	echo "attempting to mount Windows Drive $1:\\ to /mnt/$DriveLetter"
+	#check if /mnt/DriveLetter doesn't exist or if it's empty, if there is something, abort with error
+	if [ -d "/mnt/$DriveLetter" ]; then
+		if [ "$(ls -A /mnt/"$DriveLetter")" ]; then
+			echo "ERROR: cannot mount to /mnt/$DriveLetter: not empty"
+			return 255
+		fi
+	else
+		echo "creating directory /mnt/$DriveLetter"
+		sudo mkdir "/mnt/$DriveLetter"
+	fi
+	sudo mount -t drvfs "$1": "/mnt/$DriveLetter"
+	local retcode="$?"
+	if [ "$retcode" -ne 0 ]; then
+		echo "mount failed (code $retcode)"
+		return $retcode
+	fi
+
+	echo "mounted the $1:\\ drive to /mnt/$DriveLetter"
+}
 
 #Windows shorthands
 alias npp="\"/mnt/c/Program Files (x86)/Notepad++/Notepad++.exe\""
