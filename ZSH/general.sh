@@ -27,8 +27,7 @@ alias ansicolor=ansicolour
 alias lscolor=lscolour
 
 function UpdateZSH (){
-	pushd "$CODE_LOC" || return
-	git pull
+	git -C "$CODE_LOC" pull
 	#compile all c files in the folder ZSH using the self-compile trick
 	find "$CODE_LOC/ZSH" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
 	find "$CODE_LOC/ZSH" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
@@ -36,7 +35,6 @@ function UpdateZSH (){
 		rm ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
 	fi
 	cp "$CODE_LOC/ZSH/lukasaldersley.zsh-theme" ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
-	popd || return
 	omz reload
 }
 
@@ -71,30 +69,11 @@ function SetGitBase(){
 		echo "such as 'SetGitBase general' or 'SetGitBase none /path/to/repo'"
 		return
 	fi
-	ActionBase="${2:-"$CODE_LOC"}"
-	echo "setting $ActionBase and all submodules to $1"
-	local needDirChange=false
-	if [ "$(pwd)" != "$ActionBase" ]; then
-		needDirChange=true
-		#only push if I'm not already at the destination
-		pushd "$ActionBase" || return
-	fi
-	git submodule status --recursive | sed -n 's|.[0-9a-fA-F]\+ \([^ ]\+\)\( .*\)\?|\1|p' | ~/repotools.elf "$ActionBase" SET "$1"
-	if [ $needDirChange ]; then
-		popd || return
-	fi
+	 ~/repotools.elf "${2:-"~CODE"}" SET "$1"
 }
 
 function lsRepo(){
-	ActionBase="${1:-"$(pwd)"}"
-	if [ -n "$1" ]; then
-		#if I called this without param -> no dir change necessary -> skip -> only call this if $1 is nonzero in length
-		pushd "$ActionBase" || exit
-	fi
-	~/repotools.elf "$ActionBase" SHOW
-	if [ -n "$1" ]; then
-		popd || return
-	fi
+	~/repotools.elf "${1:-"$(pwd)"}" SHOW
 }
 
 alias lsgit=lsRepo

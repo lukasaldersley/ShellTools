@@ -1,6 +1,7 @@
 #/*
-echo "compiling $0 into ~/timer-zsh.elf"
-gcc -std=c2x "$0" -o ~/timer-zsh.elf
+printf "compiling $0 into ~/timer-zsh.elf"
+gcc -std=c2x -Wall "$0" -o ~/timer-zsh.elf
+printf " -> \e[32mDONE\e[0m($?)\n"
 exit
 (basename $0 .c) would be used to get the name of file without the .c extension
 */

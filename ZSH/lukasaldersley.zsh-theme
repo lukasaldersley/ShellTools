@@ -97,8 +97,6 @@ add-zsh-hook preexec GetTimeStart
 add-zsh-hook precmd CalcTimeDiff
 #### End Time Taken for Command Helper Functions
 
-
-
 function GetBackgroundTaskInfo (){
 	#this calls `jobs` and uses `sed` to un following regex: ^\[(\d+)\]\s+([+|-]?)\s*(\w).+$
 	#(basically takes the number in square brackets, an optional + or - and the first letter of the status as capture groups and prints them in the order 1 3 2)
@@ -112,46 +110,23 @@ function GetBackgroundTaskInfo (){
 	fi
 }
 
-function GetGitRemoteInformation (){
-	#git://github.com/something/REPO                -> REPO from git:github.com
-	#http://www.github.com/something/REPO           -> REPO from http:github.com
-	#ssh://git@someurl.de:1234/path/REPO     -> REPO from ssh:git@someurl.de:1234
-	#ssh://git@some-url.de:1234/path/REPO    -> REPO from ssh:git@some-url.de:1234
-	#ssh://git@some_url.de:1234/path/REPO    -> REPO from ssh:git@some_url.de:1234
-	#git@127.0.0.1:/path/REPO                   -> REPO from ssh:git@127.0.0.1
-	#git@27.0.0.1/path/REPO                    -> REPO from ssh:git@127.0.0.1
-	#/data/repos/REPO                               -> REPO from /data/repos
-	#../../REPO                                     -> REOP from ../../
+#function GetGitRemoteInformation (){
+#	#git://github.com/something/REPO                -> REPO from git:github.com
+#	#http://www.github.com/something/REPO           -> REPO from http:github.com
+#	#ssh://git@someurl.de:1234/path/REPO     -> REPO from ssh:git@someurl.de:1234
+#	#ssh://git@some-url.de:1234/path/REPO    -> REPO from ssh:git@some-url.de:1234
+#	#ssh://git@some_url.de:1234/path/REPO    -> REPO from ssh:git@some_url.de:1234
+#	#git@127.0.0.1:/path/REPO                   -> REPO from ssh:git@127.0.0.1
+#	#git@127.0.0.1/path/REPO                    -> REPO from ssh:git@127.0.0.1
+#	#/data/repos/REPO                               -> REPO from /data/repos
+#	#../../REPO                                     -> REPO from ../../
 
-	#if it contains @ but not //, prepend "ssh://"
-	# a remote url can be done like:    (?<proto>\w+?)://(?:www.)?(?<username>\w+@)?(?<host>[0-9a-zA-Z\.\-_]+):?(?<port>:\d*)?(?:/\S+)*/(?<repo>\S+)       replace with        ${repo} from ${proto}:${username}${host}${port}
-	#but note: don't use / as a seperator, ~ is a better idea.
-	#if not, it's local
+#	#if it contains @ but not //, prepend "ssh://"
+#	# a remote url can be done like:    (?<proto>\w+?)://(?:www.)?(?<username>\w+@)?(?<host>[0-9a-zA-Z\.\-_]+):?(?<port>:\d*)?(?:/\S+)*/(?<repo>\S+)       replace with        ${repo} from ${proto}:${username}${host}${port}
+#	#but note: don't use / as a seperator, ~ is a better idea.
 
-	#I want to have the info: 1.Protocol (ssh/local/git)  2a.(if local, path [abs or rel])  2b.(if remote, host/IP+port)
-	#at the moment port isn't implemented
-	#if it's not a repo, do nothing
-	#local repoinfo="$(git remote -v|head -1|sed 's~^.*\([ssh|http.]\?\).*@\([a-zA-Z0-9\.\-\_]*\).*$~\1:\2~')"
-	##local fulltextremote
-	##fulltextremote="$(~/repotools.elf "$(git ls-remote --get-url origin)" "$(pwd)")"
-	if [ "$fulltextremote" != 'origin' ]; then
-	##	local localrepos
-	##	# this used to work, but an update to realpath broke it, since realpath started to spit out something that's neither an URI nor a direct path
-	##	#localrepos="$(realpath -q -s --relative-to="$(pwd)" "$fulltextremote")"
-	##	#the grep -v is to remove the contents of fulltextremote if it starts with something://, the final "" is there as a kind of default value for realpath since realpath complains about missing argument if grep fully removes the fulltextremote
-	##	# a remote of git@127.0.0.1:/data/repos/somerepo (as seen in fulltextremote) breaks
-	##	#if I have something of the type of user@host or user@url -> prepend ssh://
-	##	localrepos="$(realpath -q -s --relative-to="$(pwd)" "$( echo "$fulltextremote" | grep -v ".\+://")" "")"
-	##	local remoteRepos
-	##	remoteRepos="$(sed -n 's|^\([a-zA-Z0-9]\+\)://\([a-zA-Z0-9]\+@\)\?\([a-zA-Z0-9._\-]\+\).*$|\1:\3|p' <<< "$fulltextremote")"
-	##	local repoName
-	##	repoName="$(echo "$fulltextremote" | rev | cut -f 1 -d '/' | rev)"
-	##	echo "%F{009}$repoName %F{001}from %F{009}$localrepos$remoteRepos %f"
-	echo "$(~/repotools.elf "$(git ls-remote --get-url origin)")"
-	else
-		echo ""
-	fi
-}
+#	echo "$(~/repotools.elf "$(git ls-remote --get-url origin)")"
+#}
 
 #adapted from various answers from https://stackoverflow.com/questions/44544385/how-to-find-primary-ip-address-on-my-linux-machine (the double grep)
 #and https://unix.stackexchange.com/questions/14961/how-to-find-out-which-interface-am-i-using-for-connecting-to-the-internet (the bit about ip route ls |grep defult (the sed is my own work))
@@ -161,7 +136,8 @@ function GetLocalIP (){
 	for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices for any 'default routes'
 	do
 		#TODO possibly display metric (lower is better) or mark lowest metric route with a star
-		#TODO find out what metrics I get if a system has two valid conns (eg serenity)
+		#TODO find out what metrics I get if a system has two valid conns (eg serenity) -> both connections (provided they are on the same network have the same metric (wsl:0; win:35), this holds true even in windows (cmd: route print))
+		#I tested conecting to mobile hostpot while also on enternet->result: in wsl both have metric 0, whereas in windows the wifi from mobile tethering had metric 50 while ethernet remained at 35
 		#lookup the IP for those devices
 		#the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
 		isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
@@ -223,10 +199,11 @@ local user_at_host="%F{010}%n%F{007}@%F{033}%m:/dev/%y%f" # 'user@host:/dev/term
 local WorkingDirectory='%F{cyan}%B%c%b%f' # 'directory'
 
 #$(git_prompt_info) is built as follows: PREFIX+branch+[DIRTY|CLEAN]+SUFFIX  //Dirty/Clean je nachdem was zutrifft (there's also extra stuff in OhMyZsh)
-ZSH_THEME_GIT_PROMPT_PREFIX="%F{001}git:(%F{009}"
+#before the colour change this was ZSH_THEME_GIT_PROMPT_PREFIX="%F{001}git:(%F{009}"
+ZSH_THEME_GIT_PROMPT_PREFIX="%F{001}git:(%F{003}"
 ZSH_THEME_GIT_PROMPT_SUFFIX="%f "
 ZSH_THEME_GIT_PROMPT_DIRTY="%F{001}) %F{011}\u2573"
 ZSH_THEME_GIT_PROMPT_CLEAN="%F{001})"
-PROMPT='${user_at_host} $(git_prompt_info)$(GetGitRemoteInformation)$WorkingDirectory %B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b '
+PROMPT='${user_at_host} $(git_prompt_info)$(~/repotools.elf "$(pwd)")$WorkingDirectory %B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b '
 RPROMPT='%D{%T UTC%z (%Z)}$(GetBackgroundTaskInfo) $(GetProxyInfo)$(GetLocalIP)$(PowerState)'
 echo "SetupDone"
