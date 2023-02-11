@@ -34,6 +34,7 @@ function UpdateZSH (){
 	if [ -w ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme ]; then #if file exists and write permission is granted
 		rm ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
 	fi
+	echo "copying $CODE_LOC/ZSH/lukasaldersley.zsh-theme to  ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme"
 	cp "$CODE_LOC/ZSH/lukasaldersley.zsh-theme" ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
 	omz reload
 }
@@ -64,16 +65,11 @@ function enableProxy(){
 }
 
 function SetGitBase(){
-	if [ -z "$1" ]; then
-		echo "You MUST supply th NAME of the desired repo acces type (currently none, internal, local, global)"
-		echo "such as 'SetGitBase general' or 'SetGitBase none /path/to/repo'"
-		return
-	fi
-	 ~/repotools.elf "${2:-"~CODE"}" SET "$1"
+	 ~/repotools.elf SET "${2:-"~CODE"}" "${1:-"NONE"}" "${3:-"QUICK"}"
 }
 
 function lsRepo(){
-	~/repotools.elf "${1:-"$(pwd)"}" SHOW
+	~/repotools.elf SHOW "${1:-"$(pwd)"}" "${2:-"QUICK"}"
 }
 
 alias lsgit=lsRepo

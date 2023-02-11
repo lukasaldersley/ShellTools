@@ -12,13 +12,89 @@
 #the same applies to Background colours, just use BG/bg instead of FG/fg
 #there is a shorthand for both: %F{...} for text(foreground) colour and %K{...} for background (same for text and number, no more case difference)
 #to reset a colour back to default use %{$reset_color%} (restets both text and background) or the shorthand of %f for text and %k for background
-#\u2718 is errorX (like for unclean git)
 #prompt variables: %n -> current user   |   %0 -> pwd   %1 -> current dir   %2 -> current dir + parent dir etc. (if used wth a ~ eg %0~ it'd abbreviate paths with ~)
 #%T gives time as hh:mm   %* gives time as hh:mm:ss   %D{...} is custom strftime format
 #%? returns status code of last command
 #conditional syntax: %(TestChar.TrueVal.FalseVal) (for testChar doc see https://zsh.sourceforge.io/Doc/Release/Prompt-Expansion.html#Conditional-Substrings-in-Prompts)
 #conditional: the seperator doesn't need to be . it is arbitrary
 
+
+ #das wird von oh-my-zsh ohnehin gesetzt, es schadet aber nicht
+ #die funktion hiervon ist dass prompt substitution überhaupt geht und der promprt nicht ein vorher definierter statischer string ist
+setopt prompt_subst
+setopt PROMPT_SUBST
+#das autoload hier bedeutet, dass zur runtime eine funktion namens add-zsh-hook existieren wird, aber jetzt noch nicht bekannt ist von wo.
+#in diesem skript kann dann add-zsh-hook verwendet werden auch wenn es erst at runtime existiert
+#https://stackoverflow.com/questions/30840651/what-does-autoload-do-in-zsh
+autoload -Uz add-zsh-hook # load add-zsh-hook with zsh (-z) and suppress aliases (-U)
+
+#### Time Taken for Command Helper functions
+#just declare vars in a script local scope
+local CmdStartTime=""
+local CmdDur="0s"
+
+GetTimeStart (){
+	#this function is executed via zsh hook on preexec (ie just before the command is actually executed)
+	#%s is seconds since UNIX TIME; %3N gives the first three digits of the current Nanoseconds
+	CmdStartTime="$(~/timer-zsh.elf START)"
+}
+
+CalcTimeDiff (){
+	#this function takes the previously stored start time and calculates the time difference to now
+	#this function is automatically called via zsh hook on precmd (ie immediatly after the last command execution finishes
+	#but before the next prompt is prepared)
+	if [ "$CmdStartTime" ]; then
+		CmdDur="$(~/timer-zsh.elf STOP $CmdStartTime)"
+		CmdStartTime=""
+	fi
+	#passion theme had another if [ "${#CmdDur}" = "2" ]; then CmdDur="0$CmdDur" fi to make sure to have 0.X and not just .X for sub 1 second commands
+	#echo "$CmdDur"
+}
+add-zsh-hook preexec GetTimeStart
+add-zsh-hook precmd CalcTimeDiff
+#### End Time Taken for Command Helper Functions
+
+function GetSSHInfo(){
+	echo $SSH_CONNECTION | sed -nE 's~^([-0-9a-zA-Z_\.]+) ([0-9]+) ([-0-9a-zA-Z_\.]+) ([0-9]+)$~<SSH: \1:\2 -> \3:\4> ~p'
+}
+
+function GetBackgroundTaskInfo (){
+	#this calls `jobs` and uses `sed` to un following regex: ^\[(\d+)\]\s+([+|-]?)\s*(\w).+$
+	#(basically takes the number in square brackets, an optional + or - and the first letter of the status as capture groups and prints them in the order 1 3 2)
+	#then tr is used to get rid of linebreaks and shove everything to uppercase. finally rev|cut -c2-|rev chops trailing whitespace off
+	local background_task_info
+	background_task_info="$(jobs|sed -nE 's~^\[([0-9]+)\][^-a-zA-Z+]*([-+]?)[^-a-zA-Z+]*(.).*$~ \1\3\2~p'|tr 'a-z\n' 'A-Z '|rev|cut -c2- |rev)"
+	if [ ! -n "${background_task_info}" ]; then
+		echo ""
+	else
+		echo " {$background_task_info}"
+	fi
+}
+
+#adapted from various answers from https://stackoverflow.com/questions/44544385/how-to-find-primary-ip-address-on-my-linux-machine (the double grep)
+#and https://unix.stackexchange.com/questions/14961/how-to-find-out-which-interface-am-i-using-for-connecting-to-the-internet (the bit about ip route ls |grep defult (the sed is my own work))
+#another way would be to cause a dns lookup like so and grep that ip route get 8.8.8.8
+function GetLocalIP (){
+	IpAddrList=""
+	for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices for any 'default routes'
+	do
+		#TODO possibly display metric (lower is better) or mark lowest metric route with a star
+		#TODO find out what metrics I get if a system has two valid conns (eg serenity) -> both connections (provided they are on the same network have the same metric (wsl:0; win:35), this holds true even in windows (cmd: route print))
+		#I tested conecting to mobile hostpot while also on enternet->result: in wsl both have metric 0, whereas in windows the wifi from mobile tethering had metric 50 while ethernet remained at 35
+		#lookup the IP for those devices
+		#the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
+		isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
+		if [ "$isupstate" ]; then
+			IpAddrList="$IpAddrList $i:$isupstate"
+		fi
+	done
+
+	if [ ! "$IpAddrList" ]; then
+		IpAddrList=" NC"
+	fi
+
+	echo "$IpAddrList" #|cut -c2- #bin the first space
+}
 
 GetProxyInfo(){
 	local PROXY_STATE_RES
@@ -60,105 +136,15 @@ GetProxyInfo(){
 	fi
 
 	if [ "$PROXY_STATE_RES" ]; then
-		echo "[$PROXY_STATE_RES]:"
+		echo " [$PROXY_STATE_RES]"
 	else
 		echo ""
 	fi
 }
 
-#### Time Taken for Command Helper functions
-#just declare vars in a script local scope
-local CmdStartTime=""
-local CmdDur="0s"
-
-GetTimeStart (){
-	#this function is executed via zsh hook on preexec (ie just before the command is actually executed)
-	#%s is seconds since UNIX TIME; %3N gives the first three digits of the current Nanoseconds
-	CmdStartTime="$(~/timer-zsh.elf START)"
-}
-
-CalcTimeDiff (){
-	#this function takes the previously stored start time and calculates the time difference to now
-	#this function is automatically called via zsh hook on precmd (ie immediatly after the last command execution finishes
-	#but before the next prompt is prepared)
-	if [ "$CmdStartTime" ]; then
-		CmdDur="$(~/timer-zsh.elf STOP $CmdStartTime)"
-		CmdStartTime=""
-	fi
-	#passion theme had another if [ "${#CmdDur}" = "2" ]; then CmdDur="0$CmdDur" fi to make sure to have 0.X and not just .X for sub 1 second commands
-	#echo "$CmdDur"
-}
-
-setopt prompt_subst # das wird von oh-my-zsh ohnehin gesetzt, es schadet aber nicht
-#die funktion hiervon ist dass prompt substitution überhaupt geht und der promprt nicht ein vorher definierter statischer string ist
-autoload -Uz add-zsh-hook # load add-zsh-hook with zsh (-z) and suppress aliases (-U)
-#https://stackoverflow.com/questions/30840651/what-does-autoload-do-in-zsh
-add-zsh-hook preexec GetTimeStart
-add-zsh-hook precmd CalcTimeDiff
-#### End Time Taken for Command Helper Functions
-
-function GetBackgroundTaskInfo (){
-	#this calls `jobs` and uses `sed` to un following regex: ^\[(\d+)\]\s+([+|-]?)\s*(\w).+$
-	#(basically takes the number in square brackets, an optional + or - and the first letter of the status as capture groups and prints them in the order 1 3 2)
-	#then tr is used to get rid of linebreaks and shove everything to uppercase. finally rev|cut -c2-|rev chops trailing whitespace off
-	local background_task_info
-	background_task_info="$(jobs|sed 's/^\[\([0-9]\+\)\][^a-zA-Z+\-]*\([+\-]\?\)[^a-zA-Z+\-]*\(.\).*$/\1\3\2/'|tr 'a-z\n' 'A-Z '|rev|cut -c2- |rev)"
-	if [ ${#background_task_info} -eq "0" ]; then
-		echo ""
-	else
-		echo " [$background_task_info]"
-	fi
-}
-
-#function GetGitRemoteInformation (){
-#	#git://github.com/something/REPO                -> REPO from git:github.com
-#	#http://www.github.com/something/REPO           -> REPO from http:github.com
-#	#ssh://git@someurl.de:1234/path/REPO     -> REPO from ssh:git@someurl.de:1234
-#	#ssh://git@some-url.de:1234/path/REPO    -> REPO from ssh:git@some-url.de:1234
-#	#ssh://git@some_url.de:1234/path/REPO    -> REPO from ssh:git@some_url.de:1234
-#	#git@127.0.0.1:/path/REPO                   -> REPO from ssh:git@127.0.0.1
-#	#git@127.0.0.1/path/REPO                    -> REPO from ssh:git@127.0.0.1
-#	#/data/repos/REPO                               -> REPO from /data/repos
-#	#../../REPO                                     -> REPO from ../../
-
-#	#if it contains @ but not //, prepend "ssh://"
-#	# a remote url can be done like:    (?<proto>\w+?)://(?:www.)?(?<username>\w+@)?(?<host>[0-9a-zA-Z\.\-_]+):?(?<port>:\d*)?(?:/\S+)*/(?<repo>\S+)       replace with        ${repo} from ${proto}:${username}${host}${port}
-#	#but note: don't use / as a seperator, ~ is a better idea.
-
-#	echo "$(~/repotools.elf "$(git ls-remote --get-url origin)")"
-#}
-
-#adapted from various answers from https://stackoverflow.com/questions/44544385/how-to-find-primary-ip-address-on-my-linux-machine (the double grep)
-#and https://unix.stackexchange.com/questions/14961/how-to-find-out-which-interface-am-i-using-for-connecting-to-the-internet (the bit about ip route ls |grep defult (the sed is my own work))
-#another way would be to cause a dns lookup like so and grep that ip route get 8.8.8.8
-function GetLocalIP (){
-	IpAddrList=""
-	for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices for any 'default routes'
-	do
-		#TODO possibly display metric (lower is better) or mark lowest metric route with a star
-		#TODO find out what metrics I get if a system has two valid conns (eg serenity) -> both connections (provided they are on the same network have the same metric (wsl:0; win:35), this holds true even in windows (cmd: route print))
-		#I tested conecting to mobile hostpot while also on enternet->result: in wsl both have metric 0, whereas in windows the wifi from mobile tethering had metric 50 while ethernet remained at 35
-		#lookup the IP for those devices
-		#the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
-		isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
-		if [ "$isupstate" ]; then
-			IpAddrList="$IpAddrList $i:$isupstate"
-		fi
-	done
-
-	if [ ! "$IpAddrList" ]; then
-		IpAddrList=" NC"
-	fi
-
-	echo "$IpAddrList"|cut -c2- #bin the first space
-}
-
-#/sys/class/power_supply/battery/status Discharging/Full/Charging ->
-#/sys/class/power_supply/battery/capacity Percentage
-#↯≻▽▲
-#possibly, depending on the system it'd be BAT0 or BAT1 instead of battery
 function PowerState (){
 	local BatSource
+	#dependig on the system the battery might be named differently, this isto accomodate that
 	if [ -r /sys/class/power_supply/battery/capacity ] && [ -r /sys/class/power_supply/battery/status ]; then
 		BatSource='battery'
 	elif [ -r /sys/class/power_supply/BAT0/capacity ] && [ -r /sys/class/power_supply/BAT0/status ]; then
@@ -172,38 +158,61 @@ function PowerState (){
 	fi
 	local __PWR_COND_STATUS
 	local __PWR_COND_LVL
-	__PWR_COND_LVL=$(cat /sys/class/power_supply/$BatSource/capacity)
+	local __PWR_EXT_STATUS
+
+	#this is to determin the AC status. at least on WSL /sys/class/power_supply/ac is unused and mapped into usb instead.
+	#on native linux this may be different but I don't have a system to test that at the minute
+	__PWR_EXT_STATUS=""
+	if [ -r /sys/class/power_supply/usb/online ] && [ $(cat /sys/class/power_supply/usb/online) = "1" ]; then
+		__PWR_EXT_STATUS=" ↯"
+	fi
+
+	#this reads the battery status and appends % but because this is used in the prompt % needs to be escaped by another % infront
+	__PWR_COND_LVL="$(cat /sys/class/power_supply/$BatSource/capacity)"
+
 	case $(cat /sys/class/power_supply/$BatSource/status) in
 	Charging*)
-		__PWR_COND_STATUS="▲"
+		__PWR_COND_STATUS=" ▲ "
 		;;
 	Discharging*)
-		__PWR_COND_STATUS="▽"
+		__PWR_COND_STATUS=" ▽ "
 		;;
 	Full*)
-		__PWR_COND_STATUS="≻"
+		__PWR_COND_STATUS=" ≻ "
+		#if the status is "battery Full" yet the battery charge percentage is 0%, it's probably because the system is a desktop PC running wsl where there is no battery but wsl still reports as if there was one -> just blank the text
+		if [ ${__PWR_COND_LVL} = "0" ]; then
+			echo ""
+			return
+		fi
 		;;
 	'Not charging'*)
-		__PWR_COND_STATUS="%F{red}◊"
+		__PWR_COND_STATUS=" %F{red}◊ "
 		;;
 	*)
 		#realistically this shouldn't happen, but if there's a state I missed I'll find out what is was
 		__PWR_COND_STATUS="$(cat /sys/class/power_supply/$BatSource/status)"
 		;;
 	esac
-	#also possibly interessant char:↯
-	echo "%B $__PWR_COND_STATUS $__PWR_COND_LVL%%%f%b"
+	echo -e "%B$__PWR_COND_STATUS$__PWR_COND_LVL\a%%%f%b$__PWR_EXT_STATUS"
 }
 
-local user_at_host="%F{010}%n%F{007}@%F{033}%m:/dev/%y%f" # 'user@host:/dev/terminaldevice'
-local WorkingDirectory='%F{cyan}%B%c%b%f' # 'directory'
+function MainPrompt(){
+	print -P "$(~/repotools.elf PROMPT "$(pwd)" "$COLUMNS" "$(print -P "%F{010}%n%F{007}@%F{033}%m\a")" "$(print -P ":/dev/%y\a")" "$(print -P "%D{%T}\a")" "$(print -P " %D{UTC%z (%Z)}\a")" "$(print -P "$(GetLocalIP)\a")" "$(print -P "$(GetProxyInfo)\a")" "$(print -P "$(PowerState)\a")" "$(print -P "$(GetBackgroundTaskInfo)\a")" " [$SHLVL]" "$(print "$(GetSSHInfo)\a")")"
+}
 
-#$(git_prompt_info) is built as follows: PREFIX+branch+[DIRTY|CLEAN]+SUFFIX  //Dirty/Clean je nachdem was zutrifft (there's also extra stuff in OhMyZsh)
-#before the colour change this was ZSH_THEME_GIT_PROMPT_PREFIX="%F{001}git:(%F{009}"
-ZSH_THEME_GIT_PROMPT_PREFIX="%F{001}git:(%F{003}"
-ZSH_THEME_GIT_PROMPT_SUFFIX="%f "
-ZSH_THEME_GIT_PROMPT_DIRTY="%F{001}) %F{011}\u2573"
-ZSH_THEME_GIT_PROMPT_CLEAN="%F{001})"
-PROMPT='${user_at_host} $(git_prompt_info)$(~/repotools.elf "$(pwd)")$WorkingDirectory %B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b '
-RPROMPT='%D{%T UTC%z (%Z)}$(GetBackgroundTaskInfo) $(GetProxyInfo)$(GetLocalIP)$(PowerState)'
+add-zsh-hook precmd MainPrompt
+
+PROMPT='└ %F{cyan}%B%c%b%f %B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b '
+
+#To do multiline Prompts I am printing the top line before the prompt is ever computed.
+#print -P is a zsh builtin (man zshmisc) that does the same substitution the prompt would.
+#I had had the top line in PROMPT with $'\n' to create the linebreak, but there were some implications:
+# + : The width of the top line would be recomputed every time the terminal size changed
+# - : the prompt kept creeping up one line overwriting previous output whenever the window size changed
+# - : the command buffer kept interfering with my two line prompt (especially when recalling very long input commands via 'arrow-up')
+# - : GetBackgroundTasks was being executed, but kept returning empty strings (probably because jobs is a zsh builtin and the prompt building was happening in another subshell with no jobs or something)
+# - : having a linebreak in PROMPT messed with the positioning of RPROMPT and the carret behaviour for editing typed commands
+# - : hitting 'HOME' or 'POS1' often would send the carret to the top line and was showing editing that but in reality it was invisibly editing the command string
+
+#RPROMPT=' %(1j.%j Background Jobs.)'
 echo "SetupDone"
