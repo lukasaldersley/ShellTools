@@ -1,127 +1,32 @@
 #/*
 outname="$(basename $0 .c).elf"
 printf "compiling $0 into ~/$outname"
-gcc -std=c2x -Wall "$0" -o ~/"$outname"
+gcc -std=c2x -Wall "$(dirname "$0")"/commons.c "$0" -o ~/"$outname"
 printf " -> \e[32mDONE\e[0m($?)\n"
 exit
 */
 
-#define _GNU_SOURCE
-#include <stdio.h>
-#include <stdint.h>
-#include <stdbool.h>
+#include "commons.h"
 #include <regex.h>
-#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
+#include <stdarg.h>
 
 #include <dirent.h>
 
-bool Compare(const char* a, const char* b)
-{
-	bool matching = true;
-	int idx = 0;
-	while (matching && (a[idx] != 0x00 || b[idx] != 0x00))
-	{
-		if (a[idx] != b[idx])
-		{
-			matching = false;
-			break;
-		}
-		idx++;
-	}
-	return matching;
-}
-
-char ToLowerCase(char c)
-{
-	if (c >= 'A' && c <= 'Z')
-	{
-		return c + 0x20; // A=0x41, a=0x61
-	}
-	else
-	{
-		return c;
-	}
-}
-
-char ToUpperCase(char c)
-{
-	if (c >= 'a')
-	{
-		return c - 0x20;
-	}
-	else
-	{
-		return c;
-	}
-}
-
-bool StartsWith(const char* a, const char* b)
-{
-	bool matching = true;
-	int idx = 0;
-	while (matching && a[idx] != 0x00 && b[idx] != 0x00)
-	{
-		// printf("a: %c al: %c, b: %c\n", a[idx], ToLowerCase(a[idx]), b[idx]);
-		if (ToLowerCase(a[idx]) != b[idx])
-		{
-			matching = false;
-			break;
-		}
-		else if (b[idx] == 0x00)
-		{
-			matching = true;
-			break;
-			// the two strings differ, but the difference is b ended whil a continues, therefore a starts with b
-		}
-		idx++;
-	}
-	return matching;
-}
-
-bool ContainsString(const char* str, const char* test)
-{
-	int sIdx = 0;
-	while (str[sIdx] != 0x00)
-	{
-		uint8_t tIdx = 0;
-		while (test[tIdx] != 0x00 && test[tIdx] == str[sIdx + tIdx])
-		{
-			tIdx++;
-		}
-		if (test[tIdx] == 0x00)
-		{
-			// if I reached the end of the test sting while the consition that test and str must match, test is contained in match
-			return true;
-		}
-		sIdx++;
-	}
-	return false;
-}
-
 #define COLOUR_GIT_BARE "\e[38;5;006m"
-
-//BrightGreen	"\e[92m"
 #define COLOUR_GIT_INDICATOR "\e[38;5;002m"
-
-//BrightCyan	"\e[96m"
 #define COLOUR_GIT_PARENT "\e[38;5;004m"
-
-//BrightRed	"\e[91m"
 #define COLOUR_GIT_NAME "\e[38;5;009m"
-
-//COLOUR_Yellow	"\e[33m"
 #define COLOUR_GIT_BRANCH "\e[38;5;001m"
-
-//Magenta	"\e[35m"
 #define COLOUR_GIT_ORIGIN "\e[38;5;005m"
-
 #define COLOUR_GIT_COMMITS "\e[38;5;208m"
 #define COLOUR_GIT_MERGES "\e[38;5;009m"
 #define COLOUR_GIT_STAGED "\e[38;5;010m"
 #define COLOUR_GIT_MODIFIED "\e[38;5;226m"
 #define COLOUR_CLEAR "\e[0m"
+const char* terminators = "\r\n\a";
 
 #define maxGroups 10
 #define MaxLocations 10
@@ -132,8 +37,11 @@ char* buf;
 int bufCurLen;
 const char* DEFAULT_NAME_NONE = "NONE";
 const char* DEFAULT_PATH_NONE = "/dev/null";
+const char* DEFAULT_NAME_LOOPBACK = "LOOPBACK";
+const char* DEFAULT_PATH_LOOPBACK = "ssh://127.0.0.1/data/repos";
 const char* DEFAULT_NAME_GLOBAL = "GLOBAL";
 const char* DEFAULT_PATH_GLOBAL = "ssh://git@someprivateurl.de:1234/data/repos";
+
 regex_t RemoteRepoRegex;
 regmatch_t CapturedResults[maxGroups];
 
@@ -154,6 +62,7 @@ struct RepoInfo_t {
 	char* RepositoryName;//the name of the repo itself
 	char* RepositoryDisplayedOrigin;
 	char* RepositoryUnprocessedOrigin;
+	char* RepositoryUnprocessedOrigin_PREVIOUS;
 	char* branch;
 	char* parentRepo;
 	int SubDirectoryCount;
@@ -181,6 +90,7 @@ RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName) {
 	ri->RepositoryName = NULL;
 	ri->RepositoryDisplayedOrigin = NULL;
 	ri->RepositoryUnprocessedOrigin = NULL;
+	ri->RepositoryUnprocessedOrigin_PREVIOUS = NULL;
 	ri->branch = NULL;
 	ri->parentRepo = NULL;
 	ri->SubDirectoryCount = 0;
@@ -209,6 +119,8 @@ void DeallocRepoInfoStrings(RepoInfo* ri) {
 	if (ri->DirectoryPath != NULL) { free(ri->DirectoryPath); }
 	if (ri->RepositoryName != NULL) { free(ri->RepositoryName); }
 	if (ri->RepositoryDisplayedOrigin != NULL) { free(ri->RepositoryDisplayedOrigin); }
+	if (ri->RepositoryUnprocessedOrigin != NULL) { free(ri->RepositoryUnprocessedOrigin); }
+	if (ri->RepositoryUnprocessedOrigin_PREVIOUS != NULL) { free(ri->RepositoryUnprocessedOrigin_PREVIOUS); }
 	if (ri->branch != NULL) { free(ri->branch); }
 	if (ri->parentRepo != NULL) { free(ri->parentRepo); }
 }
@@ -218,53 +130,26 @@ void AllocUnsetStringsToEmpty(RepoInfo* ri) {
 	if (ri->DirectoryPath == NULL) { ri->DirectoryPath = (char*)malloc(sizeof(char));ri->DirectoryPath[0] = 0x00; }
 	if (ri->RepositoryName == NULL) { ri->RepositoryName = (char*)malloc(sizeof(char));ri->RepositoryName[0] = 0x00; }
 	if (ri->RepositoryDisplayedOrigin == NULL) { ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char));ri->RepositoryDisplayedOrigin[0] = 0x00; }
+	if (ri->RepositoryUnprocessedOrigin == NULL) { ri->RepositoryUnprocessedOrigin = (char*)malloc(sizeof(char));ri->RepositoryUnprocessedOrigin[0] = 0x00; }
+	if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { ri->RepositoryUnprocessedOrigin_PREVIOUS = (char*)malloc(sizeof(char));ri->RepositoryUnprocessedOrigin_PREVIOUS[0] = 0x00; }
 	if (ri->branch == NULL) { ri->branch = (char*)malloc(sizeof(char));ri->branch[0] = 0x00; }
 	if (ri->parentRepo == NULL) { ri->parentRepo = (char*)malloc(sizeof(char));ri->parentRepo[0] = 0x00; }
 }
 
-
-
-
-char* ExecuteProcess(const char* args) {
-	int size = 1024;
-	char* result = malloc(sizeof(char) * size);
-	if (result == NULL) {
-		return NULL;
-	}
-	FILE* fp = popen(args, "r");
-	if (fp == NULL)
-	{
-		fprintf(stderr, "failed running process %s\n", args);
-	}
-	else {
-		if (fgets(result, size - 1, fp) == NULL)
-		{
-			/*
-			RETURN VALUE
-				fgetc(), getc(), and getchar() return the character read as an unsigned char cast to an int or EOF on end of file or error.
-				fgets() returns s on success, and NULL on error or when end of file occurs while no characters have been read.
-			*/
-			//show superprojet working tree returns 0 bytes if it's a toplevel thing -> just print back an empty string
-			result[0] = 0x00;
-		}
-	}
-	pclose(fp);
-	return result;
-}
-
-void CheckExtendedGitStatus(RepoInfo* ri) {
+bool CheckExtendedGitStatus(RepoInfo* ri) {
 	int size = 1024;
 	char* result = malloc(sizeof(char) * size);
 	if (result == NULL) {
 		fprintf(stderr, "OUT OF MEMORY");
-		return;//TODO indicate failure
+		return 0;
 	}
 	char* command;
-	asprintf(&command, "git -C %s status --porcelain=v2 -b", ri->DirectoryPath);
+	asprintf(&command, "git -C \"%s\" status --porcelain=v2 -b --show-stash", ri->DirectoryPath);
 	FILE* fp = popen(command, "r");
 	if (fp == NULL)
 	{
-		fprintf(stderr, "failed running process %s\n", command);
+		size = 0;
+		fprintf(stderr, "failed running process `%s`\n", command);
 	}
 	else {
 		while (fgets(result, size - 1, fp) != NULL)
@@ -307,17 +192,7 @@ void CheckExtendedGitStatus(RepoInfo* ri) {
 	free(result);
 	pclose(fp);
 	free(command);
-}
-
-void TerminateStrOnCR_LF_BEL(char* str) {
-	int i = 0;
-	while (str[i] != 0x00) {
-		if (str[i] == '\n' || str[i] == '\r' || str[i] == '\a') {
-			str[i] = 0x00;
-			return;
-		}
-		i++;
-	}
+	return size != 0;//if I set size to 0 when erroring out, return false/0; else 1
 }
 
 void AddChild(RepoInfo* parent, RepoInfo* child) {//OK
@@ -379,12 +254,6 @@ int cpyString(char* dest, const char* src, int maxCount) {
 bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoProcessWorktree, bool BeThorough) {
 	//the return value is just: has an error occurred
 
-	// I)   rev-parse --show-toplevel ; rev-parse --is-inside-git-dir ; rev-parse --is-bare-repository : $pwd ; false ; false => top level of worktree
-	// II)  rev-parse --show-toplevel ; rev-parse --is-inside-git-dir ; rev-parse --is-bare-repository : anything other than $pwd ; false ; false => lower level of worktree
-	// III) rev-parse --show-toplevel ; rev-parse --is-inside-git-dir ; rev-parse --is-bare-repository : error ; true ; false => inside .git of a worktree repo
-	// IV)  rev-parse --show-toplevel ; rev-parse --is-inside-git-dir ; rev-parse --is-bare-repository : error ; true ; true => inside bare repo
-	//basically I just need to model I and IV to determin if and what sort of git folder I'm dealing with
-
 	char* cmd;
 	if (BeThorough || DoProcessWorktree) {
 		asprintf(&cmd, "git -C \"%s\" rev-parse --is-bare-repository 2>/dev/null", ri->DirectoryPath);
@@ -396,7 +265,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			free(ri);
 			return false;
 		}
-		TerminateStrOnCR_LF_BEL(bareRes);
+		TerminateStrOn(bareRes, terminators);
 		ri->isBare = Compare(bareRes, "true");
 		free(bareRes);
 		bareRes = NULL;
@@ -405,7 +274,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 		if (!ri->isBare) {
 			asprintf(&cmd, "git -C \"%s\" rev-parse --show-toplevel 2>/dev/null", ri->DirectoryPath);
 			char* tlres = ExecuteProcess(cmd);
-			TerminateStrOnCR_LF_BEL(tlres);
+			TerminateStrOn(tlres, terminators);
 			free(cmd);
 			ri->isGit = Compare(ri->DirectoryPath, tlres);
 			//printf("dir %s tl: %s (%i) dpw: %i\n", ri->DirectoryPath, tlres, ri->isGit, DoProcessWorktree);
@@ -414,7 +283,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 				//usually we are done at this stage (only treat as git if in toplevel, but this is for the prompt substitution where it needs to work anywhere in git)
 				asprintf(&cmd, "git -C \"%s\" rev-parse --is-inside-work-tree 2>/dev/null", ri->DirectoryPath);
 				char* wtres = ExecuteProcess(cmd);
-				TerminateStrOnCR_LF_BEL(wtres);
+				TerminateStrOn(wtres, terminators);
 				free(cmd);
 				ri->isGit = Compare(wtres, "true");
 				free(wtres);
@@ -431,7 +300,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	//this tries to obtain the branch, or if that fails tag and if both fail the commit hash
 	asprintf(&cmd, "git -C  \"%1$s\" symbolic-ref --short HEAD 2>/dev/null || git -C \"%1$s\" describe --tags --exact-match HEAD 2>/dev/null || git -C \"%1$s\" rev-parse --short HEAD", ri->DirectoryPath);
 	ri->branch = ExecuteProcess(cmd);
-	TerminateStrOnCR_LF_BEL(ri->branch);
+	TerminateStrOn(ri->branch, terminators);
 	//printf("branch : %s\n", ri->branch);
 	free(cmd);
 	cmd = NULL;
@@ -439,7 +308,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	//if 'git rev-parse --show-superproject-working-tree' outputs NOTHING, a repo is standalone, if there is output it will point to the parent repo
 	asprintf(&cmd, "git -C \"%s\" rev-parse --show-superproject-working-tree", ri->DirectoryPath);
 	ri->parentRepo = ExecuteProcess(cmd);
-	TerminateStrOnCR_LF_BEL(ri->parentRepo);
+	TerminateStrOn(ri->parentRepo, terminators);
 	ri->isSubModule = !((ri->parentRepo)[0] == 0x00);
 	free(cmd);
 
@@ -455,7 +324,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 		return false;
 	}
 	cmd = NULL;
-	TerminateStrOnCR_LF_BEL(ri->RepositoryUnprocessedOrigin);
+	TerminateStrOn(ri->RepositoryUnprocessedOrigin, terminators);
 	if (Compare(ri->RepositoryUnprocessedOrigin, "origin")) {
 		//if git ls-remote --get-url origin returns 'origin' it means either the folder is not a git repository OR it's a repository without remote (local only)
 		//in this case since I already checked this IS a repo, it MUST be a repo without remote
@@ -473,30 +342,27 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	}
 	char* FixedProtoOrigin = FixImplicitProtocol(ri->RepositoryUnprocessedOrigin);
 
-	//printf("fixedorigin: %s\n", FixedProtoOrigin);
-
 	// input: repoToTest, the path of a repo. if it is one of the defined repos, return that, if it's not, produce the short notation
 	// basically this should produce the displayed name for the repo in the output buffer and additionally indicate if it's a known one
 	ri->RepositoryOriginID = -1;
 	for (int i = 0; i < numLOCS; i++)
 	{
+		//fprintf(stderr, "%s > %s testing against %s(%s)\n", ri->RepositoryUnprocessedOrigin, FixedProtoOrigin, LOCS[i], NAMES[i]);
 		if (StartsWith(FixedProtoOrigin, LOCS[i]))
 		{
+			//fprintf(stderr, "\tSUCCESS\n");
 			ri->RepositoryOriginID = i;
 			asprintf(&ri->RepositoryDisplayedOrigin, "%s", NAMES[i]);
 			break;
 		}
 	}
 
-
-	// value was not found in the defined ones -> make new one
-
 	char* sedCmd;
+	//this regex is basically "(?<proto>\w+)://(?<remotehost>(?<user@remoteHost>\w+@)?\w+)(?<port>:\d+)?((?:/:)?(\w+))?.*/(\w+)(.git/?)?"
+	//I am a bit unsure what everything after port is trying to do. it seems like it might be one of these things that is a bit nondeterministic and causes a lot of backtracking. obviously I want to capture somethoing like ssh://git@host:port:/somepath/reponame.git/, where I want remoname (without .git, and if there's a trailing /, also without that), but I don't really know what exactly the first couple groups are and why I need those groups
 	asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([a-zA-Z0-9_]+):\\/\\/(([a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(\\:([0-9]+)){0,1}([\\:\\/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git\\/{0,1})?$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin);
-	//printf("sedcmd <%s>", sedCmd);
-	//fflush(stdout);
 	char* sedRes = ExecuteProcess(sedCmd);
-	TerminateStrOnCR_LF_BEL(sedRes);
+	TerminateStrOn(sedRes, terminators);
 	if (sedRes[0] == 0x00) {
 		// local repo
 		if (ri->RepositoryOriginID == -1)
@@ -521,9 +387,6 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 		//local repo
 	}
 	else {
-		//printf("have sed response: <%s>\n", sedRes);
-		//fflush(stdout);
-		//parse out the elements from the input (proto|user|host|port|account|directory)
 #define ptrcount 7
 		char* ptrs[ptrcount];
 		ptrs[0] = sedRes;
@@ -541,11 +404,6 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			asprintf(&ri->RepositoryName, "%s", ptrs[5]);
 		}
 
-		//for (int i = 0;i < ptrcount - 1;i++) {
-		//	printf("element %i is %s\n", i, ptrs[i]);
-		//}
-
-		//proto:user_if_not_git@host:port:folder_if_gitHub
 		if (ri->RepositoryOriginID == -1)
 		{
 			ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char) * 256);
@@ -575,9 +433,12 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 
 		//change
 		ri->RepositoryOriginID_PREVIOUS = ri->RepositoryOriginID;
+		if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { free(ri->RepositoryUnprocessedOrigin_PREVIOUS); }
+		ri->RepositoryUnprocessedOrigin_PREVIOUS = ri->RepositoryUnprocessedOrigin;
 		ri->RepositoryOriginID = desiredorigin;
+		asprintf(&ri->RepositoryUnprocessedOrigin, "%s/%s", LOCS[ri->RepositoryOriginID], ri->RepositoryName);
 		char* changeCmd;
-		asprintf(&changeCmd, "git -C \"%s\" remote set-url origin %s/%s", ri->DirectoryPath, LOCS[ri->RepositoryOriginID], ri->RepositoryName);
+		asprintf(&changeCmd, "git -C \"%s\" remote set-url origin %s", ri->DirectoryPath, ri->RepositoryUnprocessedOrigin);
 		printf("%s\n", changeCmd);
 		ExecuteProcess(changeCmd);
 		free(changeCmd);
@@ -618,7 +479,7 @@ RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, 
 	}
 	else
 	{
-		printf("failed on directory: %s\n", directoryName);
+		fprintf(stderr, "failed on directory: %s\n", directoryName);
 		perror("Couldn't open the directory");
 	}
 	if (!BeThorough) {
@@ -695,7 +556,7 @@ char* ConstructGitStatusString(RepoInfo* ri) {
 	return rb;
 }
 
-void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSameLevelEntryFollows) {
+void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSameLevelEntryFollows, bool fullOut) {
 	if (ri == NULL) {
 		return;
 	}
@@ -708,23 +569,30 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 			printf("-SM" COLOUR_CLEAR "@" COLOUR_GIT_PARENT "%s", ri->parentRepo);
 		}
 		printf(COLOUR_CLEAR "] " COLOUR_GIT_NAME "%s" COLOUR_CLEAR " on " COLOUR_GIT_BRANCH "%s " COLOUR_CLEAR "from ", ri->RepositoryName, ri->branch);
+
+		char* GitStatStrTemp = ConstructGitStatusString(ri);
+		//differentiate between display only and display after change
 		if (ri->RepositoryOriginID_PREVIOUS != -1) {
 			printf(COLOUR_GIT_ORIGIN "[%s(%i) -> %s(%i)]" COLOUR_CLEAR, NAMES[ri->RepositoryOriginID_PREVIOUS], ri->RepositoryOriginID_PREVIOUS, NAMES[ri->RepositoryOriginID], ri->RepositoryOriginID);
+			printf("%s", GitStatStrTemp);
+			if (fullOut) {
+				printf(" \e[38;5;240m(%s -> %s)\e[0m", ri->RepositoryUnprocessedOrigin_PREVIOUS, ri->RepositoryUnprocessedOrigin);
+			}
+			putc('\n', stdout);
 		}
 		else {
 			printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin);
+			printf("%s", GitStatStrTemp);
+			if (fullOut) {
+				printf(" \e[38;5;240m(%s)\e[0m", ri->RepositoryUnprocessedOrigin);
+			}
+			putc('\n', stdout);
 		}
+		free(GitStatStrTemp);
 
-		//if (ri->DirtyWorktree) {
-		//	printf(COLOUR_BrightYellow " \u2573" COLOUR_CLEAR);
-		//}
-		char* temp = ConstructGitStatusString(ri);
-		printf("%s", temp);
-		free(temp);
-		printf(" \e[38;5;240m(%s)\e[0m\n", ri->RepositoryUnprocessedOrigin);
 	}
 	else {
-		printf("%s\n", ri->DirectoryName);
+		printf("\e[38;5;240m%s\e[0m\n", ri->DirectoryName);//this prints the name of intermediate folders that are not git repos, but contain a repo somewhere within -> those are less important -> print greyed out //TODO I just grabbed the CSI colour for the full remote string form the unprocessed repo origin
 	}
 	fflush(stdout);
 	RepoList* current = ri->SubDirectories;
@@ -734,14 +602,18 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 	while (current != NULL)
 	{
 		procedSubDirs++;
-		printTree_internal(current->self, temp, procedSubDirs < ri->SubDirectoryCount);
+		printTree_internal(current->self, temp, procedSubDirs < ri->SubDirectoryCount, fullOut);
 		current = current->next;
 	}
 	free(temp);
 }
 
-void printTree(RepoInfo* ri) {
-	printTree_internal(ri, "", ri->SubDirectoryCount > 1);
+void printTreeBasic(RepoInfo* ri) {
+	printTree_internal(ri, "", ri->SubDirectoryCount > 1, false);
+}
+
+void printTree(RepoInfo* ri, bool Detailed) {
+	printTree_internal(ri, "", ri->SubDirectoryCount > 1, Detailed);
 }
 
 bool pruneTreeForGit(RepoInfo* ri) {
@@ -782,7 +654,9 @@ void DoSetup() {
 	LOCS[0] = DEFAULT_PATH_NONE;
 	NAMES[1] = DEFAULT_NAME_GLOBAL;
 	LOCS[1] = DEFAULT_PATH_GLOBAL;
-	numLOCS = 2;
+	NAMES[2] = DEFAULT_NAME_LOOPBACK;
+	LOCS[2] = DEFAULT_PATH_LOOPBACK;
+	numLOCS = 3;
 	errno = 0;
 
 	char* file;
@@ -796,16 +670,17 @@ void DoSetup() {
 		errno = 0;
 		fp = fopen(file, "w+");//open for read/write -> create if not exists, then fill defaults, then read
 		if (fp == NULL) {
-			printf("couldn't create file (%i: %s)\n", errno, strerror(errno));
+			fprintf(stderr, "couldn't create file (%i: %s)\n", errno, strerror(errno));
 		}
 		else {
-			fprintf(fp, "LOCAL	ssh://127.0.0.1/data/repos\n");
+			fprintf(fp, "LOCAL	ssh://git@127.0.0.1/data/repos\n");
 			fprintf(fp, "GITHUB	ssh://git@github.com:username\n");
 			fflush(fp);
 			rewind(fp);
 			printf("created default config file: %s\n", file);
 		}
 	}
+	free(file);
 
 	while (bufCurLen < 1024 - 2) {
 		fgets(buf + bufCurLen, 1024 - bufCurLen - 1, fp);
@@ -831,106 +706,40 @@ void DoSetup() {
 			break;
 		}
 	}
-	free(file);
 }
 
-int VisibleStrLen(const char* s) {
-	int count = 0;
-	int idx = 0;
-	char c;
-	while ((c = s[idx]) != 0x00) {
-		//test for zsh prompt stuff
-		if (c == '%') {
-			if (s[idx + 1] == 'F' && s[idx + 2] == '{') {//%F{...} -> set colour
-				while (s[idx] != 0x00 && s[idx] != '}') {
-					idx++;
-				}
-				idx++;
-				continue;
-			}
-			else if (s[idx + 1] == 'f') {//clear colour
-				idx += 2;
-				continue;
-			}
-			else if (s[idx + 1] == 'b') {//clear bold
-				idx += 2;
-				continue;
-			}
-			else if (s[idx + 1] == 'B') {//set bold
-				idx += 2;
-				continue;
-			}
-			else if (s[idx + 1 == '%']) {//escaped %, an actual % sign
-				//NOTE: NO continue and ONLY +1 because I WANT to read that
-				idx++;
-			}
+uint32_t determinePossibleCombinations(int* availableLength, int NumElements, ...) {
+	//this function takes a poiner to an int containing the total available size and the number of variadic arguments to be expected.
+	//the variadic elements are the size of individual blocks.
+	//the purpose of this function is to figure out which blocks can fit into the total size in an optimal fashion.
+	//an optimal fashion means: as many as possible, but the blocks are given in descending priority.
+	//example: if there's a total size of 10 and the blocks 5,7,6,3,4,2,8,1,1,1,1,1,1,1,1 the solution would be to take 5+3+2 since 5 is the most important which means there's a size of 5 left that can be filled again. 7 doesn't fit, so we'll take the next best thing that will fit, in this case 3, which leaves 2, which in turn can be taken by the 2.
+	//if the goal was just to have "as many as possible" the example should have picked all 1es, but since I need priorities, take the first that'll fit and find the next hightest priority that'll fit (which will be further back in the list, otherwise it would already have been selected)
+	//this function then returns a bitfield of which blocks were selected
+	assert(NumElements > 0 && NumElements <= 32);
+	uint32_t res = 0;
+	va_list ELEMENTS;
+	va_start(ELEMENTS, NumElements);//start variadic function param handling, NumElements is the Identifier of the LAST NON-VARIADIC parameter passed to this function
+	for (int i = 0; i < NumElements; i++)
+	{
+		//va_arg returns the next of the variadic emlements, assuming it's type is compatible with the provided one (here int)
+		//if it's not compatible, it's undefined behaviour
+		int nextElem = va_arg(ELEMENTS, int);
+		//if the next element fits, select it and reduce the available space
+		if (*availableLength > nextElem) {
+			res |= 1 << i;
+			*availableLength -= nextElem;
 		}
-		//ANSI CSI sequences https://en.wikipedia.org/wiki/ANSI_escape_code
-		//don't count them at all
-		if (c == '\e' && s[idx + 1] == '[') {
-			idx += 2;//advance over \e[to test for the rest
-			//walk until valid 'final byte' or NULL found
-			while (s[idx] != 0x00 && !(s[idx] >= 0x40 && s[idx] <= 0x7E)) {
-				idx++;
-			}
-		}
-		//UTF-8 multibyte characters -> only count them once
-		if ((c & 0b11000000) == 0b11000000) {
-			//begins with 11... -> UTF8
-			count++;
-#ifdef DEBUG
-			printf("counting Unicode character\n");
-#endif
-			while (s[idx] != 0x00 && (c & 0b11000000) == 0b10000000) {
-				//in utf-8 the first byte is 11------ while all following bytes are 10------
-				idx++;
-			}
-		}
-		if (c >= 0x20 && c <= 0x7e) {
-			count++;
-#ifdef DEBUG
-			printf("%c (%x) -> %c (%x)\n", c, c, s[idx], s[idx]);
-#endif
-		}
-		idx++;
 	}
-#ifdef DEBUG
-	printf("<" COLOUR_CLEAR "%s" COLOUR_CLEAR "> total -> %i\n", s, count);
-#endif
-	return count;
-}
+	va_end(ELEMENTS);//a bit like malloc/free there has to be a va_end for each va_start
 
-uint8_t determinePossibleCombinations(int* availableLen, int el0len, int el1len, int el2len, int el3len, int el4len, int el5len, int el6len) {
-	uint8_t res = 0;
-	if (*availableLen > el0len) {
-		res |= 1 << 0;
-		*availableLen -= el0len;
-	}
-	if (*availableLen > el1len) {
-		res |= 1 << 1;
-		*availableLen -= el1len;
-	}
-	if (*availableLen > el2len) {
-		res |= 1 << 2;
-		*availableLen -= el2len;
-	}
-	if (*availableLen > el3len) {
-		res |= 1 << 3;
-		*availableLen -= el3len;
-	}
-	if (*availableLen > el4len) {
-		res |= 1 << 4;
-		*availableLen -= el4len;
-	}
-	if (*availableLen > el5len) {
-		res |= 1 << 5;
-		*availableLen -= el5len;
-	}
-	if (*availableLen > el6len) {
-		res |= 1 << 6;
-		*availableLen -= el6len;
-	}
 	return res;
+}
+
+void ListAvailableRemotes() {
+	for (int i = 0;i < numLOCS;i++) {
+		printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR " (-> %s)\n", NAMES[i], LOCS[i]);
+	}
 }
 
 int main(int argc, char** argv)
@@ -946,13 +755,13 @@ int main(int argc, char** argv)
 	if (Compare(argv[1], "PROMPT")) //show origin info for command prompt
 	{
 		if (argc != 14) {
-			printf("INVAILD PARAMETER COUNT %i\nNEED: PROMPT $pwd $COLUMNS User_at_host TerminalDevice ip_info proxy_info power_info", argc);
+			fprintf(stderr, "INVAILD PARAMETER COUNT: %i\nNEED: PROMPT $pwd $COLUMNS User_at_host TerminalDevice time timezone_info ip_info proxy_info power_info background_jobs_info shlvl sshinfo", argc - 1);
 			return -1;
 		}
 		RepoInfo* ri = AllocRepoInfo("", argv[2]);
 		TestPathForRepoAndParseIfExists(ri, -1, true, true);
 		if (ri == NULL) {
-			printf("error at main: TestPathForRepoAndParseIfExists returned null\n");
+			fprintf(stderr, "error at main: TestPathForRepoAndParseIfExists returned null\n");
 			return 1;
 		}
 		AllocUnsetStringsToEmpty(ri);
@@ -980,18 +789,18 @@ int main(int argc, char** argv)
 			temp++;
 		}
 
-		TerminateStrOnCR_LF_BEL(argv[4]);
-		TerminateStrOnCR_LF_BEL(argv[5]);
-		TerminateStrOnCR_LF_BEL(argv[6]);
-		TerminateStrOnCR_LF_BEL(argv[7]);
-		TerminateStrOnCR_LF_BEL(argv[8]);
-		TerminateStrOnCR_LF_BEL(argv[9]);
-		TerminateStrOnCR_LF_BEL(argv[10]);
-		TerminateStrOnCR_LF_BEL(argv[11]);
-		TerminateStrOnCR_LF_BEL(argv[12]);
-		TerminateStrOnCR_LF_BEL(argv[13]);
+		TerminateStrOn(argv[4], terminators);
+		TerminateStrOn(argv[5], terminators);
+		TerminateStrOn(argv[6], terminators);
+		TerminateStrOn(argv[7], terminators);
+		TerminateStrOn(argv[8], terminators);
+		TerminateStrOn(argv[9], terminators);
+		TerminateStrOn(argv[10], terminators);
+		TerminateStrOn(argv[11], terminators);
+		TerminateStrOn(argv[12], terminators);
+		TerminateStrOn(argv[13], terminators);
 
-		//if the shell level is 1, don't print it, only if slehh level >1 show it
+		//if the shell level is 1, don't print it, only if shell level >1 show it
 		if (Compare(argv[ID_SHLVL], " [1]")) {
 			argv[ID_SHLVL][0] = 0x00;
 		}
@@ -1001,9 +810,29 @@ int main(int argc, char** argv)
 			lens[i] = 0;
 		}
 		for (int i = 4;i < argc;i++) {
-			lens[i] = VisibleStrLen(argv[i]);
+			lens[i] = strlen_visible(argv[i]);//reminder: stelen_visible basically is strlen but counts mutlibyte unicode chars as 1 and ignores ZSH prompt metacharacters and CSI escape sequences
 		}
 
+		//taking the list of jobs as input, this counts the number of spaces (and because of the trailing space also the number of entries)
+		int numBgJobs = 0;
+		if (lens[ID_BackgroundJobs] > 0) {
+			int i = 0;
+			while (argv[ID_BackgroundJobs][i] != 0x00) {
+				if (argv[ID_BackgroundJobs][i] == ' ') {
+					numBgJobs++;
+				}
+				i++;
+			}
+		}
+
+		char* numBgJobsStr;
+		if (numBgJobs != 0) {
+			asprintf(&numBgJobsStr, "  %i Jobs", numBgJobs);
+		}
+		else {
+			numBgJobsStr = (char*)malloc(sizeof(char));
+			numBgJobsStr[0] = 0x00;
+		}
 
 		char* gitSegment1_BaseMarkerStart = "";
 		char* gitSegment2_parentRepoLoc = gitSegment1_BaseMarkerStart;//just an empty default
@@ -1023,17 +852,14 @@ int main(int argc, char** argv)
 			}
 			asprintf(&gitSegment3_BaseMarkerEnd, COLOUR_CLEAR "] " COLOUR_GIT_NAME "%s" COLOUR_CLEAR " on "COLOUR_GIT_BRANCH "%s" COLOUR_CLEAR, ri->RepositoryName, ri->branch);
 			asprintf(&gitSegment4_remoteinfo, " from " COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin);
-
-			//this version of gitSegement5 is a vastly cut-down versio, only indicating 'dirty' or 'not dirty' while the whole segment below makes a much more detailed statement, but the unicode chars may be useful
-			//asprintf(&gitSegment5_gitStatus, COLOUR_GIT_MODIFIED " %s" COLOUR_CLEAR "", ri->DirtyWorktree ? "\u2573\u2718" : "");
-
 			gitSegment5_gitStatus = ConstructGitStatusString(ri);
 
-			gitSegment1_BaseMarkerStart_len = VisibleStrLen(gitSegment1_BaseMarkerStart);
-			gitSegment2_parentRepoLoc_len = VisibleStrLen(gitSegment2_parentRepoLoc);
-			gitSegment3_BaseMarkerEnd_len = VisibleStrLen(gitSegment3_BaseMarkerEnd);
-			gitSegment4_remoteinfo_len = VisibleStrLen(gitSegment4_remoteinfo);
-			gitSegment5_gitStatus_len = VisibleStrLen(gitSegment5_gitStatus);
+
+			gitSegment1_BaseMarkerStart_len = strlen_visible(gitSegment1_BaseMarkerStart);
+			gitSegment2_parentRepoLoc_len = strlen_visible(gitSegment2_parentRepoLoc);
+			gitSegment3_BaseMarkerEnd_len = strlen_visible(gitSegment3_BaseMarkerEnd);
+			gitSegment4_remoteinfo_len = strlen_visible(gitSegment4_remoteinfo);
+			gitSegment5_gitStatus_len = strlen_visible(gitSegment5_gitStatus);
 		}
 
 #ifdef DEBUG
@@ -1045,13 +871,20 @@ int main(int argc, char** argv)
 		printf("%i <%s>\n", gitSegment5_gitStatus_len, gitSegment5_gitStatus);
 		for (int i = 4;i < argc;i++) {
 			printf("%i <%s>\n", lens[i], argv[i]);
-	}
+		}
 #endif
 
 
-		int RemainingPromptWidth = TotalPromptWidth - (lens[ID_UserAtHost] + lens[ID_SHLVL] + gitSegment1_BaseMarkerStart_len + gitSegment3_BaseMarkerEnd_len + gitSegment5_gitStatus_len + lens[ID_Time] + lens[ID_ProxyInfo] + lens[ID_PowerState] + 1);
+		int RemainingPromptWidth = TotalPromptWidth - (lens[ID_UserAtHost] + lens[ID_SHLVL] + gitSegment1_BaseMarkerStart_len + gitSegment3_BaseMarkerEnd_len + gitSegment5_gitStatus_len + lens[ID_Time] + lens[ID_ProxyInfo] + strlen_visible(numBgJobsStr) + lens[ID_PowerState] + 1);
 
-		uint8_t AdditionalElementAvailabilityPackedBool = determinePossibleCombinations(&RemainingPromptWidth, gitSegment4_remoteinfo_len, lens[ID_LocalIPs], lens[ID_TimeZone], lens[ID_TerminalDevice], gitSegment2_parentRepoLoc_len, lens[ID_BackgroundJobs], lens[ID_SSHInfo]);
+		uint32_t AdditionalElementAvailabilityPackedBool = determinePossibleCombinations(&RemainingPromptWidth, 7,
+			gitSegment4_remoteinfo_len,
+			lens[ID_LocalIPs],
+			lens[ID_TimeZone],
+			lens[ID_TerminalDevice],
+			gitSegment2_parentRepoLoc_len,
+			lens[ID_BackgroundJobs],
+			lens[ID_SSHInfo]);
 
 
 		//if the seventh-prioritized element (ssh connection info) has space, print it "<SSH: 100.85.145.164:49567 -> 192.168.0.220:22> "
@@ -1108,6 +941,7 @@ int main(int argc, char** argv)
 			printf("%s", argv[ID_LocalIPs]);
 		}
 
+		printf("%s", numBgJobsStr);
 		//if the sixth-prioritized element (background tasks) has space, print it " {1S-  2S+}"
 		if ((AdditionalElementAvailabilityPackedBool & (1 << 5))) {
 			printf("%s", argv[ID_BackgroundJobs]);
@@ -1130,7 +964,7 @@ int main(int argc, char** argv)
 		free(ri);
 
 		return 0;
-}
+	}
 	else if (Compare(argv[1], "SET") || Compare(argv[1], "SHOW"))
 	{
 		int requestedNewOrigin = -1;
@@ -1143,15 +977,9 @@ int main(int argc, char** argv)
 			}
 			if (requestedNewOrigin == -1) {
 				printf("new origin specification " COLOUR_GIT_ORIGIN "'%s'" COLOUR_CLEAR " is unknown. available origin specifications are:\n", argv[3]);
-				requestedNewOrigin = -2;//this is a special flag to drop into LIST ORIGINS and exit (as error handling mechanism)
+				ListAvailableRemotes();
+				return -1;
 			}
-		}
-
-		if (requestedNewOrigin == -2) {//figue out a nicer thing
-			for (int i = 0;i < numLOCS;i++) {
-				printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR " (-> %s)\n", NAMES[i], LOCS[i]);
-			}
-			return 0;
 		}
 
 		bool ThoroughSearch = Compare(argv[argc - 1], "THOROUGH");
@@ -1166,8 +994,16 @@ int main(int argc, char** argv)
 		if (requestedNewOrigin != -1) {
 			printf("\n");
 		}
-		printTree(treeroot);
+		printTree(treeroot, ThoroughSearch);
 		printf("\n");
+	}
+	else if (Compare(argv[1], "LIST")) {
+		ListAvailableRemotes();
+		return 0;
+	}
+	else {
+		printf("unknown command %s\n", argv[1]);
+		return -1;
 	}
 	free(buf);
 }

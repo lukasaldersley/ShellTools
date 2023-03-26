@@ -1,4 +1,5 @@
 #!/bin/false
+# shellcheck shell=bash
 #this should only be sourced or '.' included, not called.
 
 #zsh prompt expansion web doc is at https://zsh.sourceforge.io/Doc/Release/index.html#Top
@@ -17,14 +18,15 @@
 #%? returns status code of last command
 #conditional syntax: %(TestChar.TrueVal.FalseVal) (for testChar doc see https://zsh.sourceforge.io/Doc/Release/Prompt-Expansion.html#Conditional-Substrings-in-Prompts)
 #conditional: the seperator doesn't need to be . it is arbitrary
+#https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit
 
 
- #das wird von oh-my-zsh ohnehin gesetzt, es schadet aber nicht
- #die funktion hiervon ist dass prompt substitution überhaupt geht und der promprt nicht ein vorher definierter statischer string ist
+#this will be set by oh-my-zsh anyway but it won't hurt to, for sanity, set it here as well
+#this is required (at any point) to enable any form if prompt susbstitution/to enable anything beyond a static string without vars as prompt
 setopt prompt_subst
 setopt PROMPT_SUBST
-#das autoload hier bedeutet, dass zur runtime eine funktion namens add-zsh-hook existieren wird, aber jetzt noch nicht bekannt ist von wo.
-#in diesem skript kann dann add-zsh-hook verwendet werden auch wenn es erst at runtime existiert
+#autoload here means I promise to this system a function add-zsh-hook will exist at runtime but it isn't known yet where it will be.
+#even if it's unknown that function can then be used here without issues
 #https://stackoverflow.com/questions/30840651/what-does-autoload-do-in-zsh
 autoload -Uz add-zsh-hook # load add-zsh-hook with zsh (-z) and suppress aliases (-U)
 
@@ -43,31 +45,32 @@ CalcTimeDiff (){
 	#this function takes the previously stored start time and calculates the time difference to now
 	#this function is automatically called via zsh hook on precmd (ie immediatly after the last command execution finishes
 	#but before the next prompt is prepared)
+	#the 'passion' theme shipped with oh-my-zsh does this entirely in shell, but I decided that's too slow and imprecise -> c binary compiled from ./timer.c
 	if [ "$CmdStartTime" ]; then
-		CmdDur="$(~/timer-zsh.elf STOP $CmdStartTime)"
+		CmdDur="$(~/timer-zsh.elf STOP "$CmdStartTime")"
 		CmdStartTime=""
 	fi
-	#passion theme had another if [ "${#CmdDur}" = "2" ]; then CmdDur="0$CmdDur" fi to make sure to have 0.X and not just .X for sub 1 second commands
-	#echo "$CmdDur"
 }
 add-zsh-hook preexec GetTimeStart
 add-zsh-hook precmd CalcTimeDiff
 #### End Time Taken for Command Helper Functions
 
 function GetSSHInfo(){
-	echo $SSH_CONNECTION | sed -nE 's~^([-0-9a-zA-Z_\.]+) ([0-9]+) ([-0-9a-zA-Z_\.]+) ([0-9]+)$~<SSH: \1:\2 -> \3:\4> ~p'
+	#this attempts to parse the SSH_CONNECTION env-variable to get '<SSH: clientIP:clientPort -> serverIP:serverPort>'
+	echo "$SSH_CONNECTION" | sed -nE 's~^([-0-9a-zA-Z_\.]+) ([0-9]+) ([-0-9a-zA-Z_\.]+) ([0-9]+)$~<SSH: \1:\2 -> \3:\4> ~p'
 }
 
 function GetBackgroundTaskInfo (){
 	#this calls `jobs` and uses `sed` to un following regex: ^\[(\d+)\]\s+([+|-]?)\s*(\w).+$
 	#(basically takes the number in square brackets, an optional + or - and the first letter of the status as capture groups and prints them in the order 1 3 2)
 	#then tr is used to get rid of linebreaks and shove everything to uppercase. finally rev|cut -c2-|rev chops trailing whitespace off
+	#NOTE: this isn't straight printed, repotools takes this as input and computes the number of jobs and may then print it if there's space
 	local background_task_info
-	background_task_info="$(jobs|sed -nE 's~^\[([0-9]+)\][^-a-zA-Z+]*([-+]?)[^-a-zA-Z+]*(.).*$~ \1\3\2~p'|tr 'a-z\n' 'A-Z '|rev|cut -c2- |rev)"
+	background_task_info="$(jobs|sed -nE 's~^\[([0-9]+)\][^-a-zA-Z+]*([-+]?)[^-a-zA-Z+]*(.).*$~\1\3\2~p'|tr 'a-z\n' 'A-Z '|rev|cut -c2- |rev)"
 	if [ ! -n "${background_task_info}" ]; then
 		echo ""
 	else
-		echo " {$background_task_info}"
+		echo ": {$background_task_info}"
 	fi
 }
 
@@ -102,37 +105,37 @@ GetProxyInfo(){
 		local apt_proxy_state_http
 		local apt_proxy_state_https
 		local valthing
-        valthing=$(tr -d '\n' < /etc/apt/apt.conf.d/proxy)
+		valthing=$(tr -d '\n' < /etc/apt/apt.conf.d/proxy)
 		apt_proxy_state_http=$(echo "$valthing"  | grep -G 'Acquire.*{.*HTTP::proxy.*;}')
 		apt_proxy_state_https=$(echo "$valthing" | grep -G 'Acquire.*{.*HTTPS::proxy.*;}')
 		if [ "$apt_proxy_state_http" ]; then
 			if [ "$apt_proxy_state_https" ]; then
-				PROXY_STATE_RES="$PROXY_STATE_RES%F{green}A%f" #both
+				PROXY_STATE_RES="$PROXY_STATE_RES%F{002}A%f" #both %green
 			else
-				PROXY_STATE_RES="$PROXY_STATE_RES%F{red}A%f" #http but not https
+				PROXY_STATE_RES="$PROXY_STATE_RES%F{001}A%f" #http but not https %red
 			fi
 		else
 			if [ "$apt_proxy_state_https" ]; then
-				PROXY_STATE_RES="$PROXY_STATE_RES%F{orange}A%f" #https but not http
+				PROXY_STATE_RES="$PROXY_STATE_RES%F{202}A%f" #https but not http %orange
 			fi
 		fi
 	fi
 	if [ "$http_proxy" ]; then
 		if [ "$https_proxy" ]; then
-			PROXY_STATE_RES="$PROXY_STATE_RES%F{green}H%f" #both
+			PROXY_STATE_RES="$PROXY_STATE_RES%F{002}H%f" #both
 		else
-			PROXY_STATE_RES="$PROXY_STATE_RES%F{red}H%f" #http but not https
+			PROXY_STATE_RES="$PROXY_STATE_RES%F{001}H%f" #http but not https
 		fi
 	else
 		if [ "$https_proxy" ]; then
-			PROXY_STATE_RES="$PROXY_STATE_RES%F{orange}H%f" #https but not http
+			PROXY_STATE_RES="$PROXY_STATE_RES%F{202}H%f" #https but not http
 		fi
 	fi
 	if [ "$no_proxy" ]; then
-		PROXY_STATE_RES="$PROXY_STATE_RES%F{green}N%f"
+		PROXY_STATE_RES="$PROXY_STATE_RES%F{002}N%f"
 	fi
 	if [ "$ftp_proxy" ]; then
-		PROXY_STATE_RES="$PROXY_STATE_RES%F{green}F%f"
+		PROXY_STATE_RES="$PROXY_STATE_RES%F{002}F%f"
 	fi
 
 	if [ "$PROXY_STATE_RES" ]; then
@@ -160,33 +163,67 @@ function PowerState (){
 	local __PWR_COND_LVL
 	local __PWR_EXT_STATUS
 
-	#this is to determin the AC status. at least on WSL /sys/class/power_supply/ac is unused and mapped into usb instead.
-	#on native linux this may be different but I don't have a system to test that at the minute
-	__PWR_EXT_STATUS=""
-	if [ -r /sys/class/power_supply/usb/online ] && [ $(cat /sys/class/power_supply/usb/online) = "1" ]; then
-		__PWR_EXT_STATUS=" ↯"
+	#this is to determine the AC status. at least on WSL /sys/class/power_supply/ac is unused and mapped into usb instead.
+	#on a Xubuntu VM there was /sys/class/power_supply/AC and that System also had Power status 'Unknown' (this VM was running in VirtualBox on top of an older Win10)
+	local USB_PWR
+	local AC_PWR
+	if [ -r /sys/class/power_supply/usb/online ] && [ "$(cat /sys/class/power_supply/usb/online)" = "1" ]; then
+		USB_PWR=1
 	fi
+	if [ -r /sys/class/power_supply/ac/online ] && [ "$(cat /sys/class/power_supply/ac/online)" = "1" ]; then
+		AC_PWR=1
+	elif [ -r /sys/class/power_supply/AC/online ] && [ "$(cat /sys/class/power_supply/AC/online)" = "1" ]; then
+		AC_PWR=1
+	fi
+	__PWR_EXT_STATUS=""
+
+	if [ "$AC_PWR" = 1 ] || [ "$USB_PWR" = 1 ]; then
+		if [ -n "$WSL_VERSION" ];then
+			#WSL->power always reported as USB -> no specific symbol
+			__PWR_EXT_STATUS=" "
+		else
+			if [ "$AC_PWR" = 1 ] && [ ! "$USB_PWR" = 1 ]; then
+				#AC
+				__PWR_EXT_STATUS=" ≈"
+			elif [ ! "$AC_PWR" = 1 ] && [ "$USB_PWR" = 1 ]; then
+				#USB
+				__PWR_EXT_STATUS=" ≛"
+			else
+				#BOTH
+				__PWR_EXT_STATUS=" ⩰"
+			fi
+		fi
+		__PWR_EXT_STATUS="$__PWR_EXT_STATUS↯"
+	fi
+
 
 	#this reads the battery status and appends % but because this is used in the prompt % needs to be escaped by another % infront
 	__PWR_COND_LVL="$(cat /sys/class/power_supply/$BatSource/capacity)"
 
 	case $(cat /sys/class/power_supply/$BatSource/status) in
 	Charging*)
-		__PWR_COND_STATUS=" ▲ "
+		__PWR_COND_STATUS="%F{157} ▲ "
 		;;
 	Discharging*)
-		__PWR_COND_STATUS=" ▽ "
+		__PWR_COND_STATUS="%F{217} ▽ "
 		;;
 	Full*)
-		__PWR_COND_STATUS=" ≻ "
+		__PWR_COND_STATUS="%F{157} ≻ "
 		#if the status is "battery Full" yet the battery charge percentage is 0%, it's probably because the system is a desktop PC running wsl where there is no battery but wsl still reports as if there was one -> just blank the text
-		if [ ${__PWR_COND_LVL} = "0" ]; then
+		if [ "${__PWR_COND_LVL}" = "0" ]; then
 			echo ""
 			return
 		fi
 		;;
 	'Not charging'*)
-		__PWR_COND_STATUS=" %F{red}◊ "
+		if [ "$__PWR_COND_LVL" -ge 95 ]; then
+			__PWR_COND_STATUS=" %F{172}◊ "
+		else
+			__PWR_COND_STATUS=" %F{009}◊ "
+		fi
+		;;
+	'Unknown'*)
+		__PWR_COND_STATUS=" %F{009}!⌧? "
 		;;
 	*)
 		#realistically this shouldn't happen, but if there's a state I missed I'll find out what is was
@@ -197,12 +234,12 @@ function PowerState (){
 }
 
 function MainPrompt(){
-	print -P "$(~/repotools.elf PROMPT "$(pwd)" "$COLUMNS" "$(print -P "%F{010}%n%F{007}@%F{033}%m\a")" "$(print -P ":/dev/%y\a")" "$(print -P "%D{%T}\a")" "$(print -P " %D{UTC%z (%Z)}\a")" "$(print -P "$(GetLocalIP)\a")" "$(print -P "$(GetProxyInfo)\a")" "$(print -P "$(PowerState)\a")" "$(print -P "$(GetBackgroundTaskInfo)\a")" " [$SHLVL]" "$(print "$(GetSSHInfo)\a")")"
+	print -P "\n$(~/repotools.elf PROMPT "$(pwd)" "$COLUMNS" "$(print -P "%F{010}%n%F{007}@%F{033}%m\a")" "$(print -P ":/dev/%y\a")" "$(print -P "%D{%T}\a")" "$(print -P " %D{UTC%z (%Z)}\a")" "$(print -P "$(GetLocalIP)\a")" "$(print -P "$(GetProxyInfo)\a")" "$(print -P "$(PowerState)\a")" "$(print -P "$(GetBackgroundTaskInfo)\a")" " [$SHLVL]" "$(print "$(GetSSHInfo)\a")")"
 }
 
 add-zsh-hook precmd MainPrompt
 
-PROMPT='└ %F{cyan}%B%c%b%f %B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b '
+PROMPT='└%F{cyan}%B %2~ %b%f%B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b  '
 
 #To do multiline Prompts I am printing the top line before the prompt is ever computed.
 #print -P is a zsh builtin (man zshmisc) that does the same substitution the prompt would.
@@ -214,5 +251,4 @@ PROMPT='└ %F{cyan}%B%c%b%f %B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b '
 # - : having a linebreak in PROMPT messed with the positioning of RPROMPT and the carret behaviour for editing typed commands
 # - : hitting 'HOME' or 'POS1' often would send the carret to the top line and was showing editing that but in reality it was invisibly editing the command string
 
-#RPROMPT=' %(1j.%j Background Jobs.)'
 echo "SetupDone"

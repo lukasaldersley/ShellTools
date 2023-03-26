@@ -5,8 +5,8 @@
 
 export EDITOR=nano
 #the hash -d something=other is a bit like ~ means /mnt/user/home; ~something now means other
-hash -d CODE="$CODE_LOC"
 hash -d code="$CODE_LOC"
+hash -d CODE="$CODE_LOC"
 
 #script invocations
 alias pack='$CODE_LOC/packAndDeleteFolder.sh'
@@ -18,13 +18,17 @@ alias contentsearch='$CODE_LOC/contentsearch.sh'
 alias zshrc="nano ~/.zshrc"
 alias cls=clear
 alias gitlog="git log --branches --remotes --tags --graph --oneline --decorate --notes HEAD"
+#"hash time(realtivetime) (HEAD -> master,...) email(name) subject"
+#%h abbrev commit hash
+#%an author name
+#%ae author email
+#%ar author date realtive
+#%aI iso yyyy-mm-ddThh:mm:ss author date
+#%ai iso-like format author date
+#everywhere I used %a. it would have been possible to use %c. to get the committer instead of the author...
+#%d ref names like --decorate of git log
+#%s subjet
 alias qqq=exit
-alias dotnet=~/.dotnet/dotnet
-
-alias lscolour='echo -e "\e[30m30 \e[90m90 \e[31m31 \e[91m91 \e[32m32 \e[92m92 \e[33m33 \e[93m93 \e[34m34 \e[94m94 \e[35m35 \e[95m95 \e[36m36 \e[96m96 \e[37m37 \e[97m97  \e[40m40 \e[100m100 \e[41m41 \e[101m101 \e[42m42 \e[102m102 \e[43m43 \e[103m103 \e[44m44 \e[104m104 \e[45m45 \e[105m105 \e[46m46 \e[106m106 \e[47m47 \e[107m107"'
-alias ansicolour=lscolour
-alias ansicolor=ansicolour
-alias lscolor=lscolour
 
 function UpdateZSH (){
 	git -C "$CODE_LOC" pull
@@ -44,7 +48,21 @@ export PROXY_ADDRESS_STRING
 PROXY_USER="user"
 export PROXY_USER
 
+function SetUpAptProxyConfigFile(){
+	if [ ! -w /etc/apt/apt.conf.d/proxy ]; then
+		echo "apt proxy config file had no write permissions -> changing that"
+		if [ ! -e /etc/apt/apt.conf.d/proxy ]; then
+			echo "apt proxy config file didn't even exist -> creating now"
+			sudo touch /etc/apt/apt.conf.d/proxy
+		fi
+		sudo chmod 664 /etc/apt/apt.conf.d/proxy
+		sudo chgrp sudo /etc/apt/apt.conf.d/proxy
+		ls -lash /etc/apt/apt.conf.d/proxy
+	fi
+}
+
 function enableProxy(){
+	SetUpAptProxyConfigFile
 	local PROXY_PW
 	#please note, read is a shell builtin. in bash it would be -r -s -p "prompt" TargetVar while in ZSH it is -r -s "?prompt" TargetVar
 	read -r -s "?Please Enter Password for Proxy ($PROXY_ADDRESS_STRING, user $PROXY_USER):" PROXY_PW
@@ -65,7 +83,7 @@ function enableProxy(){
 }
 
 function SetGitBase(){
-	 ~/repotools.elf SET "${2:-"~CODE"}" "${1:-"NONE"}" "${3:-"QUICK"}"
+	 ~/repotools.elf SET "${2:-"$CODE_LOC"}" "${1:-"NONE"}" "${3:-"QUICK"}"
 }
 
 function lsRepo(){
@@ -75,6 +93,8 @@ function lsRepo(){
 alias lsgit=lsRepo
 alias lsrepo=lsRepo
 alias lsGit=lsRepo
+alias lsgit=lsrepo
+alias gitls=lsrepo
 
 alias lsorigin="~/repotools.elf LIST ORIGINS"
 

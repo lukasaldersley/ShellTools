@@ -1,28 +1,16 @@
 #/*
 printf "compiling $0 into ~/timer-zsh.elf"
-gcc -std=c2x -Wall "$0" -o ~/timer-zsh.elf
+gcc -std=c2x -Wall "$(dirname "$0")"/commons.c "$0" -o ~/timer-zsh.elf
 printf " -> \e[32mDONE\e[0m($?)\n"
 exit
 (basename $0 .c) would be used to get the name of file without the .c extension
 */
 
+#include "commons.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <time.h>
 #include <stdlib.h>
-
-bool Compare(const char* a, const char* b) {
-	bool matching = true;
-	int idx = 0;
-	while (matching && a[idx] != 0x00 && b[idx] != 0x00) {
-		if (a[idx] != b[idx]) {
-			matching = false;
-			break;
-		}
-		idx++;
-	}
-	return matching;
-}
 
 int main(int argc, char** argv) {
 	if (argc < 2 || argc>3) {
