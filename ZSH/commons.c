@@ -21,6 +21,29 @@ bool Compare(const char* a, const char* b)
 	return matching;
 }
 
+
+StringRelations CompareStrings(const char* a, const char* b) {
+	StringRelations result = ALPHA_EQUAL;
+	int idx = 0;
+	while (a[idx] != 0x00 && b[idx] != 0x00) {
+		char ca = ToLowerCase(a[idx]);
+		char cb = ToLowerCase(b[idx]);
+		if (ca != cb)
+		{
+			if (ca < cb) {
+				result = ALPHA_BEFORE;
+				break;
+			}
+			else {
+				result = ALPHA_AFTER;
+				break;
+			}
+		}
+		idx++;
+	}
+	return result;
+}
+
 char ToLowerCase(char c)
 {
 	if (c >= 'A' && c <= 'Z')
@@ -103,6 +126,18 @@ void TerminateStrOn(char* str, const char* terminators) {
 		}
 		i++;
 	}
+}
+
+int LastIndexOf(const char* txt, char tst) {
+	int idx = -1;
+	int ridx = 0;
+	while (txt[ridx] != 0x00) {
+		if (txt[ridx] == tst) {
+			idx = ridx;
+		}
+		ridx++;
+	}
+	return idx;
 }
 
 char* ExecuteProcess(const char* command) {

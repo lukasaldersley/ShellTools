@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+typedef enum { ALPHA_BEFORE, ALPHA_EQUAL, ALPHA_AFTER } StringRelations;
 bool Compare(const char* a, const char* b);
 char ToLowerCase(char c);
 char ToUpperCase(char c);
@@ -15,5 +16,7 @@ bool ContainsString(const char* str, const char* test);
 char* ExecuteProcess(const char* command);
 int strlen_visible(const char* s);
 void TerminateStrOn(char* str, const char* terminators);
+StringRelations CompareStrings(const char* a, const char* b);
+int LastIndexOf(const char* txt, char tst);
 
 #endif

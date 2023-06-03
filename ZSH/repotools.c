@@ -6,6 +6,7 @@ printf " -> \e[32mDONE\e[0m($?)\n"
 exit
 */
 
+
 #include "commons.h"
 #include <regex.h>
 #include <string.h>
@@ -25,10 +26,17 @@ exit
 #define COLOUR_GIT_MERGES "\e[38;5;009m"
 #define COLOUR_GIT_STAGED "\e[38;5;010m"
 #define COLOUR_GIT_MODIFIED "\e[38;5;226m"
+#define COLOUR_GREYOUT "\e[38;5;240m"
+#define COLOUR_GIT_BRANCH_REMOTEONLY "\e[0m"
+#define COLOUR_GIT_BRANCH_LOCALONLY "\e[38;5;220m"
+#define COLOUR_GIT_BRANCH_UNEQUAL "\e[38;5;009m"
 #define COLOUR_CLEAR "\e[0m"
 const char* terminators = "\r\n\a";
 
 #define maxGroups 10
+regmatch_t CapturedResults[maxGroups];
+regex_t reg;
+
 #define MaxLocations 10
 const char* NAMES[10];
 const char* LOCS[10];
@@ -42,8 +50,20 @@ const char* DEFAULT_PATH_LOOPBACK = "ssh://127.0.0.1/data/repos";
 const char* DEFAULT_NAME_GLOBAL = "GLOBAL";
 const char* DEFAULT_PATH_GLOBAL = "ssh://git@someprivateurl.de:1234/data/repos";
 
-regex_t RemoteRepoRegex;
-regmatch_t CapturedResults[maxGroups];
+typedef struct {
+	char* BranchName;
+	bool IsMergedLocal;
+	char* CommitHashLocal;
+	bool IsMergedRemote;
+	char* CommitHashRemote;
+} BranchInfo;
+
+typedef struct BranchListSorted_t BranchListSorted;
+struct BranchListSorted_t {
+	BranchInfo branchinfo;
+	BranchListSorted* next;
+	BranchListSorted* prev;
+};
 
 typedef struct RepoInfo_t RepoInfo;
 typedef struct RepoList_t RepoList;
@@ -79,6 +99,13 @@ struct RepoInfo_t {
 	int StagedChanges;
 	int ActiveMergeFiles;
 	int stashes;
+
+	int CountRemoteOnlyBranches;
+	int CountLocalOnlyBranches;
+	int CountUnequalBranches;
+	int CountActiveBranches;
+	int CountFullyMergedBranches;
+	bool CheckedOutBranchIsNotInRemote;
 };
 
 RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName) {
@@ -108,6 +135,13 @@ RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName) {
 	ri->ActiveMergeFiles = 0;
 	ri->stashes = 0;
 
+	ri->CountRemoteOnlyBranches = 0;
+	ri->CountLocalOnlyBranches = 0;
+	ri->CountUnequalBranches = 0;
+	ri->CountActiveBranches = 0;
+	ri->CountFullyMergedBranches = 0;
+	ri->CheckedOutBranchIsNotInRemote = false;
+
 	asprintf(&(ri->DirectoryName), "%s", directoryName);
 	asprintf(&(ri->DirectoryPath), "%s%s%s", directoryPath, ((strlen(directoryPath) > 0) ? "/" : ""), directoryName);
 	//printf("working on %s\n", ri->DirectoryPath);
@@ -134,6 +168,276 @@ void AllocUnsetStringsToEmpty(RepoInfo* ri) {
 	if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { ri->RepositoryUnprocessedOrigin_PREVIOUS = (char*)malloc(sizeof(char));ri->RepositoryUnprocessedOrigin_PREVIOUS[0] = 0x00; }
 	if (ri->branch == NULL) { ri->branch = (char*)malloc(sizeof(char));ri->branch[0] = 0x00; }
 	if (ri->parentRepo == NULL) { ri->parentRepo = (char*)malloc(sizeof(char));ri->parentRepo[0] = 0x00; }
+}
+
+BranchListSorted* InitBranchListSortedElement() {
+	BranchListSorted* a = (BranchListSorted*)malloc(sizeof(BranchListSorted));
+	BranchInfo* e = &(a->branchinfo);
+	e->BranchName = NULL;
+	e->CommitHashLocal = NULL;
+	e->IsMergedLocal = false;
+	e->CommitHashRemote = NULL;
+	e->IsMergedRemote = false;
+	return a;
+}
+
+BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char* branchname, char* hash, bool remote) {
+	if (head == NULL) {
+		//Create Initial Element (List didn't exist previously)
+		BranchListSorted* n = InitBranchListSortedElement();
+		n->next = NULL;
+		n->prev = NULL;
+		asprintf(&(n->branchinfo.BranchName), "%s", branchname);
+		if (remote) {
+			asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash);
+		}
+		else {
+			asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash);
+		}
+		return n;
+	}
+	else if (Compare(head->branchinfo.BranchName, branchname)) {
+		//Branch Name matches, this means I know of the local copy and am adding the remote one or vice versa
+		if (remote) {
+			asprintf(&(head->branchinfo.CommitHashRemote), "%s", hash);
+		}
+		else {
+			asprintf(&(head->branchinfo.CommitHashLocal), "%s", hash);
+		}
+		return head;
+	}
+	else if (CompareStrings(head->branchinfo.BranchName, branchname) == ALPHA_AFTER) {
+		//The new Element is Alphabetically befory myself -> insert new element before myself
+		BranchListSorted* n = InitBranchListSortedElement();
+		n->next = head;
+		n->prev = head->prev;
+		if (head->prev != NULL) head->prev->next = n;
+		head->prev = n;
+		asprintf(&(n->branchinfo.BranchName), "%s", branchname);
+		if (remote) {
+			asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash);
+		}
+		else {
+			asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash);
+		}
+		return n;
+	}
+	else if (head->next == NULL) {
+		//The New Element is NOT Equal to myslef and is NOT alphabetically before myself (as per the earlier checks)
+		//on top of that, I AM the LAST element, so I can simply create a new last element
+		BranchListSorted* n = InitBranchListSortedElement();
+		n->next = head->next;
+		n->prev = head;
+		if (head->next != NULL) head->next->prev = n;
+		head->next = n;
+		asprintf(&(n->branchinfo.BranchName), "%s", branchname);
+		if (remote) {
+			asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash);
+		}
+		else {
+			asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash);
+		}
+		return head;
+	}
+	else {
+		//The New Element is NOT Equal to myslef and is NOT alphabetically before myself (as per the earlier checks)
+		//This time there IS another element after myself -> defer to it.
+		head->next = InsertIntoBranchListSorted(head->next, branchname, hash, remote);
+		return head;
+	}
+}
+
+bool IsMergeCommit(const char* repoPath, const char* commitHash) {
+	const int size = 32;
+	char* result = (char*)malloc(sizeof(char) * size);
+	char* cmd;
+	bool RES = false;
+	asprintf(&cmd, "git -C \"%s\" cat-file -p %s |grep parent|wc -l", repoPath, commitHash);
+	FILE* fp = popen(cmd, "r");
+	if (fp == NULL)
+	{
+		fprintf(stderr, "failed running process %s\n", cmd);
+	}
+	else {
+		while (fgets(result, size - 1, fp) != NULL)
+		{
+			TerminateStrOn(result, "\r\n\a");
+			if (Compare(result, "2")) {
+				RES = true;
+			}
+		}
+	}
+	free(result);
+	pclose(fp);
+	free(cmd);
+	return RES;
+}
+
+bool IsMerged(const char* repopath, const char* commithash) {
+	//git rev-list --children --all | grep ^a40691c4edac3e3e9cff1f651f79a80dd3bd792a | cut -c42- | tr ' ' '\n'
+	//for each check if merge commit, if at least one is a merge commit, then this branch has been merged
+	const int size = 64;
+	char* result = (char*)malloc(sizeof(char) * size);
+	char* cmd;
+	bool RES = false;
+	asprintf(&cmd, "git -C \"%s\" rev-list --children --all | grep ^%s | cut -c42- | tr ' ' '\n'", repopath, commithash);
+	FILE* fp = popen(cmd, "r");
+	if (fp == NULL)
+	{
+		fprintf(stderr, "failed running process %s\n", cmd);
+	}
+	else {
+		while (fgets(result, size - 1, fp) != NULL)
+		{
+			TerminateStrOn(result, "\r\n\a");
+			if (result[0] == 0x00) {
+				//if the line is empty -> no need to check if it's a merge commit if it's not even a commit at all
+				continue;
+			}
+			bool imc = IsMergeCommit(repopath, result);
+			//printf("%s is%s a merge commit\n", result, imc ? "" : " NOT");
+			RES = RES || imc;
+		}
+	}
+	free(result);
+	pclose(fp);
+	free(cmd);
+	return RES;
+}
+
+void CheckBranching(RepoInfo* ri) {
+	BranchListSorted* ListBase = NULL;
+
+	char* command;
+	int size = 1024;
+	char* result = (char*)malloc(sizeof(char) * size);
+	asprintf(&command, "git -C \"%s\" branch -vva", ri->DirectoryPath);
+	FILE* fp = popen(command, "r");
+	if (fp == NULL)
+	{
+		fprintf(stderr, "failed running process %s\n", command);
+	}
+	else {
+		while (fgets(result, size - 1, fp) != NULL)
+		{
+			TerminateStrOn(result, "\r\n\a");
+			//printf("\n\n%s\n", result);
+			fflush(stdout);
+			int RegexReturnCode = regexec(&reg, result, maxGroups, CapturedResults, 0);
+			if (RegexReturnCode == 0)
+			{
+				char* bname = NULL;
+				char* hash = NULL;
+				bool rm = false;
+				for (unsigned int GroupID = 0; GroupID < maxGroups; GroupID++)
+				{
+					if (CapturedResults[GroupID].rm_so == (size_t)-1) {
+						break;  // No more groups
+					}
+					regoff_t start, end;
+					start = CapturedResults[GroupID].rm_so;
+					end = CapturedResults[GroupID].rm_eo;
+					int len = end - start;
+
+					char* x = malloc(sizeof(char) * (len + 1));
+					strncpy(x, result + start, len);
+					x[len] = 0x00;
+					if (GroupID == 1) {
+						int offs = 0;
+						if (StartsWith(x, "remotes/")) {
+							offs = LastIndexOf(x, '/') + 1;
+							rm = true;
+						}
+						bname = malloc(sizeof(char) * ((len - offs) + 1));
+						strncpy(bname, result + start + offs, len - offs);
+						bname[len - offs] = 0x00;
+					}
+					else if (GroupID == 2) {
+						hash = malloc(sizeof(char) * (len + 1));
+						strncpy(hash, result + start, len);
+						hash[len] = 0x00;
+					}
+					free(x);
+				}
+				if (bname != NULL && hash != NULL) {
+					ListBase = InsertIntoBranchListSorted(ListBase, bname, hash, rm);
+					free(bname);
+					free(hash);
+				}
+				else {
+					printf("found something non matching\n");
+					fflush(stdout);
+				}
+			}
+		}
+	}
+
+	BranchListSorted* ptr = ListBase;
+	BranchListSorted* LastKnown = NULL;
+	while (ptr != NULL) {
+		LastKnown = ListBase;
+		if (ptr->branchinfo.CommitHashRemote != NULL) {
+			ptr->branchinfo.IsMergedRemote = IsMerged(ri->DirectoryPath, ptr->branchinfo.CommitHashRemote);
+		}
+		else {
+			//If the branch only exists in one place, the other shall be counted as fully merged
+			//the reason is: if BOTH are fully merged I consider the branch legacy,
+			//but only if BOTH are, so to make a remote - only fully merged branch count as such, the non - existing local branch must count as merged
+			ptr->branchinfo.IsMergedRemote = true;
+		}
+		if (ptr->branchinfo.CommitHashLocal != NULL) {
+			ptr->branchinfo.IsMergedLocal = IsMerged(ri->DirectoryPath, ptr->branchinfo.CommitHashLocal);
+		}
+		else {
+			ptr->branchinfo.IsMergedLocal = true;
+		}
+
+		//printf("{%s: %s%c|%s%c}\n",
+		//	(ptr->branchinfo.BranchName != NULL ? ptr->branchinfo.BranchName : "????"),
+		//	(ptr->branchinfo.CommitHashLocal != NULL ? ptr->branchinfo.CommitHashLocal : "---"),
+		//	ptr->branchinfo.IsMergedLocal ? 'M' : '!',
+		//	(ptr->branchinfo.CommitHashRemote != NULL ? ptr->branchinfo.CommitHashRemote : "---"),
+		//	ptr->branchinfo.IsMergedRemote ? 'M' : '!');
+
+
+		if (ptr->branchinfo.CommitHashLocal == NULL && ptr->branchinfo.CommitHashRemote != NULL && !ptr->branchinfo.IsMergedRemote) {//remote-only, non-merged
+			ri->CountRemoteOnlyBranches++;
+		}
+
+		if (ptr->branchinfo.CommitHashLocal != NULL && ptr->branchinfo.CommitHashRemote == NULL) {
+			ri->CountLocalOnlyBranches++;
+			//If I CURRENTLY am ON THIS branch, indicate it as {NEW}
+			if (Compare(ptr->branchinfo.BranchName, ri->branch)) {
+				ri->CheckedOutBranchIsNotInRemote = true;
+			}
+		}
+
+		if (ptr->branchinfo.IsMergedLocal && ptr->branchinfo.IsMergedRemote) {
+			ri->CountFullyMergedBranches++;
+		}
+		else {
+			ri->CountActiveBranches++;
+		}
+
+		if (ptr->branchinfo.CommitHashLocal != NULL && ptr->branchinfo.CommitHashRemote != NULL) {
+			if (!Compare(ptr->branchinfo.CommitHashLocal, ptr->branchinfo.CommitHashRemote)) {
+				ri->CountUnequalBranches++;
+			}
+		}
+		ptr = ptr->next;
+	}
+	//free from the back forward
+	while (LastKnown != NULL) {
+		BranchListSorted* temporary = LastKnown->prev;
+		free(LastKnown);
+		LastKnown = temporary;
+	}
+	ListBase = NULL;
+
+	//printf("/%i+%i: (%i⇣ %i⇡ %i⇵)\n", ri->CountActiveBranches, ri->CountFullyMergedBranches, ri->CountRemoteOnlyBranches, ri->CountLocalOnlyBranches, ri->CountUnequalBranches);
+	free(result);
+	pclose(fp);
+	free(command);
 }
 
 bool CheckExtendedGitStatus(RepoInfo* ri) {
@@ -312,6 +616,8 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	ri->isSubModule = !((ri->parentRepo)[0] == 0x00);
 	free(cmd);
 
+	CheckBranching(ri);
+
 	CheckExtendedGitStatus(ri);
 	ri->DirtyWorktree = !(ri->ActiveMergeFiles == 0 && ri->ModifiedFiles == 0 && ri->StagedChanges == 0);
 
@@ -359,7 +665,9 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 
 	char* sedCmd;
 	//this regex is basically "(?<proto>\w+)://(?<remotehost>(?<user@remoteHost>\w+@)?\w+)(?<port>:\d+)?((?:/:)?(\w+))?.*/(\w+)(.git/?)?"
-	//I am a bit unsure what everything after port is trying to do. it seems like it might be one of these things that is a bit nondeterministic and causes a lot of backtracking. obviously I want to capture somethoing like ssh://git@host:port:/somepath/reponame.git/, where I want remoname (without .git, and if there's a trailing /, also without that), but I don't really know what exactly the first couple groups are and why I need those groups
+	//I am a bit unsure what everything after port is trying to do. it seems like it might be one of these things that is a bit nondeterministic and causes a lot of backtracking.
+	//obviously I want to capture somethoing like ssh://git@host:port:/somepath/reponame.git/, where I want remoname (without .git, and if there's a trailing /, also without that),
+	//but I don't really know what exactly the first couple groups are and why I need those groups
 	asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([a-zA-Z0-9_]+):\\/\\/(([a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(\\:([0-9]+)){0,1}([\\:\\/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git\\/{0,1})?$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin);
 	char* sedRes = ExecuteProcess(sedCmd);
 	TerminateStrOn(sedRes, terminators);
@@ -489,6 +797,49 @@ RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, 
 	return ri;
 }
 
+char* ConstructGitBranchInfoString(RepoInfo* ri) {
+#define MALEN 64
+	int rbLen = 0;
+	char* rb = (char*)malloc(sizeof(char) * MALEN);
+	rb[0] = 0x00;
+	int temp;
+	if (ri->CountRemoteOnlyBranches > 0 || ri->CountLocalOnlyBranches > 0 || ri->CountUnequalBranches > 0) {
+		temp = snprintf(rb + rbLen, MALEN - rbLen, ": ⟨");
+		if (temp < MALEN && temp>0) {
+			rbLen += temp;
+		}
+
+		if (ri->CountRemoteOnlyBranches > 0) {
+			temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_REMOTEONLY "%d⇣ ", ri->CountRemoteOnlyBranches);
+			if (temp < MALEN && temp>0) {
+				rbLen += temp;
+			}
+		}
+
+		if (ri->CountLocalOnlyBranches > 0) {
+			temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_LOCALONLY "%d⇡ ", ri->CountLocalOnlyBranches);
+			if (temp < MALEN && temp>0) {
+				rbLen += temp;
+			}
+		}
+
+		if (ri->CountUnequalBranches > 0) {
+			temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_UNEQUAL "%d⇕ ", ri->CountUnequalBranches);
+			if (temp < MALEN && temp>0) {
+				rbLen += temp;
+			}
+		}
+
+		rb[--rbLen] = 0x00;//bin a space (after the file listings)
+
+		temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GREYOUT "⟩");
+		if (temp < MALEN && temp>0) {
+			rbLen += temp;
+		}
+	}
+	return rb;
+}
+
 char* ConstructGitStatusString(RepoInfo* ri) {
 #define GIT_SEG_5_MAX_LEN 128
 	int rbLen = 0;
@@ -511,8 +862,17 @@ char* ConstructGitStatusString(RepoInfo* ri) {
 			rbLen += temp;
 		}
 	}
+	else if (ri->CheckedOutBranchIsNotInRemote) {
+		//Initially I wanted not {NEW BRANCH} but {1⇡+}, where 1 is the number of commits since branching.
+		//to do that I would have to start at the branch tip, look at it's parent and see how many children that has.
+		//I would need to continue this chain until I find a commit with more than one child (the latest branching point) or I run out of commits (nothing on remote at all, no branches whatsoever)
+		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " {" COLOUR_GIT_COMMITS "NEW BRANCH" COLOUR_CLEAR "}");
+		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
+			rbLen += temp;
+		}
+	}
 
-	if (ri->StagedChanges > 0 || ri->ModifiedFiles > 0 || ri->UntrackedFiles > 0) {
+	if (ri->StagedChanges > 0 || ri->ModifiedFiles > 0 || ri->UntrackedFiles > 0 || ri->ActiveMergeFiles > 0) {
 		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " <");
 		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
 			rbLen += temp;
@@ -568,7 +928,14 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 		if (ri->isSubModule) {
 			printf("-SM" COLOUR_CLEAR "@" COLOUR_GIT_PARENT "%s", ri->parentRepo);
 		}
-		printf(COLOUR_CLEAR "] " COLOUR_GIT_NAME "%s" COLOUR_CLEAR " on " COLOUR_GIT_BRANCH "%s " COLOUR_CLEAR "from ", ri->RepositoryName, ri->branch);
+		char* gbi = ConstructGitBranchInfoString(ri);
+		printf(COLOUR_CLEAR "] " COLOUR_GIT_NAME "%s" COLOUR_CLEAR " on " COLOUR_GIT_BRANCH "%s" COLOUR_GREYOUT "/%i+%i%s " COLOUR_CLEAR "from ",
+			ri->RepositoryName,
+			ri->branch,
+			ri->CountActiveBranches,
+			ri->CountFullyMergedBranches,
+			gbi);
+		if (gbi != NULL)free(gbi);
 
 		char* GitStatStrTemp = ConstructGitStatusString(ri);
 		//differentiate between display only and display after change
@@ -576,7 +943,7 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 			printf(COLOUR_GIT_ORIGIN "[%s(%i) -> %s(%i)]" COLOUR_CLEAR, NAMES[ri->RepositoryOriginID_PREVIOUS], ri->RepositoryOriginID_PREVIOUS, NAMES[ri->RepositoryOriginID], ri->RepositoryOriginID);
 			printf("%s", GitStatStrTemp);
 			if (fullOut) {
-				printf(" \e[38;5;240m(%s -> %s)\e[0m", ri->RepositoryUnprocessedOrigin_PREVIOUS, ri->RepositoryUnprocessedOrigin);
+				printf(COLOUR_GREYOUT " (%s -> %s)\e[0m", ri->RepositoryUnprocessedOrigin_PREVIOUS, ri->RepositoryUnprocessedOrigin);
 			}
 			putc('\n', stdout);
 		}
@@ -584,7 +951,7 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 			printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin);
 			printf("%s", GitStatStrTemp);
 			if (fullOut) {
-				printf(" \e[38;5;240m(%s)\e[0m", ri->RepositoryUnprocessedOrigin);
+				printf(COLOUR_GREYOUT " (%s)\e[0m", ri->RepositoryUnprocessedOrigin);
 			}
 			putc('\n', stdout);
 		}
@@ -592,7 +959,9 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 
 	}
 	else {
-		printf("\e[38;5;240m%s\e[0m\n", ri->DirectoryName);//this prints the name of intermediate folders that are not git repos, but contain a repo somewhere within -> those are less important -> print greyed out //TODO I just grabbed the CSI colour for the full remote string form the unprocessed repo origin
+		printf(COLOUR_GREYOUT "%s\e[0m\n", ri->DirectoryName);
+		//this prints the name of intermediate folders that are not git repos, but contain a repo somewhere within
+		//-> those are less important->print greyed out //TODO I just grabbed the CSI colour for the full remote string form the unprocessed repo origin
 	}
 	fflush(stdout);
 	RepoList* current = ri->SubDirectories;
@@ -713,8 +1082,10 @@ uint32_t determinePossibleCombinations(int* availableLength, int NumElements, ..
 	//the variadic elements are the size of individual blocks.
 	//the purpose of this function is to figure out which blocks can fit into the total size in an optimal fashion.
 	//an optimal fashion means: as many as possible, but the blocks are given in descending priority.
-	//example: if there's a total size of 10 and the blocks 5,7,6,3,4,2,8,1,1,1,1,1,1,1,1 the solution would be to take 5+3+2 since 5 is the most important which means there's a size of 5 left that can be filled again. 7 doesn't fit, so we'll take the next best thing that will fit, in this case 3, which leaves 2, which in turn can be taken by the 2.
-	//if the goal was just to have "as many as possible" the example should have picked all 1es, but since I need priorities, take the first that'll fit and find the next hightest priority that'll fit (which will be further back in the list, otherwise it would already have been selected)
+	//example: if there's a total size of 10 and the blocks 5,7,6,3,4,2,8,1,1,1,1,1,1,1,1 the solution would be to take 5+3+2 since 5 is the most important which means there's a size of 5 left that can be filled again.
+	//7 doesn't fit, so we'll take the next best thing that will fit, in this case 3, which leaves 2, which in turn can be taken by the 2.
+	//if the goal was just to have "as many as possible" the example should have picked all 1es, but since I need priorities, take the first that'll fit and find the next hightest priority that'll fit
+	//(which will be further back in the list, otherwise it would already have been selected)
 	//this function then returns a bitfield of which blocks were selected
 	assert(NumElements > 0 && NumElements <= 32);
 	uint32_t res = 0;
@@ -749,6 +1120,18 @@ int main(int argc, char** argv)
 	if (buf == NULL) {
 		printf("couldn't malloc required buffer");
 	}
+
+	const char* RegexString = "^[ *]+([-_/0-9a-zA-Z]*) +([0-9a-fA-F]+) (\\[([-/_0-9a-zA-Z]+)\\])?.*$";
+	int RegexReturnCode;
+	RegexReturnCode = regcomp(&reg, RegexString, REG_EXTENDED | REG_NEWLINE);
+	if (RegexReturnCode)
+	{
+		char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
+		int elen = regerror(RegexReturnCode, &reg, regErrorBuf, 1024);
+		printf("Could not compile regular expression '%s'. [%i(%s) {len:%i}]\n", RegexString, RegexReturnCode, regErrorBuf, elen);
+		free(regErrorBuf);
+		exit(1);
+	};
 
 	DoSetup();
 
@@ -850,7 +1233,15 @@ int main(int argc, char** argv)
 			if (ri->isSubModule) {
 				asprintf(&gitSegment2_parentRepoLoc, COLOUR_CLEAR "@" COLOUR_GIT_PARENT "%s" COLOUR_CLEAR, ri->parentRepo);
 			}
-			asprintf(&gitSegment3_BaseMarkerEnd, COLOUR_CLEAR "] " COLOUR_GIT_NAME "%s" COLOUR_CLEAR " on "COLOUR_GIT_BRANCH "%s" COLOUR_CLEAR, ri->RepositoryName, ri->branch);
+			//TODO the "/8: (1⇣ 2⇡ 3||)" means: 8 branches total, 1 in remote but not local, 2 local but not remote and 3 in both, but diverged, this means there are two branches in both and in sync
+			char* gbi = ConstructGitBranchInfoString(ri);
+			asprintf(&gitSegment3_BaseMarkerEnd, COLOUR_CLEAR "] " COLOUR_GIT_NAME "%s" COLOUR_CLEAR " on "COLOUR_GIT_BRANCH "%s" COLOUR_GREYOUT "/%i+%i%s" COLOUR_CLEAR,
+				ri->RepositoryName,
+				ri->branch,
+				ri->CountActiveBranches,
+				ri->CountFullyMergedBranches,
+				gbi);
+			if (gbi != NULL)free(gbi);
 			asprintf(&gitSegment4_remoteinfo, " from " COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin);
 			gitSegment5_gitStatus = ConstructGitStatusString(ri);
 
@@ -875,7 +1266,16 @@ int main(int argc, char** argv)
 #endif
 
 
-		int RemainingPromptWidth = TotalPromptWidth - (lens[ID_UserAtHost] + lens[ID_SHLVL] + gitSegment1_BaseMarkerStart_len + gitSegment3_BaseMarkerEnd_len + gitSegment5_gitStatus_len + lens[ID_Time] + lens[ID_ProxyInfo] + strlen_visible(numBgJobsStr) + lens[ID_PowerState] + 1);
+		int RemainingPromptWidth = TotalPromptWidth - (
+			lens[ID_UserAtHost] +
+			lens[ID_SHLVL] +
+			gitSegment1_BaseMarkerStart_len +
+			gitSegment3_BaseMarkerEnd_len +
+			gitSegment5_gitStatus_len +
+			lens[ID_Time] +
+			lens[ID_ProxyInfo] +
+			strlen_visible(numBgJobsStr) +
+			lens[ID_PowerState] + 1);
 
 		uint32_t AdditionalElementAvailabilityPackedBool = determinePossibleCombinations(&RemainingPromptWidth, 7,
 			gitSegment4_remoteinfo_len,
@@ -1006,4 +1406,5 @@ int main(int argc, char** argv)
 		return -1;
 	}
 	free(buf);
+	regfree(&reg);
 }
