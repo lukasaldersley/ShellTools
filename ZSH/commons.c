@@ -58,7 +58,7 @@ char ToLowerCase(char c)
 
 char ToUpperCase(char c)
 {
-	if (c >= 'a')
+	if (c >= 'a' && c <= 'z')
 	{
 		return c - 0x20;
 	}
@@ -101,6 +101,7 @@ bool ContainsString(const char* str, const char* test)
 		uint8_t tIdx = 0;
 		while (test[tIdx] != 0x00 && test[tIdx] == str[sIdx + tIdx])
 		{
+			//TODO optimize this to be a faster text search instead of adumb exhaustive searhc, if possible skip sIdx forward at the same time as tIdx
 			tIdx++;
 		}
 		if (test[tIdx] == 0x00)

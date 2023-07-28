@@ -234,7 +234,7 @@ function PowerState (){
 }
 
 function MainPrompt(){
-	print -P "\n$(~/repotools.elf PROMPT "$(pwd)" "$COLUMNS" "$(print -P "%F{010}%n%F{007}@%F{033}%m\a")" "$(print -P ":/dev/%y\a")" "$(print -P "%D{%T}\a")" "$(print -P " %D{UTC%z (%Z)}\a")" "$(print -P "$(GetLocalIP)\a")" "$(print -P "$(GetProxyInfo)\a")" "$(print -P "$(PowerState)\a")" "$(print -P "$(GetBackgroundTaskInfo)\a")" " [$SHLVL]" "$(print "$(GetSSHInfo)\a")")"
+	print -P "\n$(~/repotools.elf PROMPT "$(pwd)" "$COLUMNS" "$(print -P "%F{010}%n%F{007}@%F{033}%m\a")" "$(print -P ":/dev/%y\a")" "$(print -P "%D{%T}\a")" "$(print -P " %D{UTC%z (%Z)}\a")" "$(print -P " %D{%a %d.%m.%Y}\a")" "$(print -P " %D{KW%V}")" "$(print -P "$(GetLocalIP)\a")" "$(print -P "$(GetProxyInfo)\a")" "$(print -P "$(PowerState)\a")" "$(print -P "$(GetBackgroundTaskInfo)\a")" " [$SHLVL]" "$(print "$(GetSSHInfo)\a")")"
 }
 
 add-zsh-hook precmd MainPrompt
@@ -250,5 +250,6 @@ PROMPT='└%F{cyan}%B %2~ %b%f%B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b  '
 # - : GetBackgroundTasks was being executed, but kept returning empty strings (probably because jobs is a zsh builtin and the prompt building was happening in another subshell with no jobs or something)
 # - : having a linebreak in PROMPT messed with the positioning of RPROMPT and the carret behaviour for editing typed commands
 # - : hitting 'HOME' or 'POS1' often would send the carret to the top line and was showing editing that but in reality it was invisibly editing the command string
+#Conclusion: Make top line single-fire evaluation
 
-echo "SetupDone"
+echo "done loading $(basename $0)"

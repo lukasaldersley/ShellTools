@@ -43,9 +43,9 @@ function UpdateZSH (){
 	omz reload
 }
 
-PROXY_ADDRESS_STRING="host:port"
+PROXY_ADDRESS_STRING=""
 export PROXY_ADDRESS_STRING
-PROXY_USER="user"
+PROXY_USER=""
 export PROXY_USER
 
 function SetUpAptProxyConfigFile(){
@@ -62,23 +62,29 @@ function SetUpAptProxyConfigFile(){
 }
 
 function enableProxy(){
-	SetUpAptProxyConfigFile
-	local PROXY_PW
-	#please note, read is a shell builtin. in bash it would be -r -s -p "prompt" TargetVar while in ZSH it is -r -s "?prompt" TargetVar
-	read -r -s "?Please Enter Password for Proxy ($PROXY_ADDRESS_STRING, user $PROXY_USER):" PROXY_PW
-	export {http,https,ftp}_proxy="http://$PROXY_USER:$PROXY_PW@$PROXY_ADDRESS_STRING"
-	printf 'Acquire {\n  HTTP::proxy "http://%s:%s@%s";\n  HTTPS::proxy "http://%s:%s@%s";\n}\n' "$PROXY_USER" "$PROXY_PW" "$PROXY_ADDRESS_STRING" "$PROXY_USER" "$PROXY_PW" "$PROXY_ADDRESS_STRING">/etc/apt/apt.conf.d/proxy
-	PROXY_PW=""
-	echo ""
-	#NOTE: the test if proxy auth is working is not functioning right now, it always accepts
-	local ConnTestURL='www.google.de'
-	if curl --silent --max-time 1 $ConnTestURL > /dev/null
-	then
-		echo "enabled proxy"
+	if [ -n "$PROXY_ADDRESS_STRING" ] && [ -n "$PROXY_USER" ] ; then
+		SetUpAptProxyConfigFile
+		local PROXY_PW
+		#please note, read is a shell builtin. in bash it would be -r -s -p "prompt" TargetVar while in ZSH it is -r -s "?prompt" TargetVar
+		read -r -s "?Please Enter Password for Proxy ($PROXY_ADDRESS_STRING, user $PROXY_USER):" PROXY_PW
+		export {http,https,ftp}_proxy="http://$PROXY_USER:$PROXY_PW@$PROXY_ADDRESS_STRING"
+		printf 'Acquire {\n  HTTP::proxy "http://%s:%s@%s";\n  HTTPS::proxy "http://%s:%s@%s";\n}\n' "$PROXY_USER" "$PROXY_PW" "$PROXY_ADDRESS_STRING" "$PROXY_USER" "$PROXY_PW" "$PROXY_ADDRESS_STRING">/etc/apt/apt.conf.d/proxy
+		PROXY_PW=""
+		echo ""
+		
+		#NOTE: the test if proxy auth is working is not functioning right now, it always accepts
+		#it works if the proxy hasn't yet been enabled since System boot, otherwise it caches and always succeeds
+		local ConnTestURL='www.google.de'
+		if curl --silent --max-time 1 $ConnTestURL > /dev/null
+		then
+			echo "enabled proxy"
+		else
+			#no connectiopn
+			echo "Connection not possible (likely wrong password)"
+			disableProxy
+		fi
 	else
-		#no connectiopn
-		echo "Connection not possible (likely wrong password)"
-		disableProxy
+		echo "No set proxy information -> NOT SETTING PROXY"
 	fi
 }
 
@@ -88,6 +94,12 @@ function SetGitBase(){
 
 function lsRepo(){
 	~/repotools.elf SHOW "${1:-"$(pwd)"}" "${2:-"QUICK"}"
+}
+
+function compare(){
+	#EachWidth="$(bc <<< "$COLUMNS/2")"
+	#diff --width="$EachWidth" -y --color --report-identical-files --suppress-common-lines <(cat "$1") <(cat "$2")
+	code --diff "$1" "$2"
 }
 
 alias lsgit=lsRepo

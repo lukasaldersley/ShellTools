@@ -13,7 +13,6 @@ exit
 #include <errno.h>
 #include <assert.h>
 #include <stdarg.h>
-
 #include <dirent.h>
 
 #define COLOUR_GIT_BARE "\e[38;5;006m"
@@ -38,8 +37,9 @@ regmatch_t CapturedResults[maxGroups];
 regex_t reg;
 
 #define MaxLocations 10
-const char* NAMES[10];
-const char* LOCS[10];
+const char* NAMES[MaxLocations];
+const char* LOCS[MaxLocations];
+int LIMIT_BRANCHES = 0;
 uint8_t numLOCS = 0;
 char* buf;
 int bufCurLen;
@@ -144,7 +144,6 @@ RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName) {
 
 	asprintf(&(ri->DirectoryName), "%s", directoryName);
 	asprintf(&(ri->DirectoryPath), "%s%s%s", directoryPath, ((strlen(directoryPath) > 0) ? "/" : ""), directoryName);
-	//printf("working on %s\n", ri->DirectoryPath);
 	return ri;
 }
 
@@ -252,6 +251,9 @@ bool IsMergeCommit(const char* repoPath, const char* commitHash) {
 	char* result = (char*)malloc(sizeof(char) * size);
 	char* cmd;
 	bool RES = false;
+	//this looks up the commit hashes for all parents of a given commit
+	//usually a commit has EXACTLY ONE parent, the only exceptions are the initial commit (no parents) or a merge commit (two parents)
+	//therefore if a commit has 2 parents it's a merge commit
 	asprintf(&cmd, "git -C \"%s\" cat-file -p %s |grep parent|wc -l", repoPath, commitHash);
 	FILE* fp = popen(cmd, "r");
 	if (fp == NULL)
@@ -261,7 +263,7 @@ bool IsMergeCommit(const char* repoPath, const char* commitHash) {
 	else {
 		while (fgets(result, size - 1, fp) != NULL)
 		{
-			TerminateStrOn(result, "\r\n\a");
+			TerminateStrOn(result, terminators);
 			if (Compare(result, "2")) {
 				RES = true;
 			}
@@ -274,6 +276,13 @@ bool IsMergeCommit(const char* repoPath, const char* commitHash) {
 }
 
 bool IsMerged(const char* repopath, const char* commithash) {
+	//to check if a branch is merged, query git for all commits this reference is a parent to (ie search for all child commits)
+	//if any of the child commits is a merge commit, this branch is considered merged.
+	//if there are more than one child it is possible a new branch was created at this commit
+	//it is possible for two children to exist: a merge commit and one non-merge commit
+	//it that case I still consider THIS branch merged with a new branch being created
+	//if there are childen but none of them is a merge commit, this commit could be fast forwarded in some direction but hasn't, it is not merged
+	//the cut -c42- bit is to cut my own hash out of the result and only leave the children
 	//git rev-list --children --all | grep ^a40691c4edac3e3e9cff1f651f79a80dd3bd792a | cut -c42- | tr ' ' '\n'
 	//for each check if merge commit, if at least one is a merge commit, then this branch has been merged
 	const int size = 64;
@@ -289,7 +298,7 @@ bool IsMerged(const char* repopath, const char* commithash) {
 	else {
 		while (fgets(result, size - 1, fp) != NULL)
 		{
-			TerminateStrOn(result, "\r\n\a");
+			TerminateStrOn(result, terminators);
 			if (result[0] == 0x00) {
 				//if the line is empty -> no need to check if it's a merge commit if it's not even a commit at all
 				continue;
@@ -305,7 +314,9 @@ bool IsMerged(const char* repopath, const char* commithash) {
 	return RES;
 }
 
-void CheckBranching(RepoInfo* ri) {
+bool CheckBranching(RepoInfo* ri) {
+	//this method checks the status of all branches on a given repo
+	//and then computes how many differ, howm many up to date, how many branches local-only, how many branches remote-only
 	BranchListSorted* ListBase = NULL;
 
 	char* command;
@@ -318,9 +329,25 @@ void CheckBranching(RepoInfo* ri) {
 		fprintf(stderr, "failed running process %s\n", command);
 	}
 	else {
+		int branchcount = 0;
 		while (fgets(result, size - 1, fp) != NULL)
 		{
-			TerminateStrOn(result, "\r\n\a");
+			TerminateStrOn(result, terminators);
+			branchcount++;
+			if (LIMIT_BRANCHES > 0 && branchcount > LIMIT_BRANCHES) {
+				free(result);
+				pclose(fp);
+				free(command);
+				fprintf(stderr, "more than %i branches -> aborting branchhandling\n", LIMIT_BRANCHES);
+				while (ListBase != NULL) {
+					BranchListSorted* temp = ListBase;
+					ListBase = ListBase->next;
+					free(temp);
+				}
+				//printf("BRANCHING: ABORT\r");
+				//fflush(stdout);
+				return false;
+			}
 			//printf("\n\n%s\n", result);
 			fflush(stdout);
 			int RegexReturnCode = regexec(&reg, result, maxGroups, CapturedResults, 0);
@@ -438,6 +465,7 @@ void CheckBranching(RepoInfo* ri) {
 	free(result);
 	pclose(fp);
 	free(command);
+	return true;
 }
 
 bool CheckExtendedGitStatus(RepoInfo* ri) {
@@ -448,8 +476,9 @@ bool CheckExtendedGitStatus(RepoInfo* ri) {
 		return 0;
 	}
 	char* command;
-	asprintf(&command, "git -C \"%s\" status --porcelain=v2 -b --show-stash", ri->DirectoryPath);
+	asprintf(&command, "git -C \"%s\" status --ignore-submodules=dirty --porcelain=v2 -b --show-stash", ri->DirectoryPath);
 	FILE* fp = popen(command, "r");
+	//printf("have opened git status\r");
 	if (fp == NULL)
 	{
 		size = 0;
@@ -499,7 +528,7 @@ bool CheckExtendedGitStatus(RepoInfo* ri) {
 	return size != 0;//if I set size to 0 when erroring out, return false/0; else 1
 }
 
-void AddChild(RepoInfo* parent, RepoInfo* child) {//OK
+void AddChild(RepoInfo* parent, RepoInfo* child) {
 	//if the ParentDirectory node doesn't have any SubDirectories, it also won't have the list structure -> allocate and create it.
 	if (parent->SubDirectories == NULL) {
 		parent->SubDirectories = (RepoList*)malloc(sizeof(RepoList));
@@ -605,7 +634,6 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	asprintf(&cmd, "git -C  \"%1$s\" symbolic-ref --short HEAD 2>/dev/null || git -C \"%1$s\" describe --tags --exact-match HEAD 2>/dev/null || git -C \"%1$s\" rev-parse --short HEAD", ri->DirectoryPath);
 	ri->branch = ExecuteProcess(cmd);
 	TerminateStrOn(ri->branch, terminators);
-	//printf("branch : %s\n", ri->branch);
 	free(cmd);
 	cmd = NULL;
 
@@ -616,10 +644,13 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	ri->isSubModule = !((ri->parentRepo)[0] == 0x00);
 	free(cmd);
 
+
 	CheckBranching(ri);
+
 
 	CheckExtendedGitStatus(ri);
 	ri->DirtyWorktree = !(ri->ActiveMergeFiles == 0 && ri->ModifiedFiles == 0 && ri->StagedChanges == 0);
+
 
 	asprintf(&cmd, "git -C \"%s\" ls-remote --get-url origin", ri->DirectoryPath);
 	ri->RepositoryUnprocessedOrigin = ExecuteProcess(cmd);
@@ -664,14 +695,33 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	}
 
 	char* sedCmd;
-	//this regex is basically "(?<proto>\w+)://(?<remotehost>(?<user@remoteHost>\w+@)?\w+)(?<port>:\d+)?((?:/:)?(\w+))?.*/(\w+)(.git/?)?"
-	//I am a bit unsure what everything after port is trying to do. it seems like it might be one of these things that is a bit nondeterministic and causes a lot of backtracking.
-	//obviously I want to capture somethoing like ssh://git@host:port:/somepath/reponame.git/, where I want remoname (without .git, and if there's a trailing /, also without that),
-	//but I don't really know what exactly the first couple groups are and why I need those groups
-	asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([a-zA-Z0-9_]+):\\/\\/(([a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(\\:([0-9]+)){0,1}([\\:\\/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git\\/{0,1})?$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin);
+	//this regex is basically:
+	//^(?<proto>[-\w+])://(?:(?<user>[-\w]+)@)?(?<host>[-\.\w]+)(?::(?<port>\d+))?(?:[:/](?<remotePath_GitHubUser>[-\w]+))?.*/(?<reponame>[-\w]+)(?:\.git/?)?$ //this is the debuggin version for regex101.com (PCRE<7.3, delimiter ~)
+	//sed does not have non-capturing groups, so all non-capturing groups are included in the group count
+	//the mapping of sed-groups to the regex101 groups is as follows:
+	//1->protoc
+	//2->Non-capturing
+	//3->user
+	//4->host
+	//5->Non-capturing(:port)
+	//6->port
+	//7->Non-capturing (:remotepath or /gitHubUser)
+	//8->remotePath_GitHubUser (if not GitHub, it's the path on remote)
+	//9->reponame
+	//10->Non-Capturing(.git)
+	//DO NOT CHANGE THIS REGEX WITHOUT UPDATING THE Regex101 VARIANT, THE GROUP DEFINITIONS AND THE DESCRIPTION
+	asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin);
+	//I take the capturing groups and paste them into a | seperated sting. There's 6 words (5 |), so I'll need 6 pointers into this memory area to resolve the six words
+#define REPO_ORIGIN_WORDS_IN_STRING 6
+#define REPO_ORIGIN_GROUP_PROTOCOL 0
+#define REPO_ORIGIN_GROUP_USER 1
+#define REPO_ORIGIN_GROUP_Host 2
+#define REPO_ORIGIN_GROUP_PORT 3
+#define REPO_ORIGIN_GROUP_GitHubUser 4 /*(if not GitHub, it's the path on remote)*/
+#define REPO_ORIGIN_GROUP_RepoName 5
 	char* sedRes = ExecuteProcess(sedCmd);
 	TerminateStrOn(sedRes, terminators);
-	if (sedRes[0] == 0x00) {
+	if (sedRes[0] == 0x00) {//sed output was empty -> it must be a local repo, just parse the last folder as repo name and the rest as pparentrepopath
 		// local repo
 		if (ri->RepositoryOriginID == -1)
 		{
@@ -695,46 +745,63 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 		//local repo
 	}
 	else {
-#define ptrcount 7
-		char* ptrs[ptrcount];
+		//the sed command was not empty therefore it matched as a remote thing and needs to be parsed
+		char* ptrs[REPO_ORIGIN_WORDS_IN_STRING];
 		ptrs[0] = sedRes;
-		ptrs[1] = sedRes;
-		int cptr = 1;
-		while (*ptrs[cptr] != 0x00 && cptr < (ptrcount - 1)) {
-			if (*ptrs[cptr] == '|') {
-				*ptrs[cptr] = 0x00;
-				ptrs[cptr + 1] = ptrs[cptr]++;
-				cptr++;
+		char* workingPointer = sedRes;
+		int NextWordPointer = 0;
+		while (*workingPointer != 0x00 && NextWordPointer < (REPO_ORIGIN_WORDS_IN_STRING - 1)) {//since I set NextWordPointer+1^I need to stop at WORDS-2=== 'x < (Words-1)'
+			if (*workingPointer == '|') {
+				//I found a seperator -> set string terminator for current string
+				*workingPointer = 0x00;
+				//if there's anything after the seperator, set the start point for the next string
+				if (*(workingPointer + 1) != 0x00) {
+					NextWordPointer++;
+					ptrs[NextWordPointer] = (workingPointer + 1);
+				}
 			}
-			ptrs[cptr]++;
-		}
-		if (*ptrs[5] != 0x00) {//repo name
-			asprintf(&ri->RepositoryName, "%s", ptrs[5]);
+			workingPointer++;
 		}
 
-		if (ri->RepositoryOriginID == -1)
+		//I take the base name of the remote rep from this parsed string regardless of the fact if it is a LOCLANET/GLOBAL or a known GitHub derivative something unknown
+		if (*ptrs[REPO_ORIGIN_GROUP_RepoName] != 0x00) {//repo name
+			asprintf(&ri->RepositoryName, "%s", ptrs[REPO_ORIGIN_GROUP_RepoName]);
+		}
+
+		//the rest of this only makes sense for stuff that's NOT LOCALNET/GLOBAL etc.
+		if (ri->RepositoryOriginID == -1)//not a known repo origin (ie not from LOCALNET, NONE etc)
 		{
 			ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char) * 256);
 			int currlen = 0;
-			currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[0], 255 - currlen);//proto
+			currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PROTOCOL], 255 - currlen);//proto
 			currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
-			if (!Compare(ptrs[1], "git") && Compare(ptrs[0], "ssh")) {//if name is NOT git then print it but only print if it was ssh
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[1], 255 - currlen);//username
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, "@", 255 - currlen);//proto
+			if (!Compare(ptrs[REPO_ORIGIN_GROUP_USER], "git") && Compare(ptrs[REPO_ORIGIN_GROUP_PROTOCOL], "ssh")) {//if name is NOT git then print it but only print if it was ssh
+				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_USER], 255 - currlen);//username
+				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, "@", 255 - currlen);//@
 			}
-			currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[2], 255 - currlen);//host
+			currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_Host], 255 - currlen);//host
 			if (*ptrs[3] != 0x00) {//if port is given print it
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//proto
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[3], 255 - currlen);//username
+				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
+				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PORT], 255 - currlen);//username
 			}
-			if (*ptrs[4] != 0x00 && (Compare(ptrs[2], "github.com") || Compare(ptrs[2], "gitlab.com") || Compare(ptrs[2], "cc-github.bmwgroup.net"))) {//host is github or gitlab and I can parse a github username also add it
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//proto
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[4], 255 - currlen);//service username
+			if (*ptrs[4] != 0x00 && (Compare(ptrs[REPO_ORIGIN_GROUP_Host], "github.com") || Compare(ptrs[REPO_ORIGIN_GROUP_Host], "gitlab.com"))) {//host is github or gitlab and I can parse a github username also add it
+				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
+				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], 255 - currlen);//service username
 			}
 		}
-#undef ptrcount
+		for (int i = 0;i < REPO_ORIGIN_WORDS_IN_STRING;i++) {
+			ptrs[i] = NULL;//to prevent UseAfterFree vulns
+		}
 	}
+#undef REPO_ORIGIN_WORDS_IN_STRING
+#undef REPO_ORIGIN_GROUP_PROTOCOL
+#undef REPO_ORIGIN_GROUP_USER
+#undef REPO_ORIGIN_GROUP_Host
+#undef REPO_ORIGIN_GROUP_PORT
+#undef REPO_ORIGIN_GROUP_GitHubUser
+#undef REPO_ORIGIN_GROUP_RepoName
 	free(sedRes);
+	sedRes = NULL;
 
 	//once I have the current and new repo origin IDs perform the change
 	if (desiredorigin != -1 && ri->RepositoryOriginID != -1 && ri->RepositoryOriginID != desiredorigin) {
@@ -760,7 +827,7 @@ RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, 
 	RepoInfo* ri = AllocRepoInfo(directoryPath, directoryName);
 	if (BeThorough) {
 		//If I am searching thorough I need to know if I encountered a bare repo, so I need to check the current folder first.
-		//however I am quick searching I need to know if the current folder contains a file/folder named .git, therefor in that case I need to process the subfolders first
+		//however if I am quick searching I need to know if the current folder contains a file/folder named .git, therefore in that case I need to process the subfolders first
 		//so this call is conditioned on BeThorough being true while at the end of this function I have basically the same call conditionend to BeThorough being false
 		TestPathForRepoAndParseIfExists(ri, newRepoSpec, false, true);
 	}
@@ -866,6 +933,51 @@ char* ConstructGitStatusString(RepoInfo* ri) {
 		//Initially I wanted not {NEW BRANCH} but {1⇡+}, where 1 is the number of commits since branching.
 		//to do that I would have to start at the branch tip, look at it's parent and see how many children that has.
 		//I would need to continue this chain until I find a commit with more than one child (the latest branching point) or I run out of commits (nothing on remote at all, no branches whatsoever)
+
+		//////{
+		//////	int numCommitsOnBranch = 0;
+		//////	bool CheckFurter = false;
+		//////	char current[64] = "HEAD";
+		//////	do {
+		//////		numCommitsOnBranch++;
+		//////		const int size = 256;
+		//////		char* result = (char*)malloc(sizeof(char) * size);
+		//////		char* cmd;
+		//////		bool RES = false;
+		//////		//look up the commit's parent. if the parent is a branch tip on remote or the initial commit, I found the base.
+		//////		//I will also have found the base if I find a commit with more than one child (one of them being me) IFF one of the OTHER children has a child somewhere down the line which itself IS a branch tip on remote
+		//////		//the best way to figure this out would be to create a in-memory graph, start at all nodes that mark a remote branch tip and bfs/dfs my way through the graph, marking all parents as 'on remote'
+		//////		//then start at all non-remote branch tips and bfs how many nodes I need to visit until I reach a 'on remote' node or run out of nodes
+		//////		asprintf(&cmd, "git -C \"%s\" cat-file -p %s |grep parent|cut -c8-", ri->DirectoryPath, current);
+		//////		int parentcount = 0;
+		//////		FILE* fp = popen(cmd, "r");
+		//////		if (fp == NULL)
+		//////		{
+		//////			fprintf(stderr, "failed running process %s\n", cmd);
+		//////		}
+		//////		else {
+		//////			while (fgets(result, size - 1, fp) != NULL)
+		//////			{
+		//////				TerminateStrOn(result, terminators);
+		//////				if (parentcount == 0) {
+		//////					strncpy(current, result, 63);
+		//////					current[63] = 0x00;
+		//////					if (current[0] == 0x00) {
+		//////						break;
+		//////					}
+		//////				}
+		//////				parentcount++;
+		//////			}
+		//////		}
+		//////		free(result);
+		//////		pclose(fp);
+		//////		free(cmd);
+		//////		if (parentcount != 1) {
+		//////			CheckFurter = false;
+		//////		}
+		//////	} while (CheckFurter);
+		//////	printf("%s/%s has %i new commits\n", ri->RepositoryName, ri->branch, numCommitsOnBranch);
+		//////}
 		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " {" COLOUR_GIT_COMMITS "NEW BRANCH" COLOUR_CLEAR "}");
 		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
 			rbLen += temp;
@@ -1137,12 +1249,17 @@ int main(int argc, char** argv)
 
 	if (Compare(argv[1], "PROMPT")) //show origin info for command prompt
 	{
-		if (argc != 14) {
+		LIMIT_BRANCHES = 50;
+		if (argc != 16) {
 			fprintf(stderr, "INVAILD PARAMETER COUNT: %i\nNEED: PROMPT $pwd $COLUMNS User_at_host TerminalDevice time timezone_info ip_info proxy_info power_info background_jobs_info shlvl sshinfo", argc - 1);
 			return -1;
 		}
 		RepoInfo* ri = AllocRepoInfo("", argv[2]);
+		//printf("Pre entering repocheck\r");
+		//fflush(stdout);
 		TestPathForRepoAndParseIfExists(ri, -1, true, true);
+		//printf("returned out of repocheck\r");
+		//fflush(stdout);
 		if (ri == NULL) {
 			fprintf(stderr, "error at main: TestPathForRepoAndParseIfExists returned null\n");
 			return 1;
@@ -1154,12 +1271,14 @@ int main(int argc, char** argv)
 		int ID_TerminalDevice = 5;
 		int ID_Time = 6;
 		int ID_TimeZone = 7;
-		int ID_LocalIPs = 8;
-		int ID_ProxyInfo = 9;
-		int ID_PowerState = 10;
-		int ID_BackgroundJobs = 11;
-		int ID_SHLVL = 12;
-		int ID_SSHInfo = 13;
+		int ID_DateInfo = 8;
+		int ID_CalenderWeek = 9;
+		int ID_LocalIPs = 10;
+		int ID_ProxyInfo = 11;
+		int ID_PowerState = 12;
+		int ID_BackgroundJobs = 13;
+		int ID_SHLVL = 14;
+		int ID_SSHInfo = 15;
 
 		//if top line too short -> omission order: git submodule location (git_4)(...@/path/to/parent/repo); device (/dev/pts/0); time Zone (UTC+0200 (CEST)); IP info ; git remote info(git_2) (... from displayedorigin)
 
@@ -1182,6 +1301,8 @@ int main(int argc, char** argv)
 		TerminateStrOn(argv[11], terminators);
 		TerminateStrOn(argv[12], terminators);
 		TerminateStrOn(argv[13], terminators);
+		TerminateStrOn(argv[14], terminators);
+		TerminateStrOn(argv[15], terminators);
 
 		//if the shell level is 1, don't print it, only if shell level >1 show it
 		if (Compare(argv[ID_SHLVL], " [1]")) {
@@ -1277,18 +1398,29 @@ int main(int argc, char** argv)
 			strlen_visible(numBgJobsStr) +
 			lens[ID_PowerState] + 1);
 
-		uint32_t AdditionalElementAvailabilityPackedBool = determinePossibleCombinations(&RemainingPromptWidth, 7,
+		uint32_t AdditionalElementAvailabilityPackedBool = determinePossibleCombinations(&RemainingPromptWidth, 9,
 			gitSegment4_remoteinfo_len,
 			lens[ID_LocalIPs],
+			lens[ID_CalenderWeek],
 			lens[ID_TimeZone],
+			lens[ID_DateInfo],
 			lens[ID_TerminalDevice],
 			gitSegment2_parentRepoLoc_len,
 			lens[ID_BackgroundJobs],
 			lens[ID_SSHInfo]);
 
+#define AdditionalElementPriorityGitRemoteInfo 0
+#define AdditionalElementPriorityLocalIP 1
+#define AdditionalElementPriorityCalenderWeek 2
+#define AdditionalElementPriorityTimeZone 3
+#define AdditionalElementPriorityDate 4
+#define AdditionalElementPriorityTerminalDevice 5
+#define AdditionalElementPriorityParentRepoLocation 6
+#define AdditionalElementPriorityBackgroundJobDetail 7
+#define AdditionalElementPrioritySSHInfo 8
 
 		//if the seventh-prioritized element (ssh connection info) has space, print it "<SSH: 100.85.145.164:49567 -> 192.168.0.220:22> "
-		if (AdditionalElementAvailabilityPackedBool & (1 << 6)) {
+		if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPrioritySSHInfo)) {
 			printf("%s", argv[ID_SSHInfo]);
 		}
 
@@ -1296,7 +1428,7 @@ int main(int argc, char** argv)
 		printf("%s", argv[ID_UserAtHost]);
 
 		//if the fourth-prioritized element (the line/terminal device has space, append it to the user@machine) ":/dev/pts/0"
-		if (AdditionalElementAvailabilityPackedBool & (1 << 3)) {
+		if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTerminalDevice)) {
 			printf("%s", argv[ID_TerminalDevice]);
 		}
 
@@ -1305,7 +1437,7 @@ int main(int argc, char** argv)
 		printf("%s" COLOUR_CLEAR "%s", argv[ID_SHLVL], gitSegment1_BaseMarkerStart);
 
 		//if the fifth-prioritized element (the the location of the parent repo, if it exists, ie if this is submodule) "@/mnt/e/CODE"
-		if ((AdditionalElementAvailabilityPackedBool & (1 << 4))) {
+		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityParentRepoLocation))) {
 			printf("%s", gitSegment2_parentRepoLoc);
 		}
 
@@ -1313,7 +1445,7 @@ int main(int argc, char** argv)
 		printf("%s", gitSegment3_BaseMarkerEnd);
 
 		//if the first-prioritized element (the git remote origin information) has space, print it " from ssh:git@someprivateurl.de:1234"
-		if ((AdditionalElementAvailabilityPackedBool & (1 << 0))) {
+		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityGitRemoteInfo))) {
 			printf("%s", gitSegment4_remoteinfo);
 		}
 
@@ -1329,21 +1461,29 @@ int main(int argc, char** argv)
 		printf("%s", argv[ID_Time]);
 
 		//if the third-prioritized element (timezone info) has space, print it " UTC+0200 (CEST)"
-		if ((AdditionalElementAvailabilityPackedBool & (1 << 2))) {
+		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTimeZone))) {
 			printf("%s", argv[ID_TimeZone]);
+		}
+
+		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityDate))) {
+			printf("%s", argv[ID_DateInfo]);
+		}
+
+		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityCalenderWeek))) {
+			printf("%s", argv[ID_CalenderWeek]);
 		}
 
 		//if a proxy is configured, show it (A=Apt, H=http(s), F=FTP, N=None) " [AHF]"
 		printf("%s", argv[ID_ProxyInfo]);
 
 		//if the second prioritized element (local IP addresses) has space, print it " eth0:127.0.0.1 wifi0:127.0.0.2"
-		if ((AdditionalElementAvailabilityPackedBool & (1 << 1))) {
+		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityLocalIP))) {
 			printf("%s", argv[ID_LocalIPs]);
 		}
 
 		printf("%s", numBgJobsStr);
 		//if the sixth-prioritized element (background tasks) has space, print it " {1S-  2S+}"
-		if ((AdditionalElementAvailabilityPackedBool & (1 << 5))) {
+		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityBackgroundJobDetail))) {
 			printf("%s", argv[ID_BackgroundJobs]);
 		}
 

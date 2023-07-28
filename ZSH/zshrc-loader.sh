@@ -21,6 +21,8 @@ if [ -z "$WSL_VERSION" ]; then
 	echo "native -> don't source WSL"
 else
 	export WSL_VERSION
-	# shellcheck source=./wsl.sh
-	. "$CODE_LOC/ZSH/wsl.sh"
+	# shellcheck source=./wsl_common.sh
+	. "$CODE_LOC/BAT_VBS/ZSH/wsl_common.sh"
 fi
+
+echo "done loading utility scripts"
