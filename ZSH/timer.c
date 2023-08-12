@@ -1,12 +1,12 @@
 #/*
 printf "compiling $0 into ~/timer-zsh.elf"
-gcc -std=c2x -Wall "$(dirname "$0")"/commons.c "$0" -o ~/timer-zsh.elf
+gcc -std=c2x -Wall "$(realpath "$(dirname "$0")/../")"/C/commons.c "$0" -o ~/timer-zsh.elf
 printf " -> \e[32mDONE\e[0m($?)\n"
 exit
 (basename $0 .c) would be used to get the name of file without the .c extension
 */
 
-#include "commons.h"
+#include "../C/commons.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <time.h>
