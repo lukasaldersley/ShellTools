@@ -54,7 +54,6 @@ while true; do
 			;;
 		-f|--full-update)
 			full=1
-			distUpgrade=1
 			admin=1
 			doUpdate=1
 			nolock=0
@@ -98,8 +97,35 @@ if [ $distUpgrade -ne 0 ]; then
 	cmd="${cmd}dist-"
 fi
 cmd="${cmd}upgrade"
-#echo "$cmd"
-eval "LANG=C.UTF-8 LANGUAGE="" $cmd" | sed -nE 's~([0-9]+) upgraded.*and ([0-9]+) not upgraded.+~There are \1 packages to be updated and \2 for dist-upgrade ~p'|tr -d '\n'
+___apt_tempfile01___="$(mktemp)"
+if [ $full -ne 0 ];then
+	bash -ic "$cmd"
+	eval "$0 -u"
+	exit
+else
+	#echo "$cmd"
+	eval "LANG=C.UTF-8 LANGUAGE="" $cmd">"$___apt_tempfile01___"
+	sed -nE 's~([0-9]+) upgraded.*and ([0-9]+) not upgraded.+~There are \1 packages to be updated and \2 held back ~p' < "$___apt_tempfile01___"|tr -d '\n'
+fi
+
+___apt_tempfile02___="$(mktemp)"
+# shellcheck disable=SC2046 # SC2046 is double quote to prevent word splitting. in this case I WANT word splitting, see SC2046 wiki for another example
+apt show -a $(tr '\n' '|' <"$___apt_tempfile01___"|sed 's~|  ~ ~g'|grep -Eo 'kept back:[^\|]+'|cut -c12-) 2>&1 | grep Phased > "$___apt_tempfile02___";
+___apt_tempvar01___="$(wc -l <"$___apt_tempfile02___")";
+printf "(%s of those are held by phased update" "$___apt_tempvar01___";
+if [ "$___apt_tempvar01___" -ne 0 ]; then
+	printf ": "
+	uniq -c <"$___apt_tempfile02___" | sed -nE 's~ *([0-9]+)[^:]+: ([0-9]+)~\1\x1b[38;5;242m@\2%\x1b[0m ~p'|tr -d '\n'|rev|cut -c2-|rev|tr -d '\n'
+fi
+printf ") ";
+rm "$___apt_tempfile01___"
+rm "$___apt_tempfile02___"
+unset ___apt_tempfile01___
+unset ___apt_tempfile02___
+unset ___apt_tempvar01___
+#There are 0 packages to be updated and 7 held back {7 Packages held by Staged Update: 2@0% 2@80% 3@70%} (Archives are 1 minutes old, fetched 1 minutes ago)
+#when a package reaches 100% staged update it's rolled out globally until then based on machine ID and package name I may or may not get it yet
+
 #according to https://serverfault.com/questions/20747/find-last-time-update-was-performed-with-apt-get /var/lib/apt/lists/partial/ is the one I want to go with to check when the last update was
 #
 # shellcheck disable=SC2010 #reason for shellcheck disable is: this is one of the cases where ls's sorting (-t, sort by time) is important and that's fine according to shellcheck.net
@@ -109,7 +135,7 @@ now=$(date +%s)
 diff=$((now-timestamp))
 d2=$((now-t2))
 
-printf "(Archives are "
+printf "[Archives are "
 if [ $d2 -lt 60 ]; then
 	printf "%s seconds" "$d2"
 elif [ $d2 -lt 3600 ]; then
@@ -123,14 +149,15 @@ fi
 printf " old, fetched "
 
 if [ $diff -lt 60 ]; then
-	echo "$diff seconds ago)"
+	printf "%s seconds" "$diff"
 elif [ $diff -lt 3600 ]; then
-	echo "$((diff / 60)) minutes ago)"
+	printf "%s minutes" "$((diff / 60))"
 elif [ $diff -lt 86400 ]; then
-	echo "$((diff / 3600)) hours ago)"
+	printf "%s hours" "$((diff / 3600))"
 else
-	echo "$((diff / 86400)) days ago)"
+	printf "%s days" "$((diff / 86400))"
 fi
+echo " ago]"
 
 if [ -f /var/run/reboot-required ]; then
 	cat /var/run/reboot-required

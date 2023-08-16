@@ -41,11 +41,9 @@ alias qqq=exit
 
 function UpdateZSH (){
 	git -C "$CODE_LOC" pull
-	#compile all c files in the folders ZSH and C using the self-compile trick
-	find "$CODE_LOC/ZSH" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
-	find "$CODE_LOC/ZSH" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
-	find "$CODE_LOC/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
-	find "$CODE_LOC/C" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
+	#compile all .c or .cpp files in the folders ZSH and C using the self-compile trick
+	find "$CODE_LOC/ZSH" "$CODE_LOC/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
+	find "$CODE_LOC/ZSH" "$CODE_LOC/C" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
 	if [ -w ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme ]; then #if file exists and write permission is granted
 		rm ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
 	fi
@@ -58,6 +56,8 @@ PROXY_ADDRESS_STRING=""
 export PROXY_ADDRESS_STRING
 PROXY_USER=""
 export PROXY_USER
+PROXY_PORT=""
+export PROXY_PORT
 
 function SetUpAptProxyConfigFile(){
 	if [ ! -w /etc/apt/apt.conf.d/proxy ]; then
@@ -89,6 +89,7 @@ function enableProxy(){
 		if curl --silent --max-time 1 $ConnTestURL > /dev/null
 		then
 			echo "enabled proxy"
+			export no_proxy="127.0.0.1,localhost,::1"
 		else
 			#no connectiopn
 			echo "Connection not possible (likely wrong password)"
