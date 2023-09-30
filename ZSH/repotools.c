@@ -29,7 +29,8 @@ exit
 #define COLOUR_GIT_BRANCH_REMOTEONLY "\e[0m"
 #define COLOUR_GIT_BRANCH_LOCALONLY "\e[38;5;220m"
 #define COLOUR_GIT_BRANCH_UNEQUAL "\e[38;5;009m"
-#define COLOUR_TERMINAL_DEVICE "\e[38;5;20m"
+#define COLOUR_TERMINAL_DEVICE "\e[38;5;242m"
+#define COLOUR_SHLVL "\e[0m"
 #define COLOUR_CLEAR "\e[0m"
 const char* terminators = "\r\n\a";
 
@@ -1451,7 +1452,7 @@ int main(int argc, char** argv)
 #define AdditionalElementPriorityBackgroundJobDetail 7
 #define AdditionalElementPrioritySSHInfo 8
 
-		//if the seventh-prioritized element (ssh connection info) has space, print it "<SSH: 100.85.145.164:49567 -> 192.168.0.220:22> "
+		//if the seventh-prioritized element (ssh connection info) has space, print it "<SSH: 127.0.0.1:49567 -> 127.0.0.2:22> "
 		if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPrioritySSHInfo)) {
 			printf("%s", argv[ID_SSHInfo]);
 		}
@@ -1461,14 +1462,14 @@ int main(int argc, char** argv)
 
 		//if the fourth-prioritized element (the line/terminal device has space, append it to the user@machine) ":/dev/pts/0"
 		if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTerminalDevice)) {
-			printf(COLOUR_TERMINAL_DEVICE "%s" COLOUR_CLEAR, argv[ID_TerminalDevice]);
+			printf(COLOUR_TERMINAL_DEVICE "%s", argv[ID_TerminalDevice]);
 		}
 
 		//append the SHLVL (how many shells are nested, ie how many Ctrl+D are needed to properly exit), only shown if >=2 " [2]"
 		//also print the first bit of the git indication (is submodule or not) " [GIT-SM"
-		printf("%s" COLOUR_CLEAR "%s", argv[ID_SHLVL], gitSegment1_BaseMarkerStart);
+		printf(COLOUR_SHLVL "%s" COLOUR_CLEAR "%s", argv[ID_SHLVL], gitSegment1_BaseMarkerStart);
 
-		//if the fifth-prioritized element (the the location of the parent repo, if it exists, ie if this is submodule) "@/mnt/e/CODE"
+		//if the fifth-prioritized element (the the location of the parent repo, if it exists, ie if this is submodule) "@/some/local/repo"
 		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityParentRepoLocation))) {
 			printf("%s", gitSegment2_parentRepoLoc);
 		}

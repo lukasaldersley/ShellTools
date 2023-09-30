@@ -1,6 +1,7 @@
 #!/bin/false
 # shellcheck shell=bash
 #this should only be sourced or '.' included, not called.
+echo "Sourcing $0"
 
 #zsh prompt expansion web doc is at https://zsh.sourceforge.io/Doc/Release/index.html#Top
 #color palette can be found by executing command spectrum_ls

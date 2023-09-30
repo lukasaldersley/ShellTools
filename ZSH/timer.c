@@ -6,6 +6,11 @@ exit
 (basename $0 .c) would be used to get the name of file without the .c extension
 */
 
+//to cross compile this for arm:
+// sudo apt install gcc-12-arm-linux-gnueabi libc6-armel-cross libc6-dev-armel-cross qemu-user qemu-user-static
+//compile: //arm-linux-gnueabi-gcc-12 -std=c2x -Wall ../C/commons.c timer.c -o timer
+//execute: //qemu-arm -L /usr/arm-linux-gnueabi ./timer START
+
 #include "../C/commons.h"
 #include <stdio.h>
 #include <stdbool.h>
@@ -20,40 +25,40 @@ int main(int argc, char** argv) {
 	if (Compare(argv[1], "START") && argc == 2) {
 		struct timespec ts;
 		timespec_get(&ts, TIME_UTC);
-		printf("%li%li", ts.tv_sec, (ts.tv_nsec / 100000000UL));
+		printf("%li%li", ts.tv_sec, (ts.tv_nsec / 100000000L));
 	}
 	else if (Compare(argv[1], "STOP") && argc == 3) {
 		struct timespec ts;
 		timespec_get(&ts, TIME_UTC);
-		unsigned long long start = strtoull(argv[2], NULL, 10);
-		unsigned long long stop = ts.tv_sec * 10 + (ts.tv_nsec / 100000000UL);
-		unsigned long long diff = stop - start;
+		uint64_t start = strtoull(argv[2], NULL, 10);
+		uint64_t stop = ts.tv_sec * 10ULL + (ts.tv_nsec / 100000000ULL);
+		uint64_t diff = stop - start;
 		//printf("start: %llu\tstop: %llu\tdiff: %llu\n\n", start, stop, diff);
-#define DAY_CONVERSION (10*3600*24)
-#define HOUR_CONVERSION (10*3600)
-#define MINUTE_CONVERSION (10*60)
+#define DAY_CONVERSION (10*3600*24UL)
+#define HOUR_CONVERSION (10*3600UL)
+#define MINUTE_CONVERSION (10*60UL)
 #define SECOND_CONVERSION (10.0)
-		int days = diff / DAY_CONVERSION;
+		uint32_t days = (uint32_t)(diff / DAY_CONVERSION);
 		diff = diff - (days * DAY_CONVERSION);
 		//printf("diff: %llu, days %i\n", diff, days);
 
-		int hours = diff / HOUR_CONVERSION;
+		uint32_t hours = (uint32_t)(diff / HOUR_CONVERSION);
 		diff = diff - (hours * HOUR_CONVERSION);
 		//printf("diff: %llu, hours %i\n", diff, hours);
 
-		int minutes = diff / MINUTE_CONVERSION;
+		uint32_t minutes = (uint32_t)(diff / MINUTE_CONVERSION);
 		diff = diff - (minutes * MINUTE_CONVERSION);
 		//printf("diff: %llu, minutes %i\n", diff, minutes);
 
 		float seconds = (float)diff / SECOND_CONVERSION;
 		if (days > 0) {
-			printf("%id ", days);
+			printf("%ud ", days);
 		}
 		if (hours > 0) {
-			printf("%ih ", hours);
+			printf("%uh ", hours);
 		}
 		if (minutes > 0) {
-			printf("%im ", minutes);
+			printf("%um ", minutes);
 		}
 		printf("%.1fs", seconds);
 	}

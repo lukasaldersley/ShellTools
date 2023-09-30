@@ -1,5 +1,5 @@
 #!/bin/false
-# shellcheck shell=bash
+#shellcheck shell=bash
 echo "Sourcing WSL $WSL_VERSION specifics"
 export DISPLAY=localhost:0.0
 
@@ -13,12 +13,6 @@ function SSHServer(){
 	sudo service ssh --full-restart
 }
 alias StartSSH=SSHServer
-
-#use cmd.exe to get windows username, discard cmd's stderr (usually because cmd prints a warning if this was called from somewhere within the linux filesystem), then strip CRLF from the result
-WinUser="$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\n\r')"
-export WinUser
-CheckUser="$WinUser"
-export CheckUser
 
 alias shutdown='{ /mnt/c/Windows/System32/cmd.exe /C shutdown /s /t 00 } 2> /dev/null'
 alias reboot='{ /mnt/c/Windows/System32/cmd.exe /C shutdown /r /t 00 } 2> /dev/null'

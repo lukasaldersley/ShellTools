@@ -110,7 +110,7 @@ fi
 
 ___apt_tempfile02___="$(mktemp)"
 # shellcheck disable=SC2046 # SC2046 is double quote to prevent word splitting. in this case I WANT word splitting, see SC2046 wiki for another example
-apt show -a $(tr '\n' '|' <"$___apt_tempfile01___"|sed 's~|  ~ ~g'|grep -Eo 'kept back:[^\|]+'|cut -c12-) 2>&1 | grep Phased > "$___apt_tempfile02___";
+apt show -a $(tr '\n' '|' <"$___apt_tempfile01___"|sed 's~|  ~ ~g'|grep -Eo 'kept back:[^\|]+'|cut -c12-) 2>&1 | grep Phased | sort -r > "$___apt_tempfile02___";
 ___apt_tempvar01___="$(wc -l <"$___apt_tempfile02___")";
 printf "(%s of those are held by phased update" "$___apt_tempvar01___";
 if [ "$___apt_tempvar01___" -ne 0 ]; then
@@ -134,6 +134,10 @@ timestamp="$(stat -c %Y /var/lib/apt/lists/partial/)"
 now=$(date +%s)
 diff=$((now-timestamp))
 d2=$((now-t2))
+
+if [ "$(tput cols)" -lt 140 ]; then
+	printf "\n"
+fi
 
 printf "[Archives are "
 if [ $d2 -lt 60 ]; then
