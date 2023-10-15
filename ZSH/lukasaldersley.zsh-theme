@@ -235,7 +235,7 @@ function PowerState (){
 }
 
 function MainPrompt(){
-	print -P "\n$(~/repotools.elf PROMPT "$(pwd)" "$COLUMNS" "$(print -P "%F{010}%n%F{007}@%F{033}%m\a")" "$(print -P ":/dev/%y\a")" "$(print -P "%D{%T}\a")" "$(print -P " %D{UTC%z (%Z)}\a")" "$(print -P " %D{%a %d.%m.%Y}\a")" "$(print -P " %D{KW%V}")" "$(print -P "$(GetLocalIP)\a")" "$(print -P "$(GetProxyInfo)\a")" "$(print -P "$(PowerState)\a")" "$(print -P "$(GetBackgroundTaskInfo)\a")" " [$SHLVL]" "$(print "$(GetSSHInfo)\a")")"
+	print -P "\n$(~/repotools.elf --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" -i"$(print -P "$(GetLocalIP)\a")" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -l" [$SHLVL]" -s"$(print "$(GetSSHInfo)\a")" "$(pwd)")"
 }
 
 add-zsh-hook precmd MainPrompt

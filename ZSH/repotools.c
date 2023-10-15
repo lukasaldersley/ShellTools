@@ -6,7 +6,6 @@ printf " -> \e[32mDONE\e[0m($?)\n"
 exit
 */
 
-
 #include "../C/commons.h"
 #include <regex.h>
 #include <string.h>
@@ -14,6 +13,8 @@ exit
 #include <assert.h>
 #include <stdarg.h>
 #include <dirent.h>
+#include <time.h>
+#include <getopt.h>
 
 #define COLOUR_GIT_BARE "\e[38;5;006m"
 #define COLOUR_GIT_INDICATOR "\e[38;5;002m"
@@ -32,6 +33,9 @@ exit
 #define COLOUR_TERMINAL_DEVICE "\e[38;5;242m"
 #define COLOUR_SHLVL "\e[0m"
 #define COLOUR_CLEAR "\e[0m"
+#define COLOUR_USER "\e[38;5;010m"
+#define COLOUR_USER_AT_HOST "\e[38;5;007m"
+#define COLOUR_HOST "\e[38;5;033m"
 const char* terminators = "\r\n\a";
 
 #define maxGroups 10
@@ -41,7 +45,7 @@ regex_t reg;
 #define MaxLocations 10
 const char* NAMES[MaxLocations];
 const char* LOCS[MaxLocations];
-int LIMIT_BRANCHES = 0;
+int LIMIT_BRANCHES = -2;
 uint8_t numLOCS = 0;
 char* buf;
 int bufCurLen;
@@ -234,7 +238,7 @@ BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char* branc
 		return n;
 	}
 	else if (head->next == NULL) {
-		//The New Element is NOT Equal to myslef and is NOT alphabetically before myself (as per the earlier checks)
+		//The New Element is NOT Equal to myself and is NOT alphabetically before myself (as per the earlier checks)
 		//on top of that, I AM the LAST element, so I can simply create a new last element
 		BranchListSorted* n = InitBranchListSortedElement();
 		n->next = head->next;
@@ -292,7 +296,7 @@ bool IsMerged(const char* repopath, const char* commithash) {
 	//if any of the child commits is a merge commit, this branch is considered merged.
 	//if there are more than one child it is possible a new branch was created at this commit
 	//it is possible for two children to exist: a merge commit and one non-merge commit
-	//it that case I still consider THIS branch merged with a new branch being created
+	//in that case I still consider THIS branch merged with a new branch being created
 	//if there are childen but none of them is a merge commit, this commit could be fast forwarded in some direction but hasn't, it is not merged
 	//the cut -c42- bit is to cut my own hash out of the result and only leave the children
 	//git rev-list --children --all | grep ^a40691c4edac3e3e9cff1f651f79a80dd3bd792a | cut -c42- | tr ' ' '\n'
@@ -346,7 +350,7 @@ bool CheckBranching(RepoInfo* ri) {
 		{
 			TerminateStrOn(result, terminators);
 			branchcount++;
-			if (LIMIT_BRANCHES > 0 && branchcount > LIMIT_BRANCHES) {
+			if (LIMIT_BRANCHES != -1 && branchcount > LIMIT_BRANCHES) {
 				free(result);
 				pclose(fp);
 				free(command);
@@ -1268,14 +1272,315 @@ int main(int argc, char** argv)
 
 	DoSetup();
 
-	if (Compare(argv[1], "PROMPT")) //show origin info for command prompt
-	{
-		LIMIT_BRANCHES = 50;
-		if (argc != 16) {
-			fprintf(stderr, "INVAILD PARAMETER COUNT: %i\nNEED: PROMPT $pwd $COLUMNS User_at_host TerminalDevice time timezone_info ip_info proxy_info power_info background_jobs_info shlvl sshinfo", argc - 1);
-			return -1;
+	//stuff to obtain the time/date/calendarweek for prompt
+	time_t tm;
+	tm = time(NULL);
+	struct tm* localtm = localtime(&tm);
+
+	bool prompt = 0, set = 0, show = 0, list = 0;
+
+	bool ThoroughSearch = 0;
+	int TotalPromptWidth;
+	char* requestedNewRemote = NULL;
+
+	char* User = ExecuteProcess("whoami");
+	TerminateStrOn(User, terminators);
+	int User_len = strlen_visible(User);
+
+	char* Host = ExecuteProcess("hostname");
+	TerminateStrOn(Host, terminators);
+	int Host_len = strlen_visible(Host);
+
+	char* TerminalDevice = NULL;
+	int TerminalDevice_len = 0;
+
+	char* Time = malloc(sizeof(char) * 16);
+	int Time_len = strftime(Time, 16, "%T", localtm);
+
+	char* TimeZone = malloc(sizeof(char) * 16);
+	int TimeZone_len = strftime(TimeZone, 16, " UTC%z (%Z)", localtm);
+
+	char* DateInfo = malloc(sizeof(char) * 16);
+	int DateInfo_len = strftime(DateInfo, 16, " %a %d.%m.%Y", localtm);
+
+	char* CalenderWeek = malloc(sizeof(char) * 8);
+	int CalenderWeek_len = strftime(CalenderWeek, 8, " KW%V", localtm);
+
+	char* LocalIPs = NULL;
+	int LocalIPs_len = 0;
+
+	char* ProxyInfo = NULL;
+	int ProxyInfo_len = 0;
+
+	char* PowerState = NULL;
+	int PowerState_len = 0;
+
+	char* BackgroundJobs = NULL;
+	int BackgroundJobs_len = 0;
+
+	char* SHLVL = NULL;
+	int SHLVL_len = 0;
+
+	char* SSHInfo = NULL;
+	int SSHInfo_len = 0;
+
+	int c;//the char for getop switch
+
+	while (1) {
+		int option_index = 0;
+
+		static struct option long_options[] = {
+			{"prompt", no_argument, 0, '0' },
+			{"show", no_argument, 0, '1' },
+			{"set", no_argument, 0, '2' },
+			{"list", no_argument, 0, '3' },
+			{"branchlimit", required_argument, 0, 'b' },
+			{"thorough", no_argument, 0, 'f'},
+			{"quick", no_argument, 0, 'q'},
+			{"help", no_argument, 0, 'h' },
+			{0, 0, 0, 0 }
+		};
+
+		c = getopt_long(argc, argv, "b:c:d:e:fhi:j:l:n:p:qs:", long_options, &option_index);
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 0:
+			{
+				printf("long option %s", long_options[option_index].name);
+				if (optarg)
+					printf(" with arg %s", optarg);
+				printf("\n");
+				break;
+			}
+		case '0':
+			{
+				if (set | show | list) {
+					printf("prompt is mutex with set|show|list\n");
+					break;
+				}
+				prompt = 1;
+				break;
+			}
+		case '1':
+			{
+				if (set | prompt | list) {
+					printf("show is mutex with set|prompt|list\n");
+					break;
+				}
+				show = 1;
+				break;
+			}
+		case '2':
+			{
+				if (prompt | show | list) {
+					printf("set is mutex with prompt|show|list\n");
+					break;
+				}
+				set = 1;
+				break;
+			}
+		case '3':
+			{
+				if (prompt | show | set) {
+					printf("list is mutex with prompt|show|set\n");
+					break;
+				}
+				list = 1;
+				break;
+			}
+		case 'b':
+			{
+				TerminateStrOn(optarg, terminators);
+				LIMIT_BRANCHES = atoi(optarg);
+				break;
+			}
+		case 'c':
+			{
+				TerminateStrOn(optarg, terminators);
+				TotalPromptWidth = atoi(optarg);
+				break;
+			}
+		case 'd':
+			{
+				TerminateStrOn(optarg, terminators);
+				TerminalDevice = optarg;
+				TerminalDevice_len = strlen_visible(TerminalDevice);
+				break;
+			}
+		case 'e':
+			{
+				//since the output will be sent through an escape sequence processing system to do the colours and stuff I must replace the literal % for the battery with a %% (the literal % is marked by \a%)
+				char* temp = optarg;
+				while (*temp != 0x00) {
+					if (*temp == '\a' && *(temp + 1) == '%') {
+						*temp = '%';
+					}
+					temp++;
+				}
+				TerminateStrOn(optarg, terminators);
+				PowerState = optarg;
+				PowerState_len = strlen_visible(PowerState);
+				break;
+			}
+
+		case 'f':
+			{
+				ThoroughSearch = 1;
+				break;
+			}
+		case 'h':
+			{
+				printf("%s MODE [OPTIONS] PATH\n\
+\n\tMODE:\n\
+\t\tprompt\n\
+\t\t\tAll options EXCEPT -n are valid\n\
+\t\tshow\n\
+\t\t\tThe only valid Option is -b --branchlimit\n\
+\t\tset\n\
+", argv[0]);
+				break;
+			}
+		case 'i':
+			{
+				TerminateStrOn(optarg, terminators);
+				LocalIPs = optarg;
+				LocalIPs_len = strlen_visible(LocalIPs);
+				break;
+			}
+		case 'j':
+			{
+				TerminateStrOn(optarg, terminators);
+				BackgroundJobs = optarg;
+				BackgroundJobs_len = strlen_visible(BackgroundJobs);
+				break;
+			}
+		case 'l':
+			{
+				TerminateStrOn(optarg, terminators);
+				SHLVL = optarg;
+				//if the shell level is 1, don't print it, only if shell level >1 show it
+				if (Compare(SHLVL, " [1]")) {
+					SHLVL[0] = 0x00;
+				}
+				SHLVL_len = strlen_visible(SHLVL);
+				break;
+			}
+		case 'n':
+			{
+				//printf("option n: %s", optarg);fflush(stdout);
+				TerminateStrOn(optarg, terminators);
+				requestedNewRemote = optarg;
+				break;
+			}
+		case 'p':
+			{
+				TerminateStrOn(optarg, terminators);
+				ProxyInfo = optarg;
+				ProxyInfo_len = strlen_visible(ProxyInfo);
+				break;
+			}
+		case 'q':
+			{
+				ThoroughSearch = false;
+				break;
+			}
+		case 's':
+			{
+				TerminateStrOn(optarg, terminators);
+				SSHInfo = optarg;
+				SSHInfo_len = strlen_visible(SSHInfo);
+				break;
+			}
+		case '?':
+			{
+				printf("option %c: >%s<\n", c, optarg);
+				break;
+			}
+		default:
+			{
+				printf("?? getopt returned character code 0%o (char: %c) with option %s ??\n", c, c, optarg);
+			}
 		}
-		RepoInfo* ri = AllocRepoInfo("", argv[2]);
+	}
+
+
+	if (requestedNewRemote == NULL) {
+		requestedNewRemote = malloc(sizeof(char));
+		requestedNewRemote[0] = 0x00;
+	}
+	if (TerminalDevice == NULL) {
+		TerminalDevice = malloc(sizeof(char));
+		TerminalDevice[0] = 0x00;
+	}
+	if (LocalIPs == NULL) {
+		LocalIPs = malloc(sizeof(char));
+		LocalIPs[0] = 0x00;
+	}
+	if (ProxyInfo == NULL) {
+		ProxyInfo = malloc(sizeof(char));
+		ProxyInfo[0] = 0x00;
+	}
+	if (PowerState == NULL) {
+		PowerState = malloc(sizeof(char));
+		PowerState[0] = 0x00;
+	}
+	if (BackgroundJobs == NULL) {
+		BackgroundJobs = malloc(sizeof(char));
+		BackgroundJobs[0] = 0x00;
+	}
+	if (SHLVL == NULL) {
+		SHLVL = malloc(sizeof(char));
+		SHLVL[0] = 0x00;
+	}
+	if (SSHInfo == NULL) {
+		SSHInfo = malloc(sizeof(char));
+		SSHInfo[0] = 0x00;
+	}
+
+
+#ifdef DEBUG
+	printf("requestedNewRemote: %s\n", requestedNewRemote);fflush(stdout);
+	printf("User: %s\n", User);fflush(stdout);
+	printf("Host: %s\n", Host);fflush(stdout);
+	printf("TerminalDevice: %s\n", TerminalDevice);fflush(stdout);
+	printf("Time: %s\n", Time);fflush(stdout);
+	printf("TimeZone: %s\n", TimeZone);fflush(stdout);
+	printf("DateInfo: %s\n", DateInfo);fflush(stdout);
+	printf("CalenderWeek: %s\n", CalenderWeek);fflush(stdout);
+	printf("LocalIPs: %s\n", LocalIPs);fflush(stdout);
+	printf("ProxyInfo: %s\n", ProxyInfo);fflush(stdout);
+	printf("PowerState: %s\n", PowerState);fflush(stdout);
+	printf("BackgroundJobs: %s\n", BackgroundJobs);fflush(stdout);
+	printf("SHLVL: %s\n", SHLVL);fflush(stdout);
+	printf("SSHInfo: %s\n", SSHInfo);fflush(stdout);
+	for (int i = 0;i < argc;i++) {
+		printf("%soption-arg %i:\t>%s<\n", (i >= optind ? "non-" : "\t"), i, argv[i]);
+	}
+#endif
+
+
+
+	if (!(prompt || show || set || list)) {
+		printf("you must specify EITHER --prompt --set or --show\n");
+		exit(1);
+	}
+
+	if (!list && !(optind < argc)) {
+		printf("You must supply one non-option parameter (if not in --list mode)");
+	}
+	char* path = argv[optind];
+
+	if (LIMIT_BRANCHES == -2) {
+		//if prompt, default 25; if set, default 50; else default -1
+		LIMIT_BRANCHES = (prompt ? 25 : (set ? 50 : -1));
+	}
+
+
+	if (prompt) //show origin info for command prompt
+	{
+		RepoInfo* ri = AllocRepoInfo("", path);
 		//printf("Pre entering repocheck\r");
 		//fflush(stdout);
 		TestPathForRepoAndParseIfExists(ri, -1, true, true);
@@ -1287,63 +1592,14 @@ int main(int argc, char** argv)
 		}
 		AllocUnsetStringsToEmpty(ri);
 
-		int TotalPromptWidth = atoi(argv[3]);
-		int ID_UserAtHost = 4;
-		int ID_TerminalDevice = 5;
-		int ID_Time = 6;
-		int ID_TimeZone = 7;
-		int ID_DateInfo = 8;
-		int ID_CalenderWeek = 9;
-		int ID_LocalIPs = 10;
-		int ID_ProxyInfo = 11;
-		int ID_PowerState = 12;
-		int ID_BackgroundJobs = 13;
-		int ID_SHLVL = 14;
-		int ID_SSHInfo = 15;
-
 		//if top line too short -> omission order: git submodule location (git_4)(...@/path/to/parent/repo); device (/dev/pts/0); time Zone (UTC+0200 (CEST)); IP info ; git remote info(git_2) (... from displayedorigin)
-
-		//since the output will be sent through an escape sequence processing system to do the colouts and stuff I must replace the literal % for the battery with a %% (the literal % is marked by \a%)
-		char* temp = argv[ID_PowerState];
-		while (*temp != 0x00) {
-			if (*temp == '\a' && *(temp + 1) == '%') {
-				*temp = '%';
-			}
-			temp++;
-		}
-
-		TerminateStrOn(argv[4], terminators);
-		TerminateStrOn(argv[5], terminators);
-		TerminateStrOn(argv[6], terminators);
-		TerminateStrOn(argv[7], terminators);
-		TerminateStrOn(argv[8], terminators);
-		TerminateStrOn(argv[9], terminators);
-		TerminateStrOn(argv[10], terminators);
-		TerminateStrOn(argv[11], terminators);
-		TerminateStrOn(argv[12], terminators);
-		TerminateStrOn(argv[13], terminators);
-		TerminateStrOn(argv[14], terminators);
-		TerminateStrOn(argv[15], terminators);
-
-		//if the shell level is 1, don't print it, only if shell level >1 show it
-		if (Compare(argv[ID_SHLVL], " [1]")) {
-			argv[ID_SHLVL][0] = 0x00;
-		}
-
-		int lens[argc];
-		for (int i = 0;i < 4;i++) {//just to zero fill the unused segment
-			lens[i] = 0;
-		}
-		for (int i = 4;i < argc;i++) {
-			lens[i] = strlen_visible(argv[i]);//reminder: stelen_visible basically is strlen but counts mutlibyte unicode chars as 1 and ignores ZSH prompt metacharacters and CSI escape sequences
-		}
 
 		//taking the list of jobs as input, this counts the number of spaces (and because of the trailing space also the number of entries)
 		int numBgJobs = 0;
-		if (lens[ID_BackgroundJobs] > 0) {
+		if (BackgroundJobs_len > 0) {
 			int i = 0;
-			while (argv[ID_BackgroundJobs][i] != 0x00) {
-				if (argv[ID_BackgroundJobs][i] == ' ') {
+			while (BackgroundJobs[i] != 0x00) {
+				if (BackgroundJobs[i] == ' ') {
 					numBgJobs++;
 				}
 				i++;
@@ -1407,40 +1663,28 @@ int main(int argc, char** argv)
 			gitSegment5_gitStatus_len = strlen_visible(gitSegment5_gitStatus);
 		}
 
-#ifdef DEBUG
-		printf("%i\n", TotalPromptWidth);
-		printf("%i <%s>\n", gitSegment1_BaseMarkerStart_len, gitSegment1_BaseMarkerStart);
-		printf("%i <%s>\n", gitSegment2_parentRepoLoc_len, gitSegment2_parentRepoLoc);
-		printf("%i <%s>\n", gitSegment3_BaseMarkerEnd_len, gitSegment3_BaseMarkerEnd);
-		printf("%i <%s>\n", gitSegment4_remoteinfo_len, gitSegment4_remoteinfo);
-		printf("%i <%s>\n", gitSegment5_gitStatus_len, gitSegment5_gitStatus);
-		for (int i = 4;i < argc;i++) {
-			printf("%i <%s>\n", lens[i], argv[i]);
-		}
-#endif
-
 
 		int RemainingPromptWidth = TotalPromptWidth - (
-			lens[ID_UserAtHost] +
-			lens[ID_SHLVL] +
+			User_len + 1 + Host_len +
+			SHLVL_len +
 			gitSegment1_BaseMarkerStart_len +
 			gitSegment3_BaseMarkerEnd_len +
 			gitSegment5_gitStatus_len +
-			lens[ID_Time] +
-			lens[ID_ProxyInfo] +
+			Time_len +
+			ProxyInfo_len +
 			strlen_visible(numBgJobsStr) +
-			lens[ID_PowerState] + 1);
+			PowerState_len + 1);
 
 		uint32_t AdditionalElementAvailabilityPackedBool = determinePossibleCombinations(&RemainingPromptWidth, 9,
 			gitSegment4_remoteinfo_len,
-			lens[ID_LocalIPs],
-			lens[ID_CalenderWeek],
-			lens[ID_TimeZone],
-			lens[ID_DateInfo],
-			lens[ID_TerminalDevice],
+			LocalIPs_len,
+			CalenderWeek_len,
+			TimeZone_len,
+			DateInfo_len,
+			TerminalDevice_len,
 			gitSegment2_parentRepoLoc_len,
-			lens[ID_BackgroundJobs],
-			lens[ID_SSHInfo]);
+			BackgroundJobs_len,
+			SSHInfo_len);
 
 #define AdditionalElementPriorityGitRemoteInfo 0
 #define AdditionalElementPriorityLocalIP 1
@@ -1454,20 +1698,20 @@ int main(int argc, char** argv)
 
 		//if the seventh-prioritized element (ssh connection info) has space, print it "<SSH: 127.0.0.1:49567 -> 127.0.0.2:22> "
 		if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPrioritySSHInfo)) {
-			printf("%s", argv[ID_SSHInfo]);
+			printf("%s", SSHInfo);
 		}
 
 		//print username and machine "user@hostname"
-		printf("%s", argv[ID_UserAtHost]);
+		printf(COLOUR_USER "%s" COLOUR_USER_AT_HOST "@" COLOUR_HOST "%s" COLOUR_CLEAR, User, Host);
 
 		//if the fourth-prioritized element (the line/terminal device has space, append it to the user@machine) ":/dev/pts/0"
 		if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTerminalDevice)) {
-			printf(COLOUR_TERMINAL_DEVICE "%s", argv[ID_TerminalDevice]);
+			printf(COLOUR_TERMINAL_DEVICE "%s", TerminalDevice);
 		}
 
 		//append the SHLVL (how many shells are nested, ie how many Ctrl+D are needed to properly exit), only shown if >=2 " [2]"
 		//also print the first bit of the git indication (is submodule or not) " [GIT-SM"
-		printf(COLOUR_SHLVL "%s" COLOUR_CLEAR "%s", argv[ID_SHLVL], gitSegment1_BaseMarkerStart);
+		printf(COLOUR_SHLVL "%s" COLOUR_CLEAR "%s", SHLVL, gitSegment1_BaseMarkerStart);
 
 		//if the fifth-prioritized element (the the location of the parent repo, if it exists, ie if this is submodule) "@/some/local/repo"
 		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityParentRepoLocation))) {
@@ -1491,37 +1735,37 @@ int main(int argc, char** argv)
 		}
 
 		//print the time in HH:mm:ss "21:24:31"
-		printf("%s", argv[ID_Time]);
+		printf("%s", Time);
 
 		//if the third-prioritized element (timezone info) has space, print it " UTC+0200 (CEST)"
 		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTimeZone))) {
-			printf("%s", argv[ID_TimeZone]);
+			printf("%s", TimeZone);
 		}
 
 		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityDate))) {
-			printf("%s", argv[ID_DateInfo]);
+			printf("%s", DateInfo);
 		}
 
 		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityCalenderWeek))) {
-			printf("%s", argv[ID_CalenderWeek]);
+			printf("%s", CalenderWeek);
 		}
 
-		//if a proxy is configured, show it (A=Apt, H=http(s), F=FTP, N=None) " [AHF]"
-		printf("%s", argv[ID_ProxyInfo]);
+		//if a proxy is configured, show it (A=Apt, H=http(s), F=FTP, N=NoProxy) " [AHNF]"
+		printf("%s", ProxyInfo);
 
 		//if the second prioritized element (local IP addresses) has space, print it " eth0:127.0.0.1 wifi0:127.0.0.2"
 		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityLocalIP))) {
-			printf("%s", argv[ID_LocalIPs]);
+			printf("%s", LocalIPs);
 		}
 
 		printf("%s", numBgJobsStr);
 		//if the sixth-prioritized element (background tasks) has space, print it " {1S-  2S+}"
 		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityBackgroundJobDetail))) {
-			printf("%s", argv[ID_BackgroundJobs]);
+			printf("%s", BackgroundJobs);
 		}
 
 		//print the battery state (the first unicode char can be any of ▲,≻,▽ or ◊[for not charging,but not dischargind]), while the second unicode char indicates the presence of AC power "≻ 100% ↯"
-		printf("%s", argv[ID_PowerState]);
+		printf("%s", PowerState);
 
 
 		if (ri->isGit) {
@@ -1538,31 +1782,31 @@ int main(int argc, char** argv)
 
 		return 0;
 	}
-	else if (Compare(argv[1], "SET") || Compare(argv[1], "SHOW"))
+	else if (set || show)
 	{
 		int requestedNewOrigin = -1;
-		if (Compare(argv[1], "SET")) {//a change was requested
+		if (set) {//a change was requested
 			for (int i = 0;i < numLOCS;i++) {
-				if (Compare(argv[3], NAMES[i])) {//found requested new origin
+				if (Compare(requestedNewRemote, NAMES[i])) {//found requested new origin
+					//printf("%s->%s", requestedNewRemote, NAMES[i]);fflush(stdout);
 					requestedNewOrigin = i;
 					break;
 				}
 			}
+			//printf("setting %i", requestedNewOrigin);fflush(stdout);
 			if (requestedNewOrigin == -1) {
-				printf("new origin specification " COLOUR_GIT_ORIGIN "'%s'" COLOUR_CLEAR " is unknown. available origin specifications are:\n", argv[3]);
+				printf("new origin specification " COLOUR_GIT_ORIGIN "'%s'" COLOUR_CLEAR " is unknown. available origin specifications are:\n", requestedNewRemote);
 				ListAvailableRemotes();
 				return -1;
 			}
 		}
-
-		bool ThoroughSearch = Compare(argv[argc - 1], "THOROUGH");
-		printf("Performing %s search for repos on %s", ThoroughSearch ? "thorough" : "quick", argv[2]);
+		printf("Performing %s search for repos on %s", ThoroughSearch ? "thorough" : "quick", path);
 		if (requestedNewOrigin != -1) {
 			printf(" and setting my repos to %s", NAMES[requestedNewOrigin]);
 		}
 		printf("\n\n");
 
-		RepoInfo* treeroot = CreateDirStruct("", argv[2], requestedNewOrigin, ThoroughSearch);
+		RepoInfo* treeroot = CreateDirStruct("", path, requestedNewOrigin, ThoroughSearch);
 		pruneTreeForGit(treeroot);
 		if (requestedNewOrigin != -1) {
 			printf("\n");
@@ -1570,7 +1814,7 @@ int main(int argc, char** argv)
 		printTree(treeroot, ThoroughSearch);
 		printf("\n");
 	}
-	else if (Compare(argv[1], "LIST")) {
+	else if (list) {
 		ListAvailableRemotes();
 		return 0;
 	}

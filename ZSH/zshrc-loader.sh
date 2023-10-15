@@ -71,13 +71,16 @@ UpdateZSH (){
 	cp "$CODE_LOC/BAT_VBS/ZSH/lukasaldersley.zsh-theme" ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
 	omz reload
 }
+alias uz=UpdateZSH
 
 SetGitBase(){
-	 ~/repotools.elf SET "${2:-"$CODE_LOC"}" "${1:-"NONE"}" "${3:-"QUICK"}"
+	#~/repotools.elf SET "${2:-"$CODE_LOC"}" "${1:-"NONE"}" "${3:-"QUICK"}"
+	~/repotools.elf --set -n"${1:-"NONE"}" "${2:-"$CODE_LOC"}" "${3:-"-q"}"
 }
 
 lsRepo(){
-	~/repotools.elf SHOW "${1:-"$(pwd)"}" "${2:-"QUICK"}"
+	#~/repotools.elf SHOW "${1:-"$(pwd)"}" "${2:-"QUICK"}"
+	~/repotools.elf --show "${1:-"$(pwd)"}" "${2:-"-q"}"
 }
 
 compare(){
@@ -91,7 +94,7 @@ alias lsrepo=lsRepo
 alias lsGit=lsRepo
 alias lsgit=lsrepo
 alias gitls=lsrepo
-alias lsorigin="~/repotools.elf LIST ORIGINS"
+alias lsorigin="~/repotools.elf --list"
 
 
 SetUpAptProxyConfigFile(){
