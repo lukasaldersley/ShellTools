@@ -1,7 +1,11 @@
 #/*
-outname="$(basename $0 .c).elf"
-printf "compiling $0 into ~/$outname"
-gcc -std=c2x -Wall "$(dirname "$0")"/commons.c "$0" -o "$HOME/$outname"
+TargetDir="$HOME/.shelltools"
+if [ ! -d "$TargetDir" ]; then
+	mkdir -p "$TargetDir"
+fi
+TargetName="$(basename $0 .c).elf"
+printf "compiling $0 into $TargetDir/$TargetName"
+gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$0" -o "$TargetDir/$TargetName"
 printf " -> \e[32mDONE\e[0m($?)\n"
 #eval "$HOME/$outname --equal=\" v\" AbBxB B Bdef efghiC v3.17 \" 3.17.0\" FX"
 exit

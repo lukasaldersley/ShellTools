@@ -230,3 +230,89 @@ int strlen_visible(const char* s) {
 	}
 	return count;
 }
+
+char* AbbreviatePathAuto(const char* path, int KeepAllIfShorterThan, int DesiredKeepElements) {
+	//plausi-check the n umber of elements to keep and distribute them between front and back
+	if (DesiredKeepElements < 1) { DesiredKeepElements = 1; }
+	int KeepFront = DesiredKeepElements / 2;
+	int KeepBack = DesiredKeepElements - KeepFront;
+	return AbbreviatePath(path, KeepAllIfShorterThan, KeepFront, KeepBack);
+}
+
+char* AbbreviatePath(const char* path, int KeepAllIfShorterThan, int DesiredKeepElementsFront, int DesiredKeepElementsBack) {
+	if (KeepAllIfShorterThan < 1) { KeepAllIfShorterThan = 1; }
+	char* Workpath;
+	if (asprintf(&Workpath, "%s", path) == -1)abortNomem();
+	int len = strlen(Workpath);
+	char* ret = NULL;
+	if (len <= KeepAllIfShorterThan) {
+		//text is so short, it won't be shortened anymore -> done
+		if (asprintf(&ret, "%s", Workpath) == -1)abortNomem();
+	}
+	else {
+		char* FromBack = Workpath + len - 1;
+		char* FromFront = Workpath;
+		int foundFront = 0;
+		int foundBack = 0;
+		int backLen = 0;
+		int frontLen = 0;
+		//if the string ends with / (or multiple of them), delete them, but keep at least one char in the entire string (eg the string is "/////", which in Unix just means /, so I too can shorten the string to /)
+		while (*FromBack == '/' && FromBack > FromFront) {
+			*FromBack = 0x00;
+			FromBack--;
+			len--;
+		}
+		//the string has potentially become short enough to be done already
+		if (len <= KeepAllIfShorterThan) {
+			if (asprintf(&ret, "%s", Workpath) == -1)abortNomem();
+		}
+		else {
+			//walk backwards over the string until I identified DesiredKeepElementsBack elements (while NOT overruning the start of the string if there's fewer)
+			while (foundBack<DesiredKeepElementsBack && FromBack>FromFront) {
+				FromBack--;
+				backLen++;
+				if (*FromBack == '/' || *FromBack == '\\') {
+					foundBack++;
+				}
+			}
+			//walk forward over the string intil I identified DesiredKeepElementsFront elements (while NOT overrunning the end of the string or an element belonging to the back group)
+			while (foundFront < DesiredKeepElementsFront && FromFront < FromBack) {
+				FromFront++;
+				frontLen++;
+				if (*FromFront == '/' || *FromFront == '\\') {
+					if (frontLen == 4 && *(FromFront + 2) == '/' && StartsWith(Workpath, "/mnt/")) {
+						;//this is a special case: I wan to count "/mnt/*/" as a single element, since just /mnt alone is kinda worthless -> skip over a single / if the conditions are right
+					}
+					else {
+						foundFront++;
+					}
+				}
+			}
+		}
+		if (FromBack - FromFront <= 3) {
+			//the text would become longer by inserting the ..., so just keep the original text
+			//this would happen with something like AbbreviatePath(/mnt/c/WS/CODE/BAT_VBS,20,3) where WS would be abbreiviated, but the abreviation ... is longer than the original name -> it doesn't make sense
+			//printf("Front and bacl coincide\n");
+			if (asprintf(&ret, "%s", Workpath) == -1)abortNomem();
+		}
+		else if (frontLen == 0) {
+			//if the front segment doesn't exist, only print the back segment WITHOUT clobbering a seperator in front
+			if (asprintf(&ret, "%s", FromBack + 1) == -1)abortNomem();
+		}
+		else {
+			*(Workpath + frontLen) = 0x00;//truncate the work text to only contain the front segment
+			if (asprintf(&ret, "%s/[...]/%s", Workpath, FromBack + 1) == -1)abortNomem();
+		}
+		//printf("%s & %s (%i + %i)\n", Workpath, FromBack + 1, frontLen, backLen);
+	}
+	free(Workpath);
+	return ret;
+}
+
+void abortNomem() {
+	printf("Out of memory\n");
+	fprintf(stderr, "Out of memory\n");
+	fflush(stdout);
+	fflush(stderr);
+	exit(1);
+}

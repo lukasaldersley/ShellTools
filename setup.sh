@@ -4,7 +4,7 @@
 
 if ! grep -Eq "ID(_LIKE)?=debian" </etc/os-release ; then
 	printf "ERROR: only debian-based systems are supported, yours (%s) doesn't seem like one.\n" "$(grep -E "^ID(_LIKE)?" < /etc/os-release |tr '\n' ','|rev|cut -c2-|rev)"
-	printf "You may still use these tools, but none of it will be set up automatically.\nCheck this file to see what would have been done.\n"
+	printf "You may still use these tools, but none of it will be set up automatically.\nCheck this file (%s) to see what would have been done.\n" "$0"
 	exit 1
 fi
 

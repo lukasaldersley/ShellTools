@@ -10,8 +10,8 @@
 ##
 ##NOTE: in bash/ksh/zsh export CODE_LOC="/mnt/e/CODE would also be valid but not in POSIX where the assignement and export must be seperate"
 
-PROXY_ADDRESS_STRING=""
-export PROXY_ADDRESS_STRING
+PROXY_HOST=""
+export PROXY_HOST
 PROXY_USER=""
 export PROXY_USER
 PROXY_PORT=""
@@ -30,34 +30,38 @@ alias contentsearch='$CODE_LOC/search.sh -c -p'
 alias sysupdate='$CODE_LOC/AptTools.sh --full-update'
 alias aptcheck='$CODE_LOC/AptTools.sh --check'
 alias aptstatus='$CODE_LOC/AptTools.sh --unattended'
-alias acat='$HOME/assemblecat.elf'
-alias cat-assemble='$HOME/assemblecat.elf'
+alias acat='$HOME/.shelltools/assemblecat.elf'
+alias cat-assemble='$HOME/.shelltools/assemblecat.elf'
+alias argtest='$HOME/.shelltools/argtest.elf'
+alias rm-recurse='$HOME/.shelltools/rm_recurse.elf'
 
 #general shorthands
 alias l="ls --time-style=+\"%Y-%m-%d %H:%M:%S\" --color=tty -lash"
 alias zshrc="nano ~/.zshrc"
 alias cls=clear
 alias qqq=exit
-
-cleanFile(){
-	___tempfile_local=$(mktemp)
-	sort < "$1" | uniq > "$___tempfile_local"
-	mv "$___tempfile_local" "$1"
-}
-
+alias recrm=rm-recurse
+alias ga="git add ."
+alias gs="git status"
+alias gl=gitlog
 #custom git log
-#alias gitlog="git log --branches --remotes --tags --graph --notes --decorate --oneline HEAD"
-#alias gitlog="git log --branches --remotes --tags --graph --notes --decorate --pretty=\"%C(auto)%h %d %s\" HEAD" #this is the same as above
 alias gitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as/%C(auto)%ar]%d %C(brightblack)%ae:%C(auto) %s\" HEAD"
-#%C(auto) basically tells git to do colouring as it usually would in it's on predefined versions until another colour instruction is given
-#%C(string) basically means display an CSI defined 4-bit colour
+alias egitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae|%ce:%C(auto) %s\" HEAD"
+#%C(auto) basically tells git to do colouring as it usually would in it's predefined versions until another colour instruction is given
+#%C(string) basically means display a CSI defined 4-bit colour
 #%h abbrev commit hash
 #%as author date, short format (YYYY-MM-DD)
 #%ar author date, relative
 #%d ref names, like the --decorate option of git-log(1) [this is the indicator of what branches are where]
 #%ae author email
 #%s subject [ie commit message]
-#everywhere I used %a. it would have been possible to use %c. to get the committer instead of the author...
+#everywhere I used %a. it would have been possible to use %c. to get the committer instead of the author... (as I have done in egitlog)
+
+cleanFile(){
+	___tempfile_local=$(mktemp)
+	sort < "$1" | uniq > "$___tempfile_local"
+	mv "$___tempfile_local" "$1"
+}
 
 UpdateZSH (){
 	git -C "$CODE_LOC/BAT_VBS" pull
@@ -75,12 +79,13 @@ alias uz=UpdateZSH
 
 SetGitBase(){
 	#~/repotools.elf SET "${2:-"$CODE_LOC"}" "${1:-"NONE"}" "${3:-"QUICK"}"
-	~/repotools.elf --set -n"${1:-"NONE"}" "${2:-"$CODE_LOC"}" "${3:-"-q"}"
+	~/.shelltools/repotools.elf --set -n"${1:-"NONE"}" "${2:-"$CODE_LOC"}" "${3:-"-q"}"
 }
+alias sgb=SetGitBase
 
 lsRepo(){
 	#~/repotools.elf SHOW "${1:-"$(pwd)"}" "${2:-"QUICK"}"
-	~/repotools.elf --show "${1:-"$(pwd)"}" "${2:-"-q"}"
+	~/.shelltools/repotools.elf --show "${1:-"$(pwd)"}" "${2:-"-q"}"
 }
 
 compare(){
@@ -94,7 +99,7 @@ alias lsrepo=lsRepo
 alias lsGit=lsRepo
 alias lsgit=lsrepo
 alias gitls=lsrepo
-alias lsorigin="~/repotools.elf --list"
+alias lsorigin="~/.shelltools/repotools.elf --list"
 
 
 SetUpAptProxyConfigFile(){
@@ -117,26 +122,26 @@ HasLocalProxyServer(){
 }
 
 enableProxy(){
-	#printf "Proxy enable: http://%s:%s@%s:%s\n" "$PROXY_USER" "$PROXY_PW" "$PROXY_ADDRESS_STRING" "$PROXY_PORT"
-	if [ -n "$PROXY_ADDRESS_STRING" ] ; then
+	#printf "Proxy enable: http://%s:%s@%s:%s\n" "$PROXY_USER" "$PROXY_PW" "$PROXY_HOST" "$PROXY_PORT"
+	if [ -n "$PROXY_HOST" ] ; then
 		SetUpAptProxyConfigFile
 
 		if HasLocalProxyServer ; then
-			#echo "woking with local proxy on $PROXY_ADDRESS_STRING, port $PROXY_PORT"
+			#echo "woking with local proxy on $PROXY_HOST, port $PROXY_PORT"
 			echo "detected $PROXY_NAME on port $PROXY_PORT"
-			export {http,https,ftp}_proxy="http://$PROXY_ADDRESS_STRING:$PROXY_PORT"
-			printf 'Acquire {\n  HTTP::proxy "http://%s:%s";\n  HTTPS::proxy "http://%s:%s";\n}\n' "$PROXY_ADDRESS_STRING" "$PROXY_PORT" "$PROXY_ADDRESS_STRING" "$PROXY_PORT" > /etc/apt/apt.conf.d/proxy
+			export {http,https,ftp}_proxy="http://$PROXY_HOST:$PROXY_PORT"
+			printf 'Acquire {\n  HTTP::proxy "http://%s:%s";\n  HTTPS::proxy "http://%s:%s";\n}\n' "$PROXY_HOST" "$PROXY_PORT" "$PROXY_HOST" "$PROXY_PORT" > /etc/apt/apt.conf.d/proxy
 
 		elif [ -n "$PROXY_USER" ];then
 			local PROXY_PW
 			#please note, read is a shell builtin. in bash it would be -r -s -p "prompt" TargetVar while in ZSH it is -r -s "?prompt" TargetVar
-			read -r -s "?Please Enter Password for Proxy ($PROXY_ADDRESS_STRING, user $PROXY_USER):" PROXY_PW
-			export {http,https,ftp}_proxy="http://$PROXY_USER:$PROXY_PW@$PROXY_ADDRESS_STRING"
-			printf 'Acquire {\n  HTTP::proxy "http://%s:%s@%s";\n  HTTPS::proxy "http://%s:%s@%s";\n}\n' "$PROXY_USER" "$PROXY_PW" "$PROXY_ADDRESS_STRING" "$PROXY_USER" "$PROXY_PW" "$PROXY_ADDRESS_STRING" > /etc/apt/apt.conf.d/proxy
+			read -r -s "?Please Enter Password for Proxy ($PROXY_HOST, user $PROXY_USER):" PROXY_PW
+			export {http,https,ftp}_proxy="http://$PROXY_USER:$PROXY_PW@$PROXY_HOST"
+			printf 'Acquire {\n  HTTP::proxy "http://%s:%s@%s";\n  HTTPS::proxy "http://%s:%s@%s";\n}\n' "$PROXY_USER" "$PROXY_PW" "$PROXY_HOST" "$PROXY_USER" "$PROXY_PW" "$PROXY_HOST" > /etc/apt/apt.conf.d/proxy
 			PROXY_PW=""
 			echo ""
 		else
-			echo "no known user for Proxy $PROXY_ADDRESS_STRING, please set PROXY_USER"
+			echo "no known user for Proxy $PROXY_HOST, please set PROXY_USER"
 		fi
 
 		#NOTE: the test if proxy auth is working is not functioning right now, it always accepts
@@ -193,8 +198,17 @@ printf "Welcome to "
 #this makes the first greedy match contain version_id as long as there is version, version_id therefore only is a fallback (I had to flip the capture groups in the regex as well)
 #--equal=\" v\" tells assemblecat to treat ' ' and 'v' the same to allow assembling of "Alpine Linux v3.17" with " 3.17.0" into "Alpine Linux v3.17.0". I wouldn't need the equality list if there wasn#t a space in the second string
 #however most distros need that space to avoid "Kali GNU/Linux Rolling2023.3"
-eval "$HOME/assemblecat.elf --equal=\" v\" $(sort -r < /etc/os-release | tr -d '\n' | sed -nE 's~.*VERSION(_ID)?="?([-a-zA-Z0-9\._ \(\)/]+)"?.*PRETTY_NAME="([-a-zA-Z0-9\._ \(\)/]+)".*~"\3" " \2"~p')" |tr -d '\n'
+eval "$HOME/.shelltools/assemblecat.elf --equal=\" v\" $(sort -r < /etc/os-release | tr -d '\n' | sed -nE 's~.*VERSION(_ID)?="?([-a-zA-Z0-9\._ \(\)/]+)"?.*PRETTY_NAME="([-a-zA-Z0-9\._ \(\)/]+)".*~"\3" " \2"~p')" |tr -d '\n'
 printf " [%s %s %s]\n" "$(uname --operating-system)" "$(uname --kernel-release)" "$(uname --machine)" #machine is x86-64 or arm or something
+
+
+if [ "$WSL_VERSION" -ne 1 ]; then
+	#system load is hardcoded in WSL as per https://github.com/microsoft/WSL/issues/945 and allegedly fixed in wsl2 as per https://github.com/microsoft/WSL/issues/2814
+	printf "System load averages (1/5/15 min) are %s out of %s\n" "$(cut -f1-3 -d ' ' /proc/loadavg | tr ' ' '/')" "$(grep -c ^processor /proc/cpuinfo).0"
+fi
+
+# shellcheck disable=SC2046 #reason: I want wordsplitting to happen on the date
+printf "System up since %s (%s)\n" "$(uptime --since)" "$("$HOME/.shelltools/timer-zsh.elf" STOPHUMAN $(uptime --since |tr ':-' ' '))"
 
 "$CODE_LOC/BAT_VBS/AptTools.sh" --unattended
 
@@ -217,10 +231,4 @@ if [ "$devcount" != "0" ]; then
 		grep "New version" <<< "$infos" |grep -Eo "[0-9\.]+" |tr -d '\n'
 		printf "]\n"
 	fi
-fi
-
-
-if [ "$WSL_VERSION" -ne 1 ]; then
-	#system load is hardcoded in WSL as per https://github.com/microsoft/WSL/issues/945 and allegedly fixed in wsl2 as per https://github.com/microsoft/WSL/issues/2814
-	printf "System load averages (1/5/15 min) are %s out of %s\n" "$(cut -f1-3 -d ' ' /proc/loadavg | tr ' ' '/')" "$(grep -c ^processor /proc/cpuinfo).0"
 fi

@@ -39,7 +39,7 @@ local CmdDur="0s"
 GetTimeStart (){
 	#this function is executed via zsh hook on preexec (ie just before the command is actually executed)
 	#%s is seconds since UNIX TIME; %3N gives the first three digits of the current Nanoseconds
-	CmdStartTime="$(~/timer-zsh.elf START)"
+	CmdStartTime="$(~/.shelltools/timer-zsh.elf START)"
 }
 
 CalcTimeDiff (){
@@ -48,7 +48,7 @@ CalcTimeDiff (){
 	#but before the next prompt is prepared)
 	#the 'passion' theme shipped with oh-my-zsh does this entirely in shell, but I decided that's too slow and imprecise -> c binary compiled from ./timer.c
 	if [ "$CmdStartTime" ]; then
-		CmdDur="$(~/timer-zsh.elf STOP "$CmdStartTime")"
+		CmdDur="$(~/.shelltools/timer-zsh.elf STOP "$CmdStartTime")"
 		CmdStartTime=""
 	fi
 }
@@ -235,12 +235,13 @@ function PowerState (){
 }
 
 function MainPrompt(){
-	print -P "\n$(~/repotools.elf --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" -i"$(print -P "$(GetLocalIP)\a")" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -l" [$SHLVL]" -s"$(print "$(GetSSHInfo)\a")" "$(pwd)")"
+	print -P "\n$(~/.shelltools/repotools.elf --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" -i"$(print -P "$(GetLocalIP)\a")" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -l" [$SHLVL]" -s"$(print "$(GetSSHInfo)\a")" "$(pwd)")"
 }
 
 add-zsh-hook precmd MainPrompt
 
-PROMPT='└%F{cyan}%B %2~ %b%f%B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b  '
+#PROMPT='└%F{cyan}%B %2~ %b%f%B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b  '
+PROMPT='$("$HOME/.shelltools/repotools.elf" --lowprompt -r"$?" -c"$COLUMNS" -t"$CmdDur" "$(print -P '%~')")'
 
 #To do multiline Prompts I am printing the top line before the prompt is ever computed.
 #print -P is a zsh builtin (man zshmisc) that does the same substitution the prompt would.
