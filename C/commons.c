@@ -114,19 +114,20 @@ bool ContainsString(const char* str, const char* test)
 	return false;
 }
 
-void TerminateStrOn(char* str, const char* terminators) {
-	int i = 0;
+uint32_t TerminateStrOn(char* str, const char* terminators) {
+	uint32_t i = 0;
 	while (str[i] != 0x00) {
 		int t = 0;
 		while (terminators[t] != 0x00) {
 			if (str[i] == terminators[t]) {
 				str[i] = 0x00;
-				return;
+				return i;
 			}
 			t++;
 		}
 		i++;
 	}
+	return i;
 }
 
 int LastIndexOf(const char* txt, char tst) {

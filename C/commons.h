@@ -19,7 +19,7 @@ bool StartsWith(const char* a, const char* b);
 bool ContainsString(const char* str, const char* test);
 char* ExecuteProcess(const char* command);
 int strlen_visible(const char* s);
-void TerminateStrOn(char* str, const char* terminators);
+uint32_t TerminateStrOn(char* str, const char* terminators);
 StringRelations CompareStrings(const char* a, const char* b);
 int LastIndexOf(const char* txt, char tst);
 char* AbbreviatePathAuto(const char* path, int KeepAllIfShorterThan, int DesiredKeepElements);

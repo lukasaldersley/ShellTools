@@ -1,11 +1,11 @@
 #/*
-TargetDir="$HOME/.shelltools"
+TargetDir="$ST_CFG"
 if [ ! -d "$TargetDir" ]; then
 	mkdir -p "$TargetDir"
 fi
 TargetName="timer-zsh.elf"
 printf "compiling $0 into $TargetDir/$TargetName"
-gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")/../")"/C/commons.c "$0" -o "$TargetDir/$TargetName"
+gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$0" -o "$TargetDir/$TargetName"
 printf " -> \e[32mDONE\e[0m($?)\n"
 exit
 (basename $0 .c) would be used to get the name of file without the .c extension
@@ -19,7 +19,7 @@ exit
 
 //the numbers this is using are UTC time (1/10 seconds), so UTC millis, but with the last two digits chopped off
 
-#include "../C/commons.h"
+#include "commons.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <time.h>

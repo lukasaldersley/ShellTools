@@ -1,5 +1,5 @@
 #/*
-TargetDir="$HOME/.shelltools"
+TargetDir="$ST_CFG"
 if [ ! -d "$TargetDir" ]; then
 	mkdir -p "$TargetDir"
 fi
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 	else {
-		fprintf("you must supply exactly one argument\n");
+		fprintf(stderr, "you must supply exactly one argument\n");
 		return 1;
 	}
 }

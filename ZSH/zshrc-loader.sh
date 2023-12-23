@@ -4,11 +4,20 @@
 ## this script must be sourced in zshrc as follows (obviously adjust CODE_LOC):
 ## Ideally just use setup.sh to create a valid zshrc
 ##
-### CODE_LOC="/mnt/e/ShellTools"
-### export CODE_LOC
-### . "$CODE_LOC/ZSH/zshrc-loader.sh"
+### ST_SRC="/path/to/parent/folder/of/ShellTools"
+### export ST_SRC
+### . "$ST_SRC/ShellTools/zshrc-loader.sh"
 ##
 ##NOTE: in bash/ksh/zsh export CODE_LOC="/mnt/e/CODE would also be valid but not in POSIX where the assignement and export must be seperate"
+
+#to forcibly log out another user su into their account and execute "DISPLAY=:1 gnome-session-quit --force"
+#to see what users are running: "who"
+#to forcibly log out a non-gui user: pkill -t "terminalDevice" such as sudo pkill -t pts/1
+
+if [ ! -e "$ST_CFG" ]; then
+	mkdir -p "$ST_CFG"
+	echo "$ST_CFG directory didn't exist -> creating now"
+fi
 
 PROXY_HOST=""
 export PROXY_HOST
@@ -18,22 +27,19 @@ PROXY_PORT=""
 export PROXY_PORT
 
 export EDITOR=nano
-#the hash -d something=other is a bit like ~ means /mnt/user/home; ~something now means other
-hash -d code="$CODE_LOC"
-hash -d CODE="$CODE_LOC"
 
 #script invocations
-alias pack='$CODE_LOC/archive.sh -p'
-alias unpack='$CODE_LOC/archive.sh -u'
-alias search='$CODE_LOC/search.sh -p'
-alias contentsearch='$CODE_LOC/search.sh -c -p'
-alias sysupdate='$CODE_LOC/AptTools.sh --full-update'
-alias aptcheck='$CODE_LOC/AptTools.sh --check'
-alias aptstatus='$CODE_LOC/AptTools.sh --unattended'
-alias acat='$HOME/.shelltools/assemblecat.elf'
-alias cat-assemble='$HOME/.shelltools/assemblecat.elf'
-alias argtest='$HOME/.shelltools/argtest.elf'
-alias rm-recurse='$HOME/.shelltools/rm_recurse.elf'
+alias pack='$ST_SRC/archive.sh -p'
+alias unpack='$ST_SRC/archive.sh -u'
+alias search='$ST_SRC/search.sh -p'
+alias contentsearch='$ST_SRC/search.sh -c -p'
+alias sysupdate='$ST_SRC/AptTools.sh --full-update'
+alias aptcheck='$ST_SRC/AptTools.sh --check'
+alias aptstatus='$ST_SRC/AptTools.sh --unattended'
+alias acat='$ST_CFG/assemblecat.elf'
+alias cat-assemble='$ST_CFG/assemblecat.elf'
+alias argtest='$ST_CFG/argtest.elf'
+alias rm-recurse='$ST_CFG/rm_recurse.elf'
 
 #general shorthands
 alias l="ls --time-style=+\"%Y-%m-%d %H:%M:%S\" --color=tty -lash"
@@ -64,28 +70,26 @@ cleanFile(){
 }
 
 UpdateZSH (){
-	git -C "$CODE_LOC/BAT_VBS" pull
+	git -C "$ST_SRC" pull
 	#compile all .c or .cpp files in the folders ZSH and C using the self-compile trick
-	find "$CODE_LOC/BAT_VBS/ZSH" "$CODE_LOC/BAT_VBS/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
-	find "$CODE_LOC/BAT_VBS/ZSH" "$CODE_LOC/BAT_VBS/C" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
+	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
+	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
 	if [ -w ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme ]; then #if file exists and write permission is granted
 		rm ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
 	fi
-	echo "copying $CODE_LOC/BAT_VBS/ZSH/lukasaldersley.zsh-theme to  ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme"
-	cp "$CODE_LOC/BAT_VBS/ZSH/lukasaldersley.zsh-theme" ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
+	echo "copying $ST_SRC/ZSH/lukasaldersley.zsh-theme to  ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme"
+	cp "$ST_SRC/ZSH/lukasaldersley.zsh-theme" ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
 	omz reload
 }
 alias uz=UpdateZSH
 
 SetGitBase(){
-	#~/repotools.elf SET "${2:-"$CODE_LOC"}" "${1:-"NONE"}" "${3:-"QUICK"}"
-	~/.shelltools/repotools.elf --set -n"${1:-"NONE"}" "${2:-"$CODE_LOC"}" "${3:-"-q"}"
+	"$ST_CFG/repotools.elf" --set -n"${1:-"NONE"}" "${2:?}" "${3:-"-q"}"
 }
 alias sgb=SetGitBase
 
 lsRepo(){
-	#~/repotools.elf SHOW "${1:-"$(pwd)"}" "${2:-"QUICK"}"
-	~/.shelltools/repotools.elf --show "${1:-"$(pwd)"}" "${2:-"-q"}"
+	"$ST_CFG/repotools.elf" --show "${1:-"$(pwd)"}" "${2:-"-q"}"
 }
 
 compare(){
@@ -99,7 +103,7 @@ alias lsrepo=lsRepo
 alias lsGit=lsRepo
 alias lsgit=lsrepo
 alias gitls=lsrepo
-alias lsorigin="~/.shelltools/repotools.elf --list"
+alias lsorigin='$ST_CFG/repotools.elf --list'
 
 
 SetUpAptProxyConfigFile(){
@@ -117,6 +121,7 @@ SetUpAptProxyConfigFile(){
 
 HasLocalProxyServer(){
 	#return default false if it's not overridden in other scripts
+	#NOTE: it WILL be overriden in custom non-public extensions
 	echo "default false for Local Proxy"
 	return 1
 }
@@ -128,6 +133,7 @@ enableProxy(){
 
 		if HasLocalProxyServer ; then
 			#echo "woking with local proxy on $PROXY_HOST, port $PROXY_PORT"
+			#PROXY_NAME will be set in a nonpublic extension
 			echo "detected $PROXY_NAME on port $PROXY_PORT"
 			export {http,https,ftp}_proxy="http://$PROXY_HOST:$PROXY_PORT"
 			printf 'Acquire {\n  HTTP::proxy "http://%s:%s";\n  HTTPS::proxy "http://%s:%s";\n}\n' "$PROXY_HOST" "$PROXY_PORT" "$PROXY_HOST" "$PROXY_PORT" > /etc/apt/apt.conf.d/proxy
@@ -146,7 +152,7 @@ enableProxy(){
 
 		#NOTE: the test if proxy auth is working is not functioning right now, it always accepts
 		#it works if the proxy hasn't yet been enabled since System boot, otherwise it caches and always succeeds
-		local ConnTestURL='www.google.de'
+		local ConnTestURL='www.google.de' # I loathe google, but it's highly likely they'll be up and not blocked by a firewall, so I'll use them as a connection test
 		if curl --silent --max-time 1 $ConnTestURL > /dev/null
 		then
 			echo "enabled proxy"
@@ -167,7 +173,6 @@ disableProxy(){
 	echo "disabled proxy"
 }
 
-
 IsWSL=0
 #use cmd.exe to get windows username, discard cmd's stderr (usually because cmd prints a warning if this was called from somewhere within the linux filesystem), then strip CRLF from the result
 WinUser="$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\n\r')"
@@ -184,7 +189,18 @@ export IsWSL
 
 if [ $IsWSL -eq 1 ]; then
 	#shellcheck source=WSL.sh
-	. "$CODE_LOC/BAT_VBS/ZSH/WSL.sh"
+	. "$ST_SRC/ZSH/WSL.sh"
+else
+	#check if this is debian-esque, if it's not, it's not supported, exit immediatley
+	#shellcheck source=BARE.sh
+	#. "$ST_SRC/ZSH/BARE.sh"
+fi
+
+if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ]; then
+	echo "Loading Non-Public Extensions"
+	# shellcheck disable=SC1091 # reason: this file may very well not exist, as it will only exist for some systems where there are non-public ShellTools Extensions.
+	# shellcheck disable=SC1090 # shellcheck can't find the file, obviously
+	. "$ST_SRC/../ShellToolsExtensionLoader.sh"
 fi
 
 unset IsWSL
@@ -198,9 +214,11 @@ printf "Welcome to "
 #this makes the first greedy match contain version_id as long as there is version, version_id therefore only is a fallback (I had to flip the capture groups in the regex as well)
 #--equal=\" v\" tells assemblecat to treat ' ' and 'v' the same to allow assembling of "Alpine Linux v3.17" with " 3.17.0" into "Alpine Linux v3.17.0". I wouldn't need the equality list if there wasn#t a space in the second string
 #however most distros need that space to avoid "Kali GNU/Linux Rolling2023.3"
-eval "$HOME/.shelltools/assemblecat.elf --equal=\" v\" $(sort -r < /etc/os-release | tr -d '\n' | sed -nE 's~.*VERSION(_ID)?="?([-a-zA-Z0-9\._ \(\)/]+)"?.*PRETTY_NAME="([-a-zA-Z0-9\._ \(\)/]+)".*~"\3" " \2"~p')" |tr -d '\n'
+eval "$ST_CFG/assemblecat.elf --equal=\" v\" $(sort -r < /etc/os-release | tr -d '\n' | sed -nE 's~.*VERSION(_ID)?="?([-a-zA-Z0-9\._ \(\)/]+)"?.*PRETTY_NAME="([-a-zA-Z0-9\._ \(\)/]+)".*~"\3" " \2"~p')" |tr -d '\n'
 printf " [%s %s %s]\n" "$(uname --operating-system)" "$(uname --kernel-release)" "$(uname --machine)" #machine is x86-64 or arm or something
-
+if [ "$(uname --machine)" != "x86_64" ]; then
+	echo "Note: you are on an inferior hardware platform (either you're using a raspberry pi or similar for it's price or you're an apple disciple who needlessly spends way to much on crappy products, just because it has a damn logo)"
+fi
 
 if [ "$WSL_VERSION" -ne 1 ]; then
 	#system load is hardcoded in WSL as per https://github.com/microsoft/WSL/issues/945 and allegedly fixed in wsl2 as per https://github.com/microsoft/WSL/issues/2814
@@ -208,9 +226,9 @@ if [ "$WSL_VERSION" -ne 1 ]; then
 fi
 
 # shellcheck disable=SC2046 #reason: I want wordsplitting to happen on the date
-printf "System up since %s (%s)\n" "$(uptime --since)" "$("$HOME/.shelltools/timer-zsh.elf" STOPHUMAN $(uptime --since |tr ':-' ' '))"
+printf "System up since %s (%s)\n" "$(uptime --since)" "$("$ST_CFG/timer-zsh.elf" STOPHUMAN $(uptime --since |tr ':-' ' '))"
 
-"$CODE_LOC/BAT_VBS/AptTools.sh" --unattended
+"$ST_SRC/AptTools.sh" --unattended
 
 devcount="$(fwupdmgr get-devices 2>/dev/null |grep -c 'Device ID')"
 if [ "$devcount" != "0" ]; then

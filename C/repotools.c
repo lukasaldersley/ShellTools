@@ -1,16 +1,16 @@
 #/*
-TargetDir="$HOME/.shelltools"
+TargetDir="$ST_CFG"
 if [ ! -d "$TargetDir" ]; then
 	mkdir -p "$TargetDir"
 fi
 TargetName="$(basename $0 .c).elf"
 printf "compiling $0 into $TargetDir/$TargetName"
-gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")/../")"/C/commons.c "$0" -o "$TargetDir/$TargetName"
+gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$0" -o "$TargetDir/$TargetName"
 printf " -> \e[32mDONE\e[0m($?)\n"
 exit
 */
 
-#include "../C/commons.h"
+#include "commons.h"
 #include <regex.h>
 #include <string.h>
 #include <errno.h>
@@ -46,18 +46,18 @@ regmatch_t CapturedResults[maxGroups];
 regex_t reg;
 
 #define MaxLocations 10
-const char* NAMES[MaxLocations];
-const char* LOCS[MaxLocations];
+char* NAMES[MaxLocations];
+char* LOCS[MaxLocations];
+char* GitHubs[MaxLocations];
+uint8_t numGitHubs = 0;
 int LIMIT_BRANCHES = -2;
 uint8_t numLOCS = 0;
-char* buf;
-int bufCurLen;
-const char* DEFAULT_NAME_NONE = "NONE";
-const char* DEFAULT_PATH_NONE = "/dev/null";
-const char* DEFAULT_NAME_LOOPBACK = "LOOPBACK";
-const char* DEFAULT_PATH_LOOPBACK = "ssh://127.0.0.1/data/repos";
-const char* DEFAULT_NAME_GLOBAL = "GLOBAL";
-const char* DEFAULT_PATH_GLOBAL = "ssh://git@someprivateurl.de:1234/data/repos";
+#define DEFAULT_CONFIG_FILE "\
+# Lines starting with # are Comments, seperator between Entries is TAB (Spaces DO NOT WORK [by design])\n\
+ORIGIN:	NONE	/dev/null\n\
+ORIGIN:	LOOPBACK	ssh://git@127.0.0.1/data/repos\n\
+HOST:	github.com\n\
+HOST:	gitlab.com\n"
 
 typedef struct {
 	char* BranchName;
@@ -295,6 +295,7 @@ bool IsMerged(const char* repopath, const char* commithash) {
 	//if there are childen but none of them is a merge commit, this commit could be fast forwarded in some direction but hasn't, it is not merged
 	//the cut -c42- bit is to cut my own hash out of the result and only leave the children
 	//git rev-list --children --all | grep ^a40691c4edac3e3e9cff1f651f79a80dd3bd792a | cut -c42- | tr ' ' '\n'
+	//NOTE: the commit hash is a demo of this case, BUT it's NOT in the public GitHub version, just in the "Ground Truth" repo on a private server
 	//for each check if merge commit, if at least one is a merge commit, then this branch has been merged
 	const int size = 64;
 	char* result = (char*)malloc(sizeof(char) * size);
@@ -801,9 +802,17 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
 				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PORT], 255 - currlen);//username
 			}
-			if (*ptrs[4] != 0x00 && (Compare(ptrs[REPO_ORIGIN_GROUP_Host], "github.com") || Compare(ptrs[REPO_ORIGIN_GROUP_Host], "gitlab.com"))) {//host is github or gitlab and I can parse a github username also add it
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], 255 - currlen);//service username
+			if (*ptrs[4] != 0x00) {//host is github or gitlab and I can parse a github username also add it
+				bool knownServer = false;
+				int i = 0;
+				while (i < numGitHubs && knownServer == false) {
+					knownServer = Compare(ptrs[REPO_ORIGIN_GROUP_Host], GitHubs[i]);
+					i++;
+				}
+				if (knownServer) {
+					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
+					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], 255 - currlen);//service username
+				}
 			}
 		}
 		for (int i = 0;i < REPO_ORIGIN_WORDS_IN_STRING;i++) {
@@ -1050,7 +1059,7 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 		return;
 	}
 	if (ri->ParentDirectory != NULL) {
-		printf("%s%s\u2500\u2500 ", parentPrefix, anotherSameLevelEntryFollows ? "\u251c" : "\u2514");
+		printf("%s%s\u2500\u2500 ", parentPrefix, (anotherSameLevelEntryFollows ? "\u251c" : "\u2514"));
 	}
 	if (ri->isGit) {
 		printf("%s [" COLOUR_GIT_BARE "%s" COLOUR_GIT_INDICATOR "GIT", ri->DirectoryName, ri->isBare ? "BARE " : "");
@@ -1154,21 +1163,30 @@ bool pruneTreeForGit(RepoInfo* ri) {
 	return ri->isGit || hasGitInTree;
 }
 
+void Cleanup() {
+	for (int i = 0;i < maxGroups;i++) {
+		if (LOCS[i] != NULL) { free(LOCS[i]); };
+		if (NAMES[i] != NULL) { free(NAMES[i]); };
+		if (GitHubs[i] != NULL) { free(GitHubs[i]); };
+	}
+}
+
 void DoSetup() {
-	NAMES[0] = DEFAULT_NAME_NONE;
-	LOCS[0] = DEFAULT_PATH_NONE;
-	NAMES[1] = DEFAULT_NAME_GLOBAL;
-	LOCS[1] = DEFAULT_PATH_GLOBAL;
-	NAMES[2] = DEFAULT_NAME_LOOPBACK;
-	LOCS[2] = DEFAULT_PATH_LOOPBACK;
-	numLOCS = 3;
+	for (int i = 0;i < maxGroups;i++) {
+		LOCS[i] = NULL;
+		NAMES[i] = NULL;
+		GitHubs[i] = NULL;
+	}
+	numLOCS = 0;
+	numGitHubs = 0;
 	errno = 0;
 
 	char* file;
-	char* fileName = "/.shelltools/repoconfig.cfg";
+	char* fileName = "/repoconfig.cfg";
+	char* pointerIntoEnv = getenv("ST_CFG");
 	//TODO check if dir exists
-	file = (char*)malloc(strlen(getenv("HOME")) + strlen(fileName) + 1); // to account for NULL terminator
-	strcpy(file, getenv("HOME"));
+	file = (char*)malloc(strlen(pointerIntoEnv) + strlen(fileName) + 1); // to account for NULL terminator
+	strcpy(file, pointerIntoEnv);
 	strcat(file, fileName);
 	FILE* fp = fopen(file, "r");//open for read, will fail if file doesn't exist
 	if (fp == NULL) {
@@ -1179,8 +1197,7 @@ void DoSetup() {
 			fprintf(stderr, "couldn't create file (%i: %s)\n", errno, strerror(errno));
 		}
 		else {
-			fprintf(fp, "LOCAL	ssh://git@127.0.0.1/data/repos\n");
-			fprintf(fp, "GITHUB	ssh://git@github.com:username\n");
+			fprintf(fp, DEFAULT_CONFIG_FILE);
 			fflush(fp);
 			rewind(fp);
 			printf("created default config file: %s\n", file);
@@ -1188,31 +1205,48 @@ void DoSetup() {
 	}
 	free(file);
 
+	int buf_max_len = 1024;
+	char* buf = (char*)malloc(sizeof(char) * buf_max_len);
+	if (buf == NULL) {
+		printf("couldn't malloc required buffer");
+	}
+
 	//at this point I know for certain a config file does exist
-	while (bufCurLen < 1024 - 2) {
-		if (fgets(buf + bufCurLen, 1024 - bufCurLen - 1, fp) == NULL)break;
-		NAMES[numLOCS] = buf + bufCurLen;
-		int linelen = 0;
-		while (linelen < 1024) {
-			if (buf[bufCurLen + linelen] == '\t') {
-				//found a tab -> split sting by inserting 0x00 and save new start location
-				buf[bufCurLen + linelen] = 0x00;
-				linelen++;
-				LOCS[numLOCS++] = buf + bufCurLen + linelen;
-			}
-			if (buf[bufCurLen + linelen] == '\n' || buf[bufCurLen + linelen] == 0x00) {
-				//found EOL -> break
-				buf[bufCurLen + linelen] = 0x00;
-				linelen++;
-				break;
-			}
-			linelen++;
+	while (fgets(buf, buf_max_len - 1, fp) != NULL) {
+		if (buf[0] == '#') {
+			continue;
 		}
-		bufCurLen += linelen;
-		if (linelen == 1) {//only the advance I make when encountering \n or 0x00 -> empty line -> done
-			break;
+		else if (StartsWith(buf, "ORIGIN:	")) {
+			//found origin
+			char* actbuf = buf + 8;//the 8 is the offset to just behind "ORIGIN:	"
+			int i = 0;
+			while (i < buf_max_len - 8 && actbuf[i] != '\t') {
+				i++;
+			}
+			if (actbuf[i] == '\t' && i < (buf_max_len - 8 - 1)) {
+				if (TerminateStrOn(actbuf + i + 1, terminators) > 0) {
+					if (asprintf(&LOCS[numLOCS], "%s", actbuf + i + 1) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
+					actbuf[i] = 0x00;
+					if (asprintf(&NAMES[numLOCS], "%s", actbuf) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
+					//printf("origin>%s|%s<\n", NAMES[numLOCS], LOCS[numLOCS]);
+					numLOCS++;
+				}
+			}
+		}
+		else if (StartsWith(buf, "HOST:	")) {
+			//found host
+			if (TerminateStrOn(buf, terminators) > 0) {
+				if (asprintf(&GitHubs[numGitHubs], "%s", buf + 6) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
+				//the +6 is the offset to just after "HOST:	"
+				//printf("host>%s<\n", GitHubs[numGitHubs]);
+				numGitHubs++;
+			}
+		}
+		else {
+			fprintf(stderr, "Warning: unknown entry in config file: >%s<", buf);
 		}
 	}
+	free(buf);
 }
 
 uint32_t determinePossibleCombinations(int* availableLength, int NumElements, ...) {
@@ -1254,11 +1288,6 @@ void ListAvailableRemotes() {
 int main(int argc, char** argv)
 {
 	int main_retcode = 0;
-	buf = (char*)malloc(sizeof(char) * 1024);
-	bufCurLen = 0;
-	if (buf == NULL) {
-		printf("couldn't malloc required buffer");
-	}
 
 	const char* RegexString = "^[ *]+([-_/0-9a-zA-Z]*) +([0-9a-fA-F]+) (\\[([-/_0-9a-zA-Z]+)\\])?.*$";
 	int RegexReturnCode;
@@ -1689,7 +1718,7 @@ int main(int argc, char** argv)
 #define AdditionalElementPriorityBackgroundJobDetail 7
 #define AdditionalElementPrioritySSHInfo 8
 
-		//if the seventh-prioritized element (ssh connection info) has space, print it "<SSH: 127.0.0.1:49567 -> 127.0.0.2:22> "
+		//if the seventh-prioritized element (ssh connection info) has space, print it "<SSH: 123.123.13.123:54321 -> 321.312.321.321:22> "
 		if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPrioritySSHInfo)) {
 			printf("%s", Arg_SSHInfo);
 		}
@@ -1706,7 +1735,7 @@ int main(int argc, char** argv)
 		//also print the first bit of the git indication (is submodule or not) " [GIT-SM"
 		printf(COLOUR_SHLVL "%s" COLOUR_CLEAR "%s", Arg_SHLVL, gitSegment1_BaseMarkerStart);
 
-		//if the fifth-prioritized element (the the location of the parent repo, if it exists, ie if this is submodule) "@/some/local/repo"
+		//if the fifth-prioritized element (the the location of the parent repo, if it exists, ie if this is submodule) "@/some/parentrepo"
 		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityParentRepoLocation))) {
 			printf("%s", gitSegment2_parentRepoLoc);
 		}
@@ -1714,7 +1743,7 @@ int main(int argc, char** argv)
 		//print the repo name and branch including the closing bracket arount the git indication "] ShellTools on master"
 		printf("%s", gitSegment3_BaseMarkerEnd);
 
-		//if the first-prioritized element (the git remote origin information) has space, print it " from ssh:git@someprivateurl.de:1234"
+		//if the first-prioritized element (the git remote origin information) has space, print it " from ssh:git@someserver.de:someport"
 		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityGitRemoteInfo))) {
 			printf("%s", gitSegment4_remoteinfo);
 		}
@@ -1746,7 +1775,7 @@ int main(int argc, char** argv)
 		//if a proxy is configured, show it (A=Apt, H=http(s), F=FTP, N=NoProxy) " [AHNF]"
 		printf("%s", Arg_ProxyInfo);
 
-		//if the second prioritized element (local IP addresses) has space, print it " eth0:127.0.0.1 wifi0:127.0.0.2"
+		//if the second prioritized element (local IP addresses) has space, print it " eth0:192.168.0.2 wifi0:192.168.0.3"
 		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityLocalIP))) {
 			printf("%s", Arg_LocalIPs);
 		}
@@ -1757,7 +1786,7 @@ int main(int argc, char** argv)
 			printf("%s", Arg_BackgroundJobs);
 		}
 
-		//print the battery state (the first unicode char can be any of ▲,≻,▽ or ◊[for not charging,but not dischargind]), while the second unicode char indicates the presence of AC power "≻ 100% ↯"
+		//print the battery state (the first unicode char can be any of ▲,≻,▽ or ◊[for not charging,but not discharging]), while the second unicode char indicates the presence of AC power "≻ 100% ↯"
 		printf("%s", Arg_PowerState);
 
 
@@ -1869,7 +1898,6 @@ int main(int argc, char** argv)
 		printf("unknown command %s\n", argv[1]);
 		return -1;
 	}
-	free(buf);
 	regfree(&reg);
 	return main_retcode;
 }

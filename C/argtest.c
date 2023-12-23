@@ -1,5 +1,5 @@
 #/*
-TargetDir="$HOME/.shelltools"
+TargetDir="$ST_CFG"
 if [ ! -d "$TargetDir" ]; then
 	mkdir -p "$TargetDir"
 fi
