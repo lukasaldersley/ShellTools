@@ -41,18 +41,13 @@ alias cat-assemble='$ST_CFG/assemblecat.elf'
 alias argtest='$ST_CFG/argtest.elf'
 alias rm-recurse='$ST_CFG/rm_recurse.elf'
 
-#general shorthands
-alias l="ls --time-style=+\"%Y-%m-%d %H:%M:%S\" --color=tty -lash"
-alias zshrc="nano ~/.zshrc"
-alias cls=clear
-alias qqq=exit
-alias recrm=rm-recurse
-alias ga="git add ."
-alias gs="git status"
-alias gl=gitlog
 #custom git log
 alias gitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as/%C(auto)%ar]%d %C(brightblack)%ae:%C(auto) %s\" HEAD"
 alias egitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae|%ce:%C(auto) %s\" HEAD"
+alias eegitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae(%an)|%ce(%cn):%C(auto) %s\" HEAD"
+alias procowners="sudo ps axo user:64 |sort|uniq"
+alias gitupdate="git submodule foreach git pull --ff-only --prune ; git pull --ff-only --prune"
+alias gitauthor='printf "Configured authors for %s:\n\t[System]: %s (%s)\n\t[Global]: %s (%s)\n\t[Local]: %s (%s)\n" "$(pwd)" "$(git config --system --get user.name)" "$(git config --system user.email)" "$(git config --global --get user.name)" "$(git config --global user.email)" "$(git config --local --get user.name)" "$(git config --local user.email)"'
 #%C(auto) basically tells git to do colouring as it usually would in it's predefined versions until another colour instruction is given
 #%C(string) basically means display a CSI defined 4-bit colour
 #%h abbrev commit hash
@@ -62,6 +57,27 @@ alias egitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C
 #%ae author email
 #%s subject [ie commit message]
 #everywhere I used %a. it would have been possible to use %c. to get the committer instead of the author... (as I have done in egitlog)
+
+#general shorthands
+alias l="ls --time-style=+\"%Y-%m-%d %H:%M:%S\" --color=tty -lash"
+alias zshrc="nano ~/.zshrc"
+alias cls=clear
+alias qqq=exit
+alias recrm=rm-recurse
+alias ga="git add ."
+alias gs="git status"
+alias gse="gitauthor ; gs"
+alias gl=gitlog
+alias gu=gitupdate
+alias cf=cleanFile
+alias uz=UpdateZSH
+
+searchapt(){
+	printf "Apt packages:\n"
+	apt-cache search "$1" | grep "$1"
+	printf "\nInstallation status:\n"
+	dpkg -l |grep "$1"
+}
 
 cleanFile(){
 	___tempfile_local=$(mktemp)
@@ -81,7 +97,6 @@ UpdateZSH (){
 	cp "$ST_SRC/ZSH/lukasaldersley.zsh-theme" ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
 	omz reload
 }
-alias uz=UpdateZSH
 
 SetGitBase(){
 	"$ST_CFG/repotools.elf" --set -n"${1:-"NONE"}" "${2:?}" "${3:-"-q"}"
@@ -127,7 +142,6 @@ HasLocalProxyServer(){
 }
 
 enableProxy(){
-	#printf "Proxy enable: http://%s:%s@%s:%s\n" "$PROXY_USER" "$PROXY_PW" "$PROXY_HOST" "$PROXY_PORT"
 	if [ -n "$PROXY_HOST" ] ; then
 		SetUpAptProxyConfigFile
 
@@ -135,19 +149,32 @@ enableProxy(){
 			#echo "woking with local proxy on $PROXY_HOST, port $PROXY_PORT"
 			#PROXY_NAME will be set in a nonpublic extension
 			echo "detected $PROXY_NAME on port $PROXY_PORT"
-			export {http,https,ftp}_proxy="http://$PROXY_HOST:$PROXY_PORT"
-			printf 'Acquire {\n  HTTP::proxy "http://%s:%s";\n  HTTPS::proxy "http://%s:%s";\n}\n' "$PROXY_HOST" "$PROXY_PORT" "$PROXY_HOST" "$PROXY_PORT" > /etc/apt/apt.conf.d/proxy
-
-		elif [ -n "$PROXY_USER" ];then
+			PROXY_STRING="http://$PROXY_HOST:$PROXY_PORT"
+			export {http,https,ftp}_proxy="$PROXY_STRING"
+			export {HTTP,HTTPS,FTP}_PROXY="$PROXY_STRING"
+			printf 'Acquire {\n  HTTP::proxy "%s";\n  HTTPS::proxy "%s";\n}\n' "$PROXY_STRING" "$PROXY_STRING" > /etc/apt/apt.conf.d/proxy
+			unset PROXY_STRING
+		else
+			ProxHost="${PROXY_HOST}${PROXY_PORT:+":$PROXY_PORT"} (${PROXY_NAME:-"Proxy"})"
+			if [ -z "$PROXY_USER" ]; then
+				read -r "?Please enter the Username for $ProxHost" PROXY_USER
+				ProxHost="$PROXY_USER@$ProxHost"
+			fi
 			local PROXY_PW
 			#please note, read is a shell builtin. in bash it would be -r -s -p "prompt" TargetVar while in ZSH it is -r -s "?prompt" TargetVar
-			read -r -s "?Please Enter Password for Proxy ($PROXY_HOST, user $PROXY_USER):" PROXY_PW
-			export {http,https,ftp}_proxy="http://$PROXY_USER:$PROXY_PW@$PROXY_HOST"
-			printf 'Acquire {\n  HTTP::proxy "http://%s:%s@%s";\n  HTTPS::proxy "http://%s:%s@%s";\n}\n' "$PROXY_USER" "$PROXY_PW" "$PROXY_HOST" "$PROXY_USER" "$PROXY_PW" "$PROXY_HOST" > /etc/apt/apt.conf.d/proxy
+			#-r is for "raw" mode; basically disable \'s special treatment
+			#-s is for silent -> don't print the password back out to the shell
+			#in bash -p is for prompt, to specify a desired prompt text, in zsh it's the first parameter, if that parameter starts with ?
+			read -r -s "?Please Enter Password for ${ProxHost}: " PROXY_PW
+			unset ProxHost
+			PROXY_STRING="http://${PROXY_USER}:${PROXY_PW}@${PROXY_HOST}${PROXY_PORT:+":$PROXY_PORT"}"
+			#echo "\n<$PROXY_STRING>"
+			export {http,https,ftp}_proxy="$PROXY_STRING"
+			export {HTTP,HTTPS,FTP}_PROXY="$PROXY_STRING"
+			printf 'Acquire {\n  HTTP::proxy "%s";\n  HTTPS::proxy "%s";\n}\n' "$PROXY_STRING" "$PROXY_STRING" > /etc/apt/apt.conf.d/proxy
+			unset PROXY_STRING
 			PROXY_PW=""
 			echo ""
-		else
-			echo "no known user for Proxy $PROXY_HOST, please set PROXY_USER"
 		fi
 
 		#NOTE: the test if proxy auth is working is not functioning right now, it always accepts
@@ -155,15 +182,15 @@ enableProxy(){
 		local ConnTestURL='www.google.de' # I loathe google, but it's highly likely they'll be up and not blocked by a firewall, so I'll use them as a connection test
 		if curl --silent --max-time 1 $ConnTestURL > /dev/null
 		then
-			echo "enabled proxy"
-			export no_proxy="127.0.0.1,localhost,::1"
+			printf "enabled proxy (%s)\n" "$PROXY_NAME"
+			export {no_proxy,NO_PROXY}="127.0.0.1,localhost,::1"
 		else
 			#no connectiopn
-			echo "Connection not possible (likely wrong password)"
+			printf "Connection to %s not possible (likely wrong password)\n" "$PROXY_NAME"
 			disableProxy
 		fi
 	else
-		echo "No set proxy information -> NOT SETTING PROXY"
+		echo "PROXY_HOST not provided -> NO ACTION"
 	fi
 }
 
@@ -194,6 +221,7 @@ else
 	#check if this is debian-esque, if it's not, it's not supported, exit immediatley
 	#shellcheck source=BARE.sh
 	#. "$ST_SRC/ZSH/BARE.sh"
+	true
 fi
 
 if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ]; then
