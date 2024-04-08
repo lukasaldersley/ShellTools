@@ -1331,14 +1331,18 @@ int main(int argc, char** argv)
 	char* Time = malloc(sizeof(char) * 16);
 	int Time_len = strftime(Time, 16, "%T", localtm);
 
-	char* TimeZone = malloc(sizeof(char) * 16);
-	int TimeZone_len = strftime(TimeZone, 16, " UTC%z (%Z)", localtm);
+	char* TimeZone = malloc(sizeof(char) * 17);
+	int TimeZone_len = strftime(TimeZone, 17, " UTC%z (%Z)", localtm);
 
 	char* DateInfo = malloc(sizeof(char) * 16);
 	int DateInfo_len = strftime(DateInfo, 16, " %a %d.%m.%Y", localtm);
 
 	char* CalenderWeek = malloc(sizeof(char) * 8);
 	int CalenderWeek_len = strftime(CalenderWeek, 8, " KW%V", localtm);
+
+	if (Time_len == 0 || TimeZone_len == 0 || DateInfo_len == 0 || CalenderWeek_len == 0) {
+		fprintf(stderr, "WARNING: strftime returned 0 -> check format string and allocated buffer size\n");
+	}
 
 	char* Arg_LocalIPs = NULL;
 	int Arg_LocalIPs_len = 0;
