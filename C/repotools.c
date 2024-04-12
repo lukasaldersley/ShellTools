@@ -101,6 +101,7 @@ struct RepoInfo_t {
 	bool isSubModule;
 	bool isBare;
 	bool DirtyWorktree;
+	bool HasRemote;
 	int RemoteCommits;
 	int LocalCommits;
 	int UntrackedFiles;
@@ -137,6 +138,7 @@ RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName) {
 	ri->isSubModule = false;
 	ri->isBare = false;
 	ri->DirtyWorktree = false;
+	ri->HasRemote = false;
 	ri->RemoteCommits = 0;
 	ri->LocalCommits = 0;
 	ri->UntrackedFiles = 0;
@@ -681,6 +683,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	if (Compare(ri->RepositoryUnprocessedOrigin, "origin")) {
 		//if git ls-remote --get-url origin returns 'origin' it means either the folder is not a git repository OR it's a repository without remote (local only)
 		//in this case since I already checked this IS a repo, it MUST be a repo without remote
+		ri->HasRemote = false;
 		if (asprintf(&ri->RepositoryDisplayedOrigin, "NO_REMOTE") == -1)abortNomem();
 		int i = 0;
 		char* tempPtr = ri->DirectoryPath;
@@ -693,41 +696,44 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 		if (asprintf(&ri->RepositoryName, "%s", tempPtr) == -1)abortNomem();
 		return true;
 	}
-	char* FixedProtoOrigin = FixImplicitProtocol(ri->RepositoryUnprocessedOrigin);
+	else {
+		//has some form of remote
+		ri->HasRemote = true;
+		char* FixedProtoOrigin = FixImplicitProtocol(ri->RepositoryUnprocessedOrigin);
 
-	// input: repoToTest, the path of a repo. if it is one of the defined repos, return that, if it's not, produce the short notation
-	// basically this should produce the displayed name for the repo in the output buffer and additionally indicate if it's a known one
-	ri->RepositoryOriginID = -1;
-	for (int i = 0; i < numLOCS; i++)
-	{
-		//fprintf(stderr, "%s > %s testing against %s(%s)\n", ri->RepositoryUnprocessedOrigin, FixedProtoOrigin, LOCS[i], NAMES[i]);
-		if (StartsWith(FixedProtoOrigin, LOCS[i]))
+		// input: repoToTest, the path of a repo. if it is one of the defined repos, return that, if it's not, produce the short notation
+		// basically this should produce the displayed name for the repo in the output buffer and additionally indicate if it's a known one
+		ri->RepositoryOriginID = -1;
+		for (int i = 0; i < numLOCS; i++)
 		{
-			//fprintf(stderr, "\tSUCCESS\n");
-			ri->RepositoryOriginID = i;
-			if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", NAMES[i]) == -1)abortNomem();
-			break;
+			//fprintf(stderr, "%s > %s testing against %s(%s)\n", ri->RepositoryUnprocessedOrigin, FixedProtoOrigin, LOCS[i], NAMES[i]);
+			if (StartsWith(FixedProtoOrigin, LOCS[i]))
+			{
+				//fprintf(stderr, "\tSUCCESS\n");
+				ri->RepositoryOriginID = i;
+				if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", NAMES[i]) == -1)abortNomem();
+				break;
+			}
 		}
-	}
 
-	char* sedCmd;
-	//this regex is basically:
-	//^(?<proto>[-\w+])://(?:(?<user>[-\w]+)@)?(?<host>[-\.\w]+)(?::(?<port>\d+))?(?:[:/](?<remotePath_GitHubUser>[-\w]+))?.*/(?<reponame>[-\w]+)(?:\.git/?)?$ //this is the debuggin version for regex101.com (PCRE<7.3, delimiter ~)
-	//sed does not have non-capturing groups, so all non-capturing groups are included in the group count
-	//the mapping of sed-groups to the regex101 groups is as follows:
-	//1->protoc
-	//2->Non-capturing
-	//3->user
-	//4->host
-	//5->Non-capturing(:port)
-	//6->port
-	//7->Non-capturing (:remotepath or /gitHubUser)
-	//8->remotePath_GitHubUser (if not GitHub, it's the path on remote)
-	//9->reponame
-	//10->Non-Capturing(.git)
-	//DO NOT CHANGE THIS REGEX WITHOUT UPDATING THE Regex101 VARIANT, THE GROUP DEFINITIONS AND THE DESCRIPTION
-	if (asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin) == -1)abortNomem();
-	//I take the capturing groups and paste them into a | seperated sting. There's 6 words (5 |), so I'll need 6 pointers into this memory area to resolve the six words
+		char* sedCmd;
+		//this regex is basically:
+		//^(?<proto>[-\w+])://(?:(?<user>[-\w]+)@)?(?<host>[-\.\w]+)(?::(?<port>\d+))?(?:[:/](?<remotePath_GitHubUser>[-\w]+))?.*/(?<reponame>[-\w]+)(?:\.git/?)?$ //this is the debuggin version for regex101.com (PCRE<7.3, delimiter ~)
+		//sed does not have non-capturing groups, so all non-capturing groups are included in the group count
+		//the mapping of sed-groups to the regex101 groups is as follows:
+		//1->protoc
+		//2->Non-capturing
+		//3->user
+		//4->host
+		//5->Non-capturing(:port)
+		//6->port
+		//7->Non-capturing (:remotepath or /gitHubUser)
+		//8->remotePath_GitHubUser (if not GitHub, it's the path on remote)
+		//9->reponame
+		//10->Non-Capturing(.git)
+		//DO NOT CHANGE THIS REGEX WITHOUT UPDATING THE Regex101 VARIANT, THE GROUP DEFINITIONS AND THE DESCRIPTION
+		if (asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin) == -1)abortNomem();
+		//I take the capturing groups and paste them into a | seperated sting. There's 6 words (5 |), so I'll need 6 pointers into this memory area to resolve the six words
 #define REPO_ORIGIN_WORDS_IN_STRING 6
 #define REPO_ORIGIN_GROUP_PROTOCOL 0
 #define REPO_ORIGIN_GROUP_USER 1
@@ -735,90 +741,90 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 #define REPO_ORIGIN_GROUP_PORT 3
 #define REPO_ORIGIN_GROUP_GitHubUser 4 /*(if not GitHub, it's the path on remote)*/
 #define REPO_ORIGIN_GROUP_RepoName 5
-	char* sedRes = ExecuteProcess(sedCmd);
-	TerminateStrOn(sedRes, terminators);
-	if (sedRes[0] == 0x00) {//sed output was empty -> it must be a local repo, just parse the last folder as repo name and the rest as parentrepopath
-		// local repo
-		if (ri->RepositoryOriginID == -1)
-		{
-			ri->RepositoryDisplayedOrigin = AbbreviatePath(FixedProtoOrigin, 15, 2, 2);
-			//if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", FixedProtoOrigin) == -1)abortNomem();
-		}
-		char* tempptr = FixedProtoOrigin;
-		char* walker = FixedProtoOrigin;
-		while (*walker != 0x00) {
-			if (*walker == '/') {
-				tempptr = walker + 1;
+		char* sedRes = ExecuteProcess(sedCmd);
+		TerminateStrOn(sedRes, terminators);
+		if (sedRes[0] == 0x00) {//sed output was empty -> it must be a local repo, just parse the last folder as repo name and the rest as parentrepopath
+			// local repo
+			if (ri->RepositoryOriginID == -1)
+			{
+				ri->RepositoryDisplayedOrigin = AbbreviatePath(FixedProtoOrigin, 15, 2, 2);
+				//if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", FixedProtoOrigin) == -1)abortNomem();
 			}
-			walker++;
-		}
-		if (asprintf(&ri->RepositoryName, "%s", tempptr) == -1)abortNomem();
-
-		// in the .sh implementation I had used realpath relative to pwd to "shorten" the path, but I think it'd be better if I properly regex this up or something.
-		// like /folder/folder/[...]/folder/NAME or /folder/[...]/NAME, though if the path is short enough, I'd like the full path
-		// local repos $(realpath -q -s --relative-to="argv[2]" "$( echo "$fulltextremote" | grep -v ".\+://")" "")
-		//this has the issue of always producing a relative path, though if the path is defined as absolute that should be reflected. Therefore see the implementation of AbbreviatePath in commons.c
-
-		// for locals: realpath -q -s --relative-to="argv[2]" "Input"
-		//local repo
-	}
-	else {
-		//the sed command was not empty therefore it matched as a remote thing and needs to be parsed
-		char* ptrs[REPO_ORIGIN_WORDS_IN_STRING];
-		ptrs[0] = sedRes;
-		char* workingPointer = sedRes;
-		int NextWordPointer = 0;
-		while (*workingPointer != 0x00 && NextWordPointer < (REPO_ORIGIN_WORDS_IN_STRING - 1)) {//since I set NextWordPointer+1^I need to stop at WORDS-2=== 'x < (Words-1)'
-			if (*workingPointer == '|') {
-				//I found a seperator -> set string terminator for current string
-				*workingPointer = 0x00;
-				//if there's anything after the seperator, set the start point for the next string
-				if (*(workingPointer + 1) != 0x00) {
-					NextWordPointer++;
-					ptrs[NextWordPointer] = (workingPointer + 1);
+			char* tempptr = FixedProtoOrigin;
+			char* walker = FixedProtoOrigin;
+			while (*walker != 0x00) {
+				if (*walker == '/') {
+					tempptr = walker + 1;
 				}
+				walker++;
 			}
-			workingPointer++;
-		}
+			if (asprintf(&ri->RepositoryName, "%s", tempptr) == -1)abortNomem();
 
-		//I take the base name of the remote rep from this parsed string regardless of the fact if it is a LOCLANET/GLOBAL or a known GitHub derivative something unknown
-		if (*ptrs[REPO_ORIGIN_GROUP_RepoName] != 0x00) {//repo name
-			if (asprintf(&ri->RepositoryName, "%s", ptrs[REPO_ORIGIN_GROUP_RepoName]) == -1)abortNomem();
-		}
+			// in the .sh implementation I had used realpath relative to pwd to "shorten" the path, but I think it'd be better if I properly regex this up or something.
+			// like /folder/folder/[...]/folder/NAME or /folder/[...]/NAME, though if the path is short enough, I'd like the full path
+			// local repos $(realpath -q -s --relative-to="argv[2]" "$( echo "$fulltextremote" | grep -v ".\+://")" "")
+			//this has the issue of always producing a relative path, though if the path is defined as absolute that should be reflected. Therefore see the implementation of AbbreviatePath in commons.c
 
-		//the rest of this only makes sense for stuff that's NOT LOCALNET/GLOBAL etc.
-		if (ri->RepositoryOriginID == -1)//not a known repo origin (ie not from LOCALNET, NONE etc)
-		{
-			ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char) * 256);
-			int currlen = 0;
-			currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PROTOCOL], 255 - currlen);//proto
-			currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
-			if (!Compare(ptrs[REPO_ORIGIN_GROUP_USER], "git") && Compare(ptrs[REPO_ORIGIN_GROUP_PROTOCOL], "ssh")) {//if name is NOT git then print it but only print if it was ssh
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_USER], 255 - currlen);//username
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, "@", 255 - currlen);//@
+			// for locals: realpath -q -s --relative-to="argv[2]" "Input"
+			//local repo
+		}
+		else {
+			//the sed command was not empty therefore it matched as a remote thing and needs to be parsed
+			char* ptrs[REPO_ORIGIN_WORDS_IN_STRING];
+			ptrs[0] = sedRes;
+			char* workingPointer = sedRes;
+			int NextWordPointer = 0;
+			while (*workingPointer != 0x00 && NextWordPointer < (REPO_ORIGIN_WORDS_IN_STRING - 1)) {//since I set NextWordPointer+1^I need to stop at WORDS-2=== 'x < (Words-1)'
+				if (*workingPointer == '|') {
+					//I found a seperator -> set string terminator for current string
+					*workingPointer = 0x00;
+					//if there's anything after the seperator, set the start point for the next string
+					if (*(workingPointer + 1) != 0x00) {
+						NextWordPointer++;
+						ptrs[NextWordPointer] = (workingPointer + 1);
+					}
+				}
+				workingPointer++;
 			}
-			currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_Host], 255 - currlen);//host
-			if (*ptrs[3] != 0x00) {//if port is given print it
+
+			//I take the base name of the remote rep from this parsed string regardless of the fact if it is a LOCLANET/GLOBAL or a known GitHub derivative something unknown
+			if (*ptrs[REPO_ORIGIN_GROUP_RepoName] != 0x00) {//repo name
+				if (asprintf(&ri->RepositoryName, "%s", ptrs[REPO_ORIGIN_GROUP_RepoName]) == -1)abortNomem();
+			}
+
+			//the rest of this only makes sense for stuff that's NOT LOCALNET/GLOBAL etc.
+			if (ri->RepositoryOriginID == -1)//not a known repo origin (ie not from LOCALNET, NONE etc)
+			{
+				ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char) * 256);
+				int currlen = 0;
+				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PROTOCOL], 255 - currlen);//proto
 				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PORT], 255 - currlen);//username
-			}
-			if (*ptrs[4] != 0x00) {//host is github or gitlab and I can parse a github username also add it
-				bool knownServer = false;
-				int i = 0;
-				while (i < numGitHubs && knownServer == false) {
-					knownServer = Compare(ptrs[REPO_ORIGIN_GROUP_Host], GitHubs[i]);
-					i++;
+				if (!Compare(ptrs[REPO_ORIGIN_GROUP_USER], "git") && Compare(ptrs[REPO_ORIGIN_GROUP_PROTOCOL], "ssh")) {//if name is NOT git then print it but only print if it was ssh
+					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_USER], 255 - currlen);//username
+					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, "@", 255 - currlen);//@
 				}
-				if (knownServer) {
+				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_Host], 255 - currlen);//host
+				if (*ptrs[3] != 0x00) {//if port is given print it
 					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], 255 - currlen);//service username
+					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PORT], 255 - currlen);//username
+				}
+				if (*ptrs[4] != 0x00) {//host is github or gitlab and I can parse a github username also add it
+					bool knownServer = false;
+					int i = 0;
+					while (i < numGitHubs && knownServer == false) {
+						knownServer = Compare(ptrs[REPO_ORIGIN_GROUP_Host], GitHubs[i]);
+						i++;
+					}
+					if (knownServer) {
+						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
+						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], 255 - currlen);//service username
+					}
 				}
 			}
+			for (int i = 0;i < REPO_ORIGIN_WORDS_IN_STRING;i++) {
+				ptrs[i] = NULL;//to prevent UseAfterFree vulns
+			}
 		}
-		for (int i = 0;i < REPO_ORIGIN_WORDS_IN_STRING;i++) {
-			ptrs[i] = NULL;//to prevent UseAfterFree vulns
-		}
-	}
 #undef REPO_ORIGIN_WORDS_IN_STRING
 #undef REPO_ORIGIN_GROUP_PROTOCOL
 #undef REPO_ORIGIN_GROUP_USER
@@ -826,25 +832,25 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 #undef REPO_ORIGIN_GROUP_PORT
 #undef REPO_ORIGIN_GROUP_GitHubUser
 #undef REPO_ORIGIN_GROUP_RepoName
-	free(sedRes);
-	sedRes = NULL;
+		free(sedRes);
+		sedRes = NULL;
 
-	//once I have the current and new repo origin IDs perform the change
-	if (desiredorigin != -1 && ri->RepositoryOriginID != -1 && ri->RepositoryOriginID != desiredorigin) {
+		//once I have the current and new repo origin IDs perform the change
+		if (desiredorigin != -1 && ri->RepositoryOriginID != -1 && ri->RepositoryOriginID != desiredorigin) {
 
-		//change
-		ri->RepositoryOriginID_PREVIOUS = ri->RepositoryOriginID;
-		if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { free(ri->RepositoryUnprocessedOrigin_PREVIOUS); }
-		ri->RepositoryUnprocessedOrigin_PREVIOUS = ri->RepositoryUnprocessedOrigin;
-		ri->RepositoryOriginID = desiredorigin;
-		if (asprintf(&ri->RepositoryUnprocessedOrigin, "%s/%s", LOCS[ri->RepositoryOriginID], ri->RepositoryName) == -1)abortNomem();
-		char* changeCmd;
-		if (asprintf(&changeCmd, "git -C \"%s\" remote set-url origin %s", ri->DirectoryPath, ri->RepositoryUnprocessedOrigin) == -1)abortNomem();
-		printf("%s\n", changeCmd);
-		ExecuteProcess(changeCmd);
-		free(changeCmd);
+			//change
+			ri->RepositoryOriginID_PREVIOUS = ri->RepositoryOriginID;
+			if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { free(ri->RepositoryUnprocessedOrigin_PREVIOUS); }
+			ri->RepositoryUnprocessedOrigin_PREVIOUS = ri->RepositoryUnprocessedOrigin;
+			ri->RepositoryOriginID = desiredorigin;
+			if (asprintf(&ri->RepositoryUnprocessedOrigin, "%s/%s", LOCS[ri->RepositoryOriginID], ri->RepositoryName) == -1)abortNomem();
+			char* changeCmd;
+			if (asprintf(&changeCmd, "git -C \"%s\" remote set-url origin %s", ri->DirectoryPath, ri->RepositoryUnprocessedOrigin) == -1)abortNomem();
+			printf("%s\n", changeCmd);
+			ExecuteProcess(changeCmd);
+			free(changeCmd);
+		}
 	}
-
 
 	return true;
 }
@@ -895,39 +901,41 @@ char* ConstructGitBranchInfoString(RepoInfo* ri) {
 	int rbLen = 0;
 	char* rb = (char*)malloc(sizeof(char) * MALEN);
 	rb[0] = 0x00;
-	int temp;
-	if (ri->CountRemoteOnlyBranches > 0 || ri->CountLocalOnlyBranches > 0 || ri->CountUnequalBranches > 0) {
-		temp = snprintf(rb + rbLen, MALEN - rbLen, ": ⟨");
-		if (temp < MALEN && temp>0) {
-			rbLen += temp;
-		}
-
-		if (ri->CountRemoteOnlyBranches > 0) {
-			temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_REMOTEONLY "%d⇣ ", ri->CountRemoteOnlyBranches);
+	if (ri->HasRemote) { //if the repo doesn't have a remote, it doesn't make sense to count the branch differences betwen remote and local since ther is no remote
+		int temp;
+		if (ri->CountRemoteOnlyBranches > 0 || ri->CountLocalOnlyBranches > 0 || ri->CountUnequalBranches > 0) {
+			temp = snprintf(rb + rbLen, MALEN - rbLen, ": ⟨");
 			if (temp < MALEN && temp>0) {
 				rbLen += temp;
 			}
-		}
 
-		if (ri->CountLocalOnlyBranches > 0) {
-			temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_LOCALONLY "%d⇡ ", ri->CountLocalOnlyBranches);
+			if (ri->CountRemoteOnlyBranches > 0) {
+				temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_REMOTEONLY "%d⇣ ", ri->CountRemoteOnlyBranches);
+				if (temp < MALEN && temp>0) {
+					rbLen += temp;
+				}
+			}
+
+			if (ri->CountLocalOnlyBranches > 0) {
+				temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_LOCALONLY "%d⇡ ", ri->CountLocalOnlyBranches);
+				if (temp < MALEN && temp>0) {
+					rbLen += temp;
+				}
+			}
+
+			if (ri->CountUnequalBranches > 0) {
+				temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_UNEQUAL "%d⇕ ", ri->CountUnequalBranches);
+				if (temp < MALEN && temp>0) {
+					rbLen += temp;
+				}
+			}
+
+			rb[--rbLen] = 0x00;//bin a space (after the file listings)
+
+			temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GREYOUT "⟩");
 			if (temp < MALEN && temp>0) {
 				rbLen += temp;
 			}
-		}
-
-		if (ri->CountUnequalBranches > 0) {
-			temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_UNEQUAL "%d⇕ ", ri->CountUnequalBranches);
-			if (temp < MALEN && temp>0) {
-				rbLen += temp;
-			}
-		}
-
-		rb[--rbLen] = 0x00;//bin a space (after the file listings)
-
-		temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GREYOUT "⟩");
-		if (temp < MALEN && temp>0) {
-			rbLen += temp;
 		}
 	}
 	return rb;
@@ -955,7 +963,7 @@ char* ConstructGitStatusString(RepoInfo* ri) {
 			rbLen += temp;
 		}
 	}
-	else if (ri->CheckedOutBranchIsNotInRemote) {
+	else if (ri->CheckedOutBranchIsNotInRemote && ri->HasRemote) { //only display if there even is a remote
 		//Initially I wanted not {NEW BRANCH} but {1⇡+}, where 1 is the number of commits since branching.
 		//to do that I would have to start at the branch tip, look at it's parent and see how many children that has.
 		//I would need to continue this chain until I find a commit with more than one child (the latest branching point) or I run out of commits (nothing on remote at all, no branches whatsoever)
