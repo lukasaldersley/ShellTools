@@ -1114,7 +1114,7 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 	else {
 		printf(COLOUR_GREYOUT "%s" COLOUR_CLEAR "\n", ri->DirectoryName);
 		//this prints the name of intermediate folders that are not git repos, but contain a repo somewhere within
-		//-> those are less important->print greyed out //TODO I just grabbed the CSI colour for the full remote string form the unprocessed repo origin
+		//-> those are less important->print greyed out
 	}
 	fflush(stdout);
 	RepoList* current = ri->SubDirectories;

@@ -41,12 +41,12 @@ function SSHsync(){
 alias sshsync=SSHsync
 
 function _netsh_retrieve_ssid_list () {
-	netsh.exe wlan show profiles | grep ":" | cut -d':' -f2 | cut -c2-
+	netsh.exe wlan show profiles | grep -a ":" | cut -d':' -f2 | cut -c2-
 }
 
 function _netsh_get_password_for_known_ssid () {
 	#cat -A <<<"$1" #for debugging purposes to print ALL characters, especially invisible ones
-	netsh.exe wlan show profile name="$1" key=clear | grep -E 'Schl.*?sselinhalt|Key Content' | cut -d':' -f2 | cut -c2-
+	netsh.exe wlan show profile name="$1" key=clear | tr '\201' 'u' | grep -E 'Schl.*?sselinhalt|Key Content' | cut -d':' -f2 | cut -c2-
 }
 
 function lswlanpw () {
