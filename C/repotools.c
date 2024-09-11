@@ -5,7 +5,9 @@ if [ ! -d "$TargetDir" ]; then
 fi
 TargetName="$(basename $0 .c).elf"
 printf "compiling $0 into $TargetDir/$TargetName"
-gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$0" -o "$TargetDir/$TargetName"
+gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$0" -o "$TargetDir/$TargetName" $1
+#the fact I DIDN'T add quotations to the $1 above means I WANT word splitting to happen.
+#I WANT to be able to do things like ./repotools.c -DPROFILING to add the compiler flag profiling but ALSO stuff like ./repotools "-DDEBUG -DPROFILING" to add both profiling and debug
 printf " -> \e[32mDONE\e[0m($?)\n"
 exit
 */
@@ -1295,6 +1297,10 @@ void ListAvailableRemotes() {
 
 int main(int argc, char** argv)
 {
+#ifdef PROFILING
+	struct timespec ts_start;
+	timespec_get(&ts_start, TIME_UTC);
+#endif
 	int main_retcode = 0;
 
 	const char* RegexString = "^[ *]+([-_/0-9a-zA-Z]*) +([0-9a-fA-F]+) (\\[([-/_0-9a-zA-Z]+)\\])?.*$";
@@ -1813,8 +1819,10 @@ int main(int argc, char** argv)
 		}
 		DeallocRepoInfoStrings(ri);
 		free(ri);
-
-		return 0;
+#ifndef PROFILING
+		return 0; //I am unsure why there even is a special return here, I commented it out then moved it into a preproc block because it interfers with profiling
+		//I think it may be to not clobber return codes from something else, but I don't know.
+#endif
 	}
 	else if (IsSet || IsShow)
 	{
@@ -1851,8 +1859,8 @@ int main(int argc, char** argv)
 		return 0;
 	}
 	else if (IsLowPrompt) {
-		int chars = Arg_TotalPromptWidth / 4;
-		int segments = chars / 16;
+		int chars = Arg_TotalPromptWidth / 4; //allow a quarter of the screen width to be current working directory
+		int segments = chars / 16; //impose a limit on how many segments make sense. if the terminal is 256 wide, chars would be 64 and I would allow 4 segements
 		char* temp = AbbreviatePathAuto(path, chars, segments);
 		//fprintf(stderr, "(%i %i)%s | %s\n", chars, segments, temp, path);
 		printf("└%%F{cyan}%%B %s %s[%s:%i", temp, (PromptRetCode == 0 ? "%F{green}" : "%F{red}"), Arg_CmdTime, PromptRetCode);
@@ -1911,5 +1919,14 @@ int main(int argc, char** argv)
 		return -1;
 	}
 	regfree(&reg);
+
+#ifdef PROFILING
+	struct timespec ts_end;
+	timespec_get(&ts_end, TIME_UTC);
+	uint64_t tstart = ts_start.tv_sec * 1000ULL + (ts_start.tv_nsec / 1000000ULL);
+	uint64_t tstop = ts_end.tv_sec * 1000ULL + (ts_end.tv_nsec / 1000000ULL);
+	printf("\n%lu", tstop - tstart);
+#endif
+
 	return main_retcode;
 }

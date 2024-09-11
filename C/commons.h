@@ -21,9 +21,9 @@ char* ExecuteProcess(const char* command);
 int strlen_visible(const char* s);
 uint32_t TerminateStrOn(char* str, const char* terminators);
 StringRelations CompareStrings(const char* a, const char* b);
-int LastIndexOf(const char* txt, char tst);
-char* AbbreviatePathAuto(const char* path, int KeepAllIfShorterThan, int DesiredKeepElements);
-char* AbbreviatePath(const char* path, int KeepAllIfShorterThan, int DesiredKeepElementsFront, int DesiredKeepElementsBack);
+int16_t LastIndexOf(const char* txt, char tst);
+char* AbbreviatePathAuto(const char* path, uint16_t KeepAllIfShorterThan, uint8_t DesiredKeepElements);
+char* AbbreviatePath(const char* path, uint16_t KeepAllIfShorterThan, uint8_t DesiredKeepElementsFront, uint8_t DesiredKeepElementsBack);
 void abortNomem();
 
 #endif

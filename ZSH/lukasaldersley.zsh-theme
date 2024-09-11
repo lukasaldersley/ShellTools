@@ -165,7 +165,7 @@ function PowerState (){
 	local __PWR_EXT_STATUS
 
 	#this is to determine the AC status. at least on WSL /sys/class/power_supply/ac is unused and mapped into usb instead.
-	#on a Xubuntu VM there was /sys/class/power_supply/AC and that System also had Power status 'Unknown' (this VM was running in VirtualBox on top of an older Win10)
+	#on a Xubuntu VM there was /sys/class/power_supply/AC and that System also had Power status 'Unknown' (this VM was running in VirtualBox on top of Windows 10 21H1)
 	local USB_PWR
 	local AC_PWR
 	if [ -r /sys/class/power_supply/usb/online ] && [ "$(cat /sys/class/power_supply/usb/online)" = "1" ]; then
@@ -252,6 +252,7 @@ PROMPT='$("$ST_CFG/repotools.elf" --lowprompt -r"$?" -c"$COLUMNS" -t"$CmdDur" "$
 # - : GetBackgroundTasks was being executed, but kept returning empty strings (probably because jobs is a zsh builtin and the prompt building was happening in another subshell with no jobs or something)
 # - : having a linebreak in PROMPT messed with the positioning of RPROMPT and the carret behaviour for editing typed commands
 # - : hitting 'HOME' or 'POS1' often would send the carret to the top line and was showing editing that but in reality it was invisibly editing the command string
+# - : on slow systems (eg the 8-ish watt Laptops, or any ARM device I've tried) the creation of the prompt may take a few seconds, and even with warm cache and optimal conditions still takes about a second (on the real computers (120+W TDP desktops) it'll run in 0.1s or less but on the laptops it's fucking slow, run it with -DPROFILING, you'll see)
 #Conclusion: Make top line single-fire evaluation
 
 echo "done loading $(basename $0)"

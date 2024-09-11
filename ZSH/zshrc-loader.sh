@@ -19,6 +19,9 @@ if [ ! -e "$ST_CFG" ]; then
 	echo "$ST_CFG directory didn't exist -> creating now"
 fi
 
+printf "Loading Scripts from %s\n" "$ST_SRC"
+printf "last commit %s, %s local changes\n" "$(git -C "$ST_SRC" log --branches --remotes --tags --notes --pretty='[%C(brightblack)%as/%C(auto)%ar]%d' HEAD -1)" "$(git -C "$ST_SRC" status --ignore-submodules=dirty --porcelain=v2 -b --show-stash| grep -cv '# branch')"
+
 PROXY_HOST=""
 export PROXY_HOST
 PROXY_USER=""
@@ -70,6 +73,7 @@ alias gse="gitauthor ; gs"
 alias gl=gitlog
 alias gu=gitupdate
 alias cf=cleanFile
+alias sf=sortFile
 alias uz=UpdateZSH
 
 searchapt(){
@@ -82,6 +86,12 @@ searchapt(){
 cleanFile(){
 	___tempfile_local=$(mktemp)
 	sort < "$1" | uniq > "$___tempfile_local"
+	mv "$___tempfile_local" "$1"
+}
+
+sortFile(){
+	___tempfile_local=$(mktemp)
+	sort < "$1" > "$___tempfile_local"
 	mv "$___tempfile_local" "$1"
 }
 

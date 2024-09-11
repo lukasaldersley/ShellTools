@@ -95,10 +95,10 @@ bool StartsWith(const char* a, const char* b)
 
 bool ContainsString(const char* str, const char* test)
 {
-	int sIdx = 0;
+	uint32_t sIdx = 0;
 	while (str[sIdx] != 0x00)
 	{
-		uint8_t tIdx = 0;
+		uint32_t tIdx = 0;
 		while (test[tIdx] != 0x00 && test[tIdx] == str[sIdx + tIdx])
 		{
 			//TODO optimize this to be a faster text search instead of adumb exhaustive searhc, if possible skip sIdx forward at the same time as tIdx
@@ -116,9 +116,9 @@ bool ContainsString(const char* str, const char* test)
 
 uint32_t TerminateStrOn(char* str, const char* terminators) {
 	uint32_t i = 0;
-	while (str[i] != 0x00) {
-		int t = 0;
-		while (terminators[t] != 0x00) {
+	while (str[i] != 0x00 && i < UINT32_MAX) {
+		int8_t t = 0;
+		while (terminators[t] != 0x00 && t < UINT8_MAX) {
 			if (str[i] == terminators[t]) {
 				str[i] = 0x00;
 				return i;
@@ -130,14 +130,14 @@ uint32_t TerminateStrOn(char* str, const char* terminators) {
 	return i;
 }
 
-int LastIndexOf(const char* txt, char tst) {
-	int idx = -1;
-	int ridx = 0;
-	while (txt[ridx] != 0x00) {
-		if (txt[ridx] == tst) {
-			idx = ridx;
+int16_t LastIndexOf(const char* txt, char tst) {
+	int16_t idx = -1;
+	int16_t searchIndex = 0;
+	while (txt[searchIndex] != 0x00) {
+		if (txt[searchIndex] == tst) {
+			idx = searchIndex;
 		}
-		ridx++;
+		searchIndex++;
 	}
 	return idx;
 }
@@ -232,19 +232,19 @@ int strlen_visible(const char* s) {
 	return count;
 }
 
-char* AbbreviatePathAuto(const char* path, int KeepAllIfShorterThan, int DesiredKeepElements) {
-	//plausi-check the n umber of elements to keep and distribute them between front and back
+char* AbbreviatePathAuto(const char* path, uint16_t KeepAllIfShorterThan, uint8_t DesiredKeepElements) {
+	//plausi-check the number of elements to keep and distribute them between front and back
 	if (DesiredKeepElements < 1) { DesiredKeepElements = 1; }
-	int KeepFront = DesiredKeepElements / 2;
-	int KeepBack = DesiredKeepElements - KeepFront;
+	uint8_t KeepFront = DesiredKeepElements / 2;
+	uint8_t KeepBack = DesiredKeepElements - KeepFront;
 	return AbbreviatePath(path, KeepAllIfShorterThan, KeepFront, KeepBack);
 }
 
-char* AbbreviatePath(const char* path, int KeepAllIfShorterThan, int DesiredKeepElementsFront, int DesiredKeepElementsBack) {
+char* AbbreviatePath(const char* path, uint16_t KeepAllIfShorterThan, uint8_t DesiredKeepElementsFront, uint8_t DesiredKeepElementsBack) {
 	if (KeepAllIfShorterThan < 1) { KeepAllIfShorterThan = 1; }
 	char* Workpath;
 	if (asprintf(&Workpath, "%s", path) == -1)abortNomem();
-	int len = strlen(Workpath);
+	uint16_t len = strlen(Workpath);
 	char* ret = NULL;
 	if (len <= KeepAllIfShorterThan) {
 		//text is so short, it won't be shortened anymore -> done
@@ -253,10 +253,10 @@ char* AbbreviatePath(const char* path, int KeepAllIfShorterThan, int DesiredKeep
 	else {
 		char* FromBack = Workpath + len - 1;
 		char* FromFront = Workpath;
-		int foundFront = 0;
-		int foundBack = 0;
-		int backLen = 0;
-		int frontLen = 0;
+		uint8_t foundFront = 0;
+		uint8_t foundBack = 0;
+		uint16_t backLen = 0;
+		uint16_t frontLen = 0;
 		//if the string ends with / (or multiple of them), delete them, but keep at least one char in the entire string (eg the string is "/////", which in Unix just means /, so I too can shorten the string to /)
 		while (*FromBack == '/' && FromBack > FromFront) {
 			*FromBack = 0x00;
@@ -282,7 +282,7 @@ char* AbbreviatePath(const char* path, int KeepAllIfShorterThan, int DesiredKeep
 				frontLen++;
 				if (*FromFront == '/' || *FromFront == '\\') {
 					if (frontLen == 4 && *(FromFront + 2) == '/' && StartsWith(Workpath, "/mnt/")) {
-						;//this is a special case: I wan to count "/mnt/*/" as a single element, since just /mnt alone is kinda worthless -> skip over a single / if the conditions are right
+						;//this is a special case: I wan to count "/mnt/*/" as a single element, since just /mnt alone is kinda worthless -> skip over a single / if the conditions are right; this is mostly relevant for WSL where windows's Drive letters are assigned that way. C:\ becomes /mnt/c/
 					}
 					else {
 						foundFront++;
