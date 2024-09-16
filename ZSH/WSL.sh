@@ -1,6 +1,6 @@
 #!/bin/false
 #shellcheck shell=bash
-echo "Sourcing WSL $WSL_VERSION specifics"
+printf "\e[38;5;240mSourcing WSL %s specifics\e[0m\n" "$WSL_VERSION"
 export DISPLAY=localhost:0.0
 
 function SetupRemoteX11 (){

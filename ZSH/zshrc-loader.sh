@@ -19,7 +19,7 @@ if [ ! -e "$ST_CFG" ]; then
 	echo "$ST_CFG directory didn't exist -> creating now"
 fi
 
-printf "Loading Scripts from %s\n" "$ST_SRC"
+printf "\e[38;5;240mLoading Scripts from\e[0m %s\n" "$ST_SRC"
 printf "last commit %s, %s local changes\n" "$(git -C "$ST_SRC" log --branches --remotes --tags --notes --pretty='[%C(brightblack)%as/%C(auto)%ar]%d' HEAD -1)" "$(git -C "$ST_SRC" status --ignore-submodules=dirty --porcelain=v2 -b --show-stash| grep -cv '# branch')"
 
 PROXY_HOST=""
@@ -45,9 +45,11 @@ alias argtest='$ST_CFG/argtest.elf'
 alias rm-recurse='$ST_CFG/rm_recurse.elf'
 
 #custom git log
-alias gitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as/%C(auto)%ar]%d %C(brightblack)%ae:%C(auto) %s\" HEAD"
-alias egitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae|%ce:%C(auto) %s\" HEAD"
-alias eegitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae(%an)|%ce(%cn):%C(auto) %s\" HEAD"
+#e -> extended (name), x-> exact (author/committer)
+alias   gitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as/%C(auto)%ar]%d %C(brightblack)%ae:%C(auto) %s\" HEAD"
+alias  egitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as/%C(auto)%ar]%d %C(brightblack)%ae(%an):%C(auto) %s\" HEAD"
+alias  xgitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae|%ce:%C(auto) %s\" HEAD"
+alias exgitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae(%an)|%ce(%cn):%C(auto) %s\" HEAD"
 alias procowners="sudo ps axo user:64 |sort|uniq"
 alias gitupdate="git submodule foreach git pull --ff-only --prune ; git pull --ff-only --prune"
 alias gitauthor='printf "Configured authors for %s:\n\t[System]: %s (%s)\n\t[Global]: %s (%s)\n\t[Local]: %s (%s)\n" "$(pwd)" "$(git config --system --get user.name)" "$(git config --system user.email)" "$(git config --global --get user.name)" "$(git config --global user.email)" "$(git config --local --get user.name)" "$(git config --local user.email)"'
@@ -178,22 +180,35 @@ enableProxy(){
 			read -r -s "?Please Enter Password for ${ProxHost}: " PROXY_PW
 			unset ProxHost
 			PROXY_STRING="http://${PROXY_USER}:${PROXY_PW}@${PROXY_HOST}${PROXY_PORT:+":$PROXY_PORT"}"
-			#echo "\n<$PROXY_STRING>"
+			#${PARAM:+WORD} means: if PARAM is null or unset -> "", if PARAM is set then substitute expansion of WORD
+			#In this case that means: if PROXY_PORT isn't null, add ':' followed by the port number otherwise add nothing
+			#echo -e "\n<$PROXY_STRING>"
 			export {http,https,ftp}_proxy="$PROXY_STRING"
 			export {HTTP,HTTPS,FTP}_PROXY="$PROXY_STRING"
+			echo -e "\n<$HTTP_PROXY>"
 			printf 'Acquire {\n  HTTP::proxy "%s";\n  HTTPS::proxy "%s";\n}\n' "$PROXY_STRING" "$PROXY_STRING" > /etc/apt/apt.conf.d/proxy
 			unset PROXY_STRING
 			PROXY_PW=""
 			echo ""
 		fi
+		export {no_proxy,NO_PROXY}="127.0.0.1,localhost,::1"
+
+		if [ -n "$1" ]; then #arg 1 is nonzero
+			printf "supplied parameter \"%s\" -> skipping connection check\n" "$1"
+			return
+		fi
 
 		#NOTE: the test if proxy auth is working is not functioning right now, it always accepts
 		#it works if the proxy hasn't yet been enabled since System boot, otherwise it caches and always succeeds
 		local ConnTestURL='www.google.de' # I loathe google, but it's highly likely they'll be up and not blocked by a firewall, so I'll use them as a connection test
-		if curl --silent --max-time 1 $ConnTestURL > /dev/null
-		then
+		curl --silent --max-time 1 $ConnTestURL > /dev/null
+		local CurlRes=$?
+		if [ 0 -eq $CurlRes ]; then
 			printf "enabled proxy (%s)\n" "$PROXY_NAME"
-			export {no_proxy,NO_PROXY}="127.0.0.1,localhost,::1"
+		elif [ 5 -eq $CurlRes ]; then
+			printf "cannot resolve proxy host (%s) for %s, tentatively leaving proxy enabled, but might not work" "$PROXY_HOST" "$PROXY_NAME"
+		elif [ 6 -eq $CurlRes ]; then
+			printf "cannot resolve test host (%s) for %s, tentatively leaving proxy enabled, but might not work" "$ConnTestURL" "$PROXY_NAME"
 		else
 			#no connectiopn
 			printf "Connection to %s not possible (likely wrong password)\n" "$PROXY_NAME"
@@ -208,6 +223,24 @@ disableProxy(){
 	unset {http,https,ftp,no}_proxy
 	echo "">/etc/apt/apt.conf.d/proxy
 	echo "disabled proxy"
+}
+
+sysver(){
+	#the following line parses /etc/os-release for the pretty_name and the version and kind of concatenates them. The pretty name usually contains a shorter version, so assemblecat is used which omits the common parts
+	#generally pretty_name will be the topmost entry and version will be somewhere down the line, with version_id below that. Alpine doesn't have version, just version_id, therefore I had to also allow version_id, but due to the always-greedy setup of sed
+	#I would always capture version_id which doesn't contain the version codename. Furthermore in alpine pretty_name is BELOW version_id, so I need to sort the input to be able to regex it. then, to avoid always matching version_id, I reverse sort it,
+	#this makes the first greedy match contain version_id as long as there is version, version_id therefore only is a fallback (I had to flip the capture groups in the regex as well)
+	#--equal=\" v\" tells assemblecat to treat ' ' and 'v' the same to allow assembling of "Alpine Linux v3.17" with " 3.17.0" into "Alpine Linux v3.17.0". I wouldn't need the equality list if there wasn#t a space in the second string
+	#however most distros need that space to avoid "Kali GNU/Linux Rolling2023.3"
+	eval "$ST_CFG/assemblecat.elf --equal=\" v\" $(sort -r < /etc/os-release | tr -d '\n' | sed -nE 's~.*VERSION(_ID)?="?([-a-zA-Z0-9\._ \(\)/]+)"?.*PRETTY_NAME="([-a-zA-Z0-9\._ \(\)/]+)".*~"\3" " \2"~p')" |tr -d '\n'
+	printf " [%s %s %s]\n" "$(uname --operating-system)" "$(uname --kernel-release)" "$(uname --machine)" #machine is x86-64 or arm or something
+}
+
+shellver(){
+	printf "\e[38;5;240mRunning Scripts from \e[0m%s\n" "$ST_SRC"
+	if [ -e "${ST_SRC}/../ShellToolsExtensionLoader.sh" ]; then
+		printf "\e[38;5;240mwith Extensions from \e[0m%s\n" "$(realpath "$(dirname "${ST_SRC}/../ShellToolsExtensionLoader.sh")")"
+	fi
 }
 
 IsWSL=0
@@ -228,10 +261,9 @@ if [ $IsWSL -eq 1 ]; then
 	#shellcheck source=WSL.sh
 	. "$ST_SRC/ZSH/WSL.sh"
 else
-	#check if this is debian-esque, if it's not, it's not supported, exit immediatley
+#check if this is debian-esque, if it's not, it's not supported, exit immediatley
 	#shellcheck source=BARE.sh
-	#. "$ST_SRC/ZSH/BARE.sh"
-	true
+	. "$ST_SRC/ZSH/BARE.sh"
 fi
 
 if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ]; then
@@ -246,17 +278,7 @@ unset IsWSL
 
 printf "done loading utility scripts\n\n"
 printf "Welcome to "
-#the following line parses /etc/os-release for the pretty_name and the version and kind of concatenates them. The pretty name usually contains a shorter version, so assemblecat is used which omits the common parts
-#generally pretty_name will be the topmost entry and version will be somewhere down the line, with version_id below that. Alpine doesn't have version, just version_id, therefore I had to also allow version_id, but due to the always-greedy setup of sed
-#I would always capture version_id which doesn't contain the version codename. Furthermore in alpine pretty_name is BELOW version_id, so I need to sort the input to be able to regex it. then, to avoid always matching version_id, I reverse sort it,
-#this makes the first greedy match contain version_id as long as there is version, version_id therefore only is a fallback (I had to flip the capture groups in the regex as well)
-#--equal=\" v\" tells assemblecat to treat ' ' and 'v' the same to allow assembling of "Alpine Linux v3.17" with " 3.17.0" into "Alpine Linux v3.17.0". I wouldn't need the equality list if there wasn#t a space in the second string
-#however most distros need that space to avoid "Kali GNU/Linux Rolling2023.3"
-eval "$ST_CFG/assemblecat.elf --equal=\" v\" $(sort -r < /etc/os-release | tr -d '\n' | sed -nE 's~.*VERSION(_ID)?="?([-a-zA-Z0-9\._ \(\)/]+)"?.*PRETTY_NAME="([-a-zA-Z0-9\._ \(\)/]+)".*~"\3" " \2"~p')" |tr -d '\n'
-printf " [%s %s %s]\n" "$(uname --operating-system)" "$(uname --kernel-release)" "$(uname --machine)" #machine is x86-64 or arm or something
-if [ "$(uname --machine)" != "x86_64" ]; then
-	echo "Note: you are on an inferior hardware platform (either you're using a raspberry pi or similar for it's price or you're an apple disciple who needlessly spends way to much on crappy products, just because it has a damn logo)"
-fi
+sysver
 
 if [ "$WSL_VERSION" -ne 1 ]; then
 	#system load is hardcoded in WSL as per https://github.com/microsoft/WSL/issues/945 and allegedly fixed in wsl2 as per https://github.com/microsoft/WSL/issues/2814

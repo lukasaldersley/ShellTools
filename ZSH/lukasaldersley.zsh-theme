@@ -1,7 +1,7 @@
 #!/bin/false
 # shellcheck shell=bash
 #this should only be sourced or '.' included, not called.
-echo "Sourcing $0"
+printf "\e[38;5;240mSourcing $0\e[0m\n"
 
 #zsh prompt expansion web doc is at https://zsh.sourceforge.io/Doc/Release/index.html#Top
 #color palette can be found by executing command spectrum_ls
@@ -255,4 +255,4 @@ PROMPT='$("$ST_CFG/repotools.elf" --lowprompt -r"$?" -c"$COLUMNS" -t"$CmdDur" "$
 # - : on slow systems (eg the 8-ish watt Laptops, or any ARM device I've tried) the creation of the prompt may take a few seconds, and even with warm cache and optimal conditions still takes about a second (on the real computers (120+W TDP desktops) it'll run in 0.1s or less but on the laptops it's fucking slow, run it with -DPROFILING, you'll see)
 #Conclusion: Make top line single-fire evaluation
 
-echo "done loading $(basename $0)"
+echo -e "\e[38;5;240mdone loading $(basename $0)\e[0m"
