@@ -1868,6 +1868,12 @@ int main(int argc, char** argv)
 		case 0:
 			printf(" (OK)");
 			break;
+		case 2:
+			printf(" (arg-error/incorrect usage)");
+			break;
+		case 126:
+			printf(" (no permission/not executable)");
+			break;
 		case 127:
 			printf(" (cmd not found)");
 			break;
@@ -1906,6 +1912,63 @@ int main(int argc, char** argv)
 			break;
 		case 128 + SIGTERM:
 			printf(" (SIGTERM)");
+			break;
+		case 128 + SIGSTKFLT:
+			printf(" (SIGSTKFLT)");
+			break;
+		case 128 + SIGPWR:
+			printf(" (SIGPWR)");
+			break;
+		case 128 + SIGBUS:
+			printf(" (SIGBUS)");
+			break;
+		case 128 + SIGSYS:
+			printf(" (SIGSYS)");
+			break;
+		case 128 + SIGURG:
+			printf(" (SIGURG)");
+			break;
+		case 128 + SIGSTOP:
+			printf(" (SIGSTOP)");
+			break;
+		case 128 + SIGTSTP:
+			printf(" (SIGTSTP)");
+			break;
+		case 128 + SIGCONT:
+			printf(" (SIGCONT)");
+			break;
+		case 128 + SIGCHLD:
+			printf(" (SIGCHLD)");
+			break;
+		case 128 + SIGTTIN:
+			printf(" (SIGTTIN)");
+			break;
+		case 128 + SIGTTOU:
+			printf(" (SIGTTOU)");
+			break;
+		case 128 + SIGPOLL:
+			printf(" (SIGPOLL)");
+			break;
+		case 128 + SIGXFSZ:
+			printf(" (SIGXFSZ)");
+			break;
+		case 128 + SIGXCPU:
+			printf(" (SIGXCPU)");
+			break;
+		case 128 + SIGVTALRM:
+			printf(" (SIGVTALRM)");
+			break;
+		case 128 + SIGPROF:
+			printf(" (SIGPROF)");
+			break;
+		case 128 + SIGUSR1:
+			printf(" (SIGUSR1)");
+			break;
+		case 128 + SIGUSR2:
+			printf(" (SIGUSR2)");
+			break;
+		case 128 + SIGWINCH:
+			printf(" (SIGWINCH)");
 			break;
 		default:
 			break;

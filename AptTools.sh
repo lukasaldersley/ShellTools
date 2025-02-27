@@ -110,7 +110,8 @@ fi
 
 ___apt_tempfile02___="$(mktemp)"
 # shellcheck disable=SC2046 # SC2046 is double quote to prevent word splitting. in this case I WANT word splitting, see SC2046 wiki for another example
-apt show -a $(tr '\n' '|' <"$___apt_tempfile01___"|sed 's~|  ~ ~g'|grep -Eo 'kept back:[^\|]+'|cut -c12-) 2>&1 | grep Phased | sort -r > "$___apt_tempfile02___";
+#apt-get used to list phased update packages simply as held back (as seen in ubuntu 22.04/apt-get 2.4.13), in later releases (such as kubuntu 24.10/apt-get 2.9.8 and later) those got their own output line with "deferred due to phasing". this code has been adapted to work with both
+apt show -a $(tr '\n' '|' <"$___apt_tempfile01___"|sed 's~|  ~ ~g'|grep -Eo -e 'have been kept back:[^\|]+' -e 'deferred due to phasing:[^\|]+'|sed -E 's~.+: (.+)~\1~'|tr '\n' ' ') 2>&1 | grep Phased | sort -r > "$___apt_tempfile02___";
 ___apt_tempvar01___="$(wc -l <"$___apt_tempfile02___")";
 printf "(%s of those are held by phased update" "$___apt_tempvar01___";
 if [ "$___apt_tempvar01___" -ne 0 ]; then

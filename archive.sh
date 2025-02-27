@@ -2,18 +2,18 @@
 
 getopt --test > /dev/null
 if [ $? -ne 4 ]; then
-	echo "getopt-test failed -> probs invalid env"
+	echo "getopt --test failed -> old version or GETOPT_COMPATIBLE detected. Aborting."
 	exit 1
 fi
 
-LONGOPTS=pack,unpack,keep-source,verbose
-OPTIONS=pukv
+LONGOPTS=pack,unpack,keep-source,verbose,output:
+OPTIONS=pukvo:
 
 # -pass arguments only via   -- "$@"   to separate them correctly
 PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
 rc=$?
 if [ $rc -ne 0 ]; then
-	echo "getopt returnded nonzero result: $rc"
+	echo "getopt returned nonzero result: $rc"
 	# e.g. return value is 1
 	#  then getopt has complained about wrong arguments to stdout
 	exit 2
@@ -22,7 +22,8 @@ fi
 #this replaces the script's inputs as if it was called with what getopts has parsed
 eval set -- "$PARSED"
 
-p=0 v=0 k=0 u=0
+p=0 v=0 k=0 u=0 o=0
+targetDirectory=""
 # now enjoy the options in order and nicely split until we see --
 #note: shift removes the first argument and thereby kind of shifts the arguments to the left
 while true; do
@@ -43,13 +44,18 @@ while true; do
 			v=1
 			shift
 			;;
+		-o|--output)
+			o=1;
+			targetDirectory="$2"
+			shift 2
+			;;
 		--)
 			shift
 			break
 			;;
 		*)
 			echo "Programming error"
-			exit 3
+			exit 255
 			;;
 	esac
 done
@@ -62,8 +68,15 @@ fi
 
 #count of arguments must be exactly one after the switched are removed
 if [ $# -ne 1 ]; then
-	echo "$0: A single input file or folder is required."
-	exit 4
+	echo "A single input file or folder is required."
+	exit 2
+fi
+
+#input file may not be in a different directory
+#I am aware modern shells have here-strings which would eliminate the echo and pipe, but I want to keep this as broadly compatible as possible, hence I am limiting myself to sh as far as possible
+if [ "$(echo "$1" | grep -c '/')" -ne 0 ]; then
+	printf "error: for clarity on what's about to happen, you may not provide files/folders not in your current working directory\nbasically the input (%s) may not contain the character /\n" "$1"
+	exit 2
 fi
 
 #echo "pack: $p, unpack $u, keep: $k, verbose: $v, in: $1"
@@ -73,10 +86,16 @@ if [ $v -ne 0 ] || [ $k -eq 0 ]; then
 	#make verbose if requested, but also if the files are NOT KEPT, regardless of verbosity switch
 	cmd="${cmd} -v"
 fi
+if [ $o -eq 0 ]; then
+	targetDirectory="$(pwd)"
+elif [ ! -e "$targetDirectory" ]; then
+	echo "info: creating directory $targetDirectory"
+	mkdir -p "$targetDirectory"
+fi
 if [ $p -ne 0 ]; then
-	cmd="${cmd} -zcf \"$1.tar.gz\" \"$1\""
+	cmd="${cmd} -zcf \"$targetDirectory/$1.tar.gz\" \"$1\""
 else
-	cmd="${cmd} -xf \"$1\""
+	cmd="${cmd} -xf \"$1\" -C \"$targetDirectory\""
 fi
 #echo "$cmd"
 #check target existance and execute
@@ -104,7 +123,6 @@ if [ -f "$1" ] || { [ -d "$1" ] && [ $p -ne 0 ]; } ; then
 	fi
 else
 	echo "'$1' can't be found (or is of the wrong type), please check your input"
-	exit 1
+	exit 2
 fi
 exit
-

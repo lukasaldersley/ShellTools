@@ -147,9 +147,15 @@ SetUpAptProxyConfigFile(){
 }
 
 HasLocalProxyServer(){
-	#return default false if it's not overridden in other scripts
-	#NOTE: it WILL be overriden in custom non-public extensions
+	#return default false if it's not overwriten in other scripts
+	#NOTE: it WILL be overwriten in custom non-public extensions
 	echo "default false for Local Proxy"
+	return 1
+}
+
+TestProxyExtension(){
+	#default return false if it's not overwriten in other scripts
+	#NOTE it WILL be overwriten in custom non-public extensions
 	return 1
 }
 
@@ -206,13 +212,17 @@ enableProxy(){
 		if [ 0 -eq $CurlRes ]; then
 			printf "enabled proxy (%s)\n" "$PROXY_NAME"
 		elif [ 5 -eq $CurlRes ]; then
-			printf "cannot resolve proxy host (%s) for %s, tentatively leaving proxy enabled, but might not work" "$PROXY_HOST" "$PROXY_NAME"
+			printf "curl cannot resolve proxy host (%s) for %s, tentatively leaving proxy enabled, but might not work" "$PROXY_HOST" "$PROXY_NAME"
 		elif [ 6 -eq $CurlRes ]; then
-			printf "cannot resolve test host (%s) for %s, tentatively leaving proxy enabled, but might not work" "$ConnTestURL" "$PROXY_NAME"
+			printf "curl cannot resolve test host (%s) for %s, tentatively leaving proxy enabled, but might not work" "$ConnTestURL" "$PROXY_NAME"
 		else
-			#no connectiopn
-			printf "Connection to %s not possible (likely wrong password)\n" "$PROXY_NAME"
-			disableProxy
+			#no connection
+			printf "Connection to %s via %s not possible (curl exit code %i). Check your Password?\n" "$ConnTestURL" "$PROXY_NAME" $CurlRes
+			TestProxyExtension $CurlRes $ConnTestURL
+			local LocalProxyTestResult=$?
+			if [ ! 0 -eq $LocalProxyTestResult ]; then
+				disableProxy
+			fi
 		fi
 	else
 		echo "PROXY_HOST not provided -> NO ACTION"
