@@ -44,7 +44,7 @@ StringRelations CompareStrings(const char* a, const char* b) {
 	return result;
 }
 
-char ToLowerCase(char c)
+inline char ToLowerCase(char c)
 {
 	if (c >= 'A' && c <= 'Z')
 	{
@@ -56,7 +56,7 @@ char ToLowerCase(char c)
 	}
 }
 
-char ToUpperCase(char c)
+inline char ToUpperCase(char c)
 {
 	if (c >= 'a' && c <= 'z')
 	{
@@ -169,6 +169,11 @@ char* ExecuteProcess(const char* command) {
 	return result;
 }
 
+/*This is basically strlen, but only counts VISIBLE characters
+THIS MUST NOT BE USED TO DETERMINE REQUIRED BUFFER SIZES
+A Usecase for this is computing how much space on screen is taken up by a string accounting for the fact control characters don't take up space
+an example of this can be found in repotools.c
+*/
 int strlen_visible(const char* s) {
 	int count = 0;
 	int idx = 0;

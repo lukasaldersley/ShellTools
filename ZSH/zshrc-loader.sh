@@ -28,6 +28,9 @@ PROXY_USER=""
 export PROXY_USER
 PROXY_PORT=""
 export PROXY_PORT
+PROXY_NOAPT=0
+export PROXY_NOAPT
+
 
 export EDITOR=nano
 
@@ -134,15 +137,17 @@ alias lsorigin='$ST_CFG/repotools.elf --list'
 
 
 SetUpAptProxyConfigFile(){
-	if [ ! -w /etc/apt/apt.conf.d/proxy ]; then
-		echo "apt proxy config file had no write permissions -> changing that"
-		if [ ! -e /etc/apt/apt.conf.d/proxy ]; then
-			echo "apt proxy config file didn't even exist -> creating now"
-			sudo touch /etc/apt/apt.conf.d/proxy
+	if [ "$PROXY_NOAPT" -eq 0 ]; then
+		if [ ! -w /etc/apt/apt.conf.d/proxy ]; then
+			echo "apt proxy config file had no write permissions -> changing that"
+			if [ ! -e /etc/apt/apt.conf.d/proxy ]; then
+				echo "apt proxy config file didn't even exist -> creating now"
+				sudo touch /etc/apt/apt.conf.d/proxy
+			fi
+			sudo chmod 664 /etc/apt/apt.conf.d/proxy
+			sudo chgrp sudo /etc/apt/apt.conf.d/proxy
+			ls -lash /etc/apt/apt.conf.d/proxy
 		fi
-		sudo chmod 664 /etc/apt/apt.conf.d/proxy
-		sudo chgrp sudo /etc/apt/apt.conf.d/proxy
-		ls -lash /etc/apt/apt.conf.d/proxy
 	fi
 }
 
@@ -170,7 +175,9 @@ enableProxy(){
 			PROXY_STRING="http://$PROXY_HOST:$PROXY_PORT"
 			export {http,https,ftp}_proxy="$PROXY_STRING"
 			export {HTTP,HTTPS,FTP}_PROXY="$PROXY_STRING"
-			printf 'Acquire {\n  HTTP::proxy "%s";\n  HTTPS::proxy "%s";\n}\n' "$PROXY_STRING" "$PROXY_STRING" > /etc/apt/apt.conf.d/proxy
+			if [ "$PROXY_NOAPT" -eq 0 ]; then
+				printf 'Acquire {\n  HTTP::proxy "%s";\n  HTTPS::proxy "%s";\n}\n' "$PROXY_STRING" "$PROXY_STRING" > /etc/apt/apt.conf.d/proxy
+			fi
 			unset PROXY_STRING
 		else
 			ProxHost="${PROXY_HOST}${PROXY_PORT:+":$PROXY_PORT"} (${PROXY_NAME:-"Proxy"})"
@@ -192,7 +199,9 @@ enableProxy(){
 			export {http,https,ftp}_proxy="$PROXY_STRING"
 			export {HTTP,HTTPS,FTP}_PROXY="$PROXY_STRING"
 			echo -e "\n<$HTTP_PROXY>"
-			printf 'Acquire {\n  HTTP::proxy "%s";\n  HTTPS::proxy "%s";\n}\n' "$PROXY_STRING" "$PROXY_STRING" > /etc/apt/apt.conf.d/proxy
+			if [ "$PROXY_NOAPT" -eq 0 ]; then
+				printf 'Acquire {\n  HTTP::proxy "%s";\n  HTTPS::proxy "%s";\n}\n' "$PROXY_STRING" "$PROXY_STRING" > /etc/apt/apt.conf.d/proxy
+			fi
 			unset PROXY_STRING
 			PROXY_PW=""
 			echo ""
@@ -242,7 +251,14 @@ sysver(){
 	#this makes the first greedy match contain version_id as long as there is version, version_id therefore only is a fallback (I had to flip the capture groups in the regex as well)
 	#--equal=\" v\" tells assemblecat to treat ' ' and 'v' the same to allow assembling of "Alpine Linux v3.17" with " 3.17.0" into "Alpine Linux v3.17.0". I wouldn't need the equality list if there wasn#t a space in the second string
 	#however most distros need that space to avoid "Kali GNU/Linux Rolling2023.3"
-	eval "$ST_CFG/assemblecat.elf --equal=\" v\" $(sort -r < /etc/os-release | tr -d '\n' | sed -nE 's~.*VERSION(_ID)?="?([-a-zA-Z0-9\._ \(\)/]+)"?.*PRETTY_NAME="([-a-zA-Z0-9\._ \(\)/]+)".*~"\3" " \2"~p')" |tr -d '\n'
+	eval "$ST_CFG/assemblecat.elf --ignore-case --equal=\" v\" $(echo $XDG_CONFIG_DIRS | grep -io ".ubuntu" | sed -E 's~^[^a-zA-Z]?(.)~\U\1~') $(sort -r < /etc/os-release | tr -d '\n' | sed -nE 's~.*VERSION(_ID)?="?([-a-zA-Z0-9\._ \(\)/]+)"?.*PRETTY_NAME="([-a-zA-Z0-9\._ \(\)/]+)".*~"\3" " \2"~p')" |tr -d '\n'
+	if [ -n "$XDG_CURRENT_DESKTOP" ]; then
+		printf " using $XDG_CURRENT_DESKTOP"
+	fi
+	#XDG_SESSION_TYPE can be set, even if there isn't a graphical interface (eg, on TTY)
+	if [ -n "$XDG_SESSION_TYPE" ]; then
+		printf " ($XDG_SESSION_TYPE)"
+	fi
 	printf " [%s %s %s]\n" "$(uname --operating-system)" "$(uname --kernel-release)" "$(uname --machine)" #machine is x86-64 or arm or something
 }
 
@@ -263,6 +279,7 @@ export WinUser
 { WSL_VERSION="$(/mnt/c/Windows/System32/wsl.exe -l -v | iconv -f unicode|grep -E "\b$WSL_DISTRO_NAME\s+Running" | awk '{print $NF}' | cut -c-1)"; } 2> /dev/null || true
 if [ -n "$WSL_VERSION" ]; then
 	IsWSL=1
+	export WSL_VERSION
 fi
 
 export IsWSL
@@ -298,8 +315,6 @@ fi
 # shellcheck disable=SC2046 #reason: I want wordsplitting to happen on the date
 printf "System up since %s (%s)\n" "$(uptime --since)" "$("$ST_CFG/timer-zsh.elf" STOPHUMAN $(uptime --since |tr ':-' ' '))"
 
-"$ST_SRC/AptTools.sh" --unattended
-
 devcount="$(fwupdmgr get-devices 2>/dev/null |grep -c 'Device ID')"
 if [ "$devcount" != "0" ]; then
 	sysname="$(cat /sys/class/dmi/id/product_name)"
@@ -308,8 +323,8 @@ if [ "$devcount" != "0" ]; then
 
 	adevcount="$(grep -c '^└─' <<< "$infos")"
 
+	printf "%s out of %s devices on %s have Firmware updates available (fwupdmgr)\n" "$adevcount" "$devcount" "$sysname"
 	if [ "$adevcount" != "0" ]; then
-		printf "%s out of %s devices on %s have Firmware updates available (updmgr\n" "$adevcount" "$devcount" "$sysname"
 		printf "\t"
 		grep "^└─" <<< "$infos" |cut -c7-|tr '\n' ' '
 		grep "^  └─" <<< "$infos" |cut -c9- |rev |cut -c2- |rev |tr -d '\n'
@@ -320,3 +335,7 @@ if [ "$devcount" != "0" ]; then
 		printf "]\n"
 	fi
 fi
+
+"$ST_SRC/AptTools.sh" --unattended
+"$ST_SRC/FlatpakTools.sh"
+"$ST_SRC/SnapTools.sh"

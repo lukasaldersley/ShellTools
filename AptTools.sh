@@ -1,5 +1,9 @@
 #!/bin/sh
 
+if ! command -v apt > /dev/null 2>&1; then
+	exit 1
+fi
+
 getopt --test > /dev/null
 if [ $? -ne 4 ]; then
 	echo "getopt-test failed -> probs invalid env"
@@ -104,8 +108,9 @@ if [ $full -ne 0 ];then
 	exit
 else
 	#echo "$cmd"
+	printf "Out of %s installed dpkg packages, " "$(dpkg -l | grep -c '^.i')"
 	eval "LANG=C.UTF-8 LANGUAGE="" $cmd">"$___apt_tempfile01___"
-	sed -nE 's~([0-9]+) upgraded.*and ([0-9]+) not upgraded.+~There are \1 packages to be updated and \2 held back ~p' < "$___apt_tempfile01___"|tr -d '\n'
+	sed -nE 's~([0-9]+) upgraded.*and ([0-9]+) not upgraded.+~there are \1 packages to be updated and \2 held back ~p' < "$___apt_tempfile01___"|tr -d '\n'
 fi
 
 ___apt_tempfile02___="$(mktemp)"

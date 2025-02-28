@@ -3,10 +3,13 @@ TargetDir="$ST_CFG"
 if [ ! -d "$TargetDir" ]; then
 	mkdir -p "$TargetDir"
 fi
-TargetName="$(basename $0 .c).elf"
-printf "compiling $0 into $TargetDir/$TargetName"
-gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$0" -o "$TargetDir/$TargetName"
-printf " -> \e[32mDONE\e[0m($?)\n"
+TargetName="$(basename "$0" .c).elf"
+printf "compiling %s into $TargetDir/$TargetName" "$0"
+#shellcheck disable=SC2086
+gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$0" -o "$TargetDir/$TargetName" $1
+#the fact I DIDN'T add quotations to the $1 above means I WANT word splitting to happen.
+#I WANT to be able to do things like ./repotools.c -DPROFILING to add the compiler flag profiling but ALSO stuff like ./repotools "-DDEBUG -DPROFILING" to add both profiling and debug
+printf " -> \e[32mDONE\e[0m(%s)\n" $?
 exit
 */
 
@@ -15,6 +18,7 @@ The reason this even exists is Microsoft's shoddy coding.
 Windows often complains you need to obtain permissions from <your own user> to delete a folder if that folder still contains files (also owned by your own user).
 You then have to first delete the files and only then can you delete the parent folder.
 Since this is really annoying if you're dealing with hundreds of subfolders with many dozen subfolders each and approximately 150k files, I created this to do that automatically.
+I should mention a simple rm -rf from WSL didn't fix the problem, I assume since rm is optimized and expects a base level of sanity from the underlying filesystem, which Microsoft does not exhibit.
 */
 
 #include "commons.h"
