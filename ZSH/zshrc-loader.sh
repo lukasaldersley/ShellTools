@@ -1,14 +1,22 @@
 #!/bin/false
 # shellcheck shell=bash
+#I am aware this is zsh not bash, but shellcheck doesn't support that
+#usually I would limit myself to POSIX compliant code (=sh) but here I need to deviate from that as zsh's read is similar to bash's but different from POSIX/sh's and if I do that I may as well use features not in sh such as here-strings and brace-expansion
 
-## this script must be sourced in zshrc as follows (obviously adjust CODE_LOC):
+#NOTE: if I clobbered something with an alias 'type -a *whateverIsuspectIsClobbered*' will gibe me a list of every possible meaning
+
+## this script must be sourced in zshrc as follows (obviously adjust ST_SRC and ST_CFG):
+## ST_CFG can be anything as long as it's writeable by ShellTools, below is just a suggestion
 ## Ideally just use setup.sh to create a valid zshrc
 ##
-### ST_SRC="/path/to/parent/folder/of/ShellTools"
+### ST_SRC="/path/to/ShellTools"
+### ST_CFG="$HOME/.shelltools"
 ### export ST_SRC
-### . "$ST_SRC/ShellTools/zshrc-loader.sh"
+### export ST_CFG
+### ST_CFG=
+### . "$ST_SRC/ZSH/zshrc-loader.sh"
 ##
-##NOTE: in bash/ksh/zsh export CODE_LOC="/mnt/e/CODE would also be valid but not in POSIX where the assignement and export must be seperate"
+##NOTE: in bash/ksh/zsh 'export ST_CFG="$HOME/.shelltools"' would also be valid but not in POSIX where the assignement and export must be seperate"
 
 #to forcibly log out another user su into their account and execute "DISPLAY=:1 gnome-session-quit --force"
 #to see what users are running: "who"
@@ -28,20 +36,20 @@ PROXY_USER=""
 export PROXY_USER
 PROXY_PORT=""
 export PROXY_PORT
-PROXY_NOAPT=0
+PROXY_NOAPT=1
 export PROXY_NOAPT
 
 
 export EDITOR=nano
 
 #script invocations
-alias pack='$ST_SRC/archive.sh -p'
-alias unpack='$ST_SRC/archive.sh -u'
-alias search='$ST_SRC/search.sh -p'
-alias contentsearch='$ST_SRC/search.sh -c -p'
-alias sysupdate='$ST_SRC/AptTools.sh --full-update'
-alias aptcheck='$ST_SRC/AptTools.sh --check'
-alias aptstatus='$ST_SRC/AptTools.sh --unattended'
+alias pack='$ST_SRC/GENERAL/archive.sh -p'
+alias unpack='$ST_SRC/GENERAL/archive.sh -u'
+alias search='$ST_SRC/GENERAL/search.sh -p'
+alias contentsearch='$ST_SRC/GENERAL/search.sh -c -p'
+alias sysupdate='$ST_SRC/GENERAL/AptTools.sh --full-update'
+alias aptcheck='$ST_SRC/GENERAL/AptTools.sh --check'
+alias aptstatus='$ST_SRC/GENERAL/AptTools.sh --unattended'
 alias acat='$ST_CFG/assemblecat.elf'
 alias cat-assemble='$ST_CFG/assemblecat.elf'
 alias argtest='$ST_CFG/argtest.elf'
@@ -80,6 +88,13 @@ alias gu=gitupdate
 alias cf=cleanFile
 alias sf=sortFile
 alias uz=UpdateZSH
+alias ss=SystemStatus
+alias syss=SystemStatus
+alias or="omz reload"
+alias hist='cat "$HOME/.zsh_history" "$HOME/.bash_history" | less'
+alias qlac="qalc"
+alias qcla="qalc"
+alias calc="qalc"
 
 searchapt(){
 	printf "Apt packages:\n"
@@ -251,13 +266,15 @@ sysver(){
 	#this makes the first greedy match contain version_id as long as there is version, version_id therefore only is a fallback (I had to flip the capture groups in the regex as well)
 	#--equal=\" v\" tells assemblecat to treat ' ' and 'v' the same to allow assembling of "Alpine Linux v3.17" with " 3.17.0" into "Alpine Linux v3.17.0". I wouldn't need the equality list if there wasn#t a space in the second string
 	#however most distros need that space to avoid "Kali GNU/Linux Rolling2023.3"
-	eval "$ST_CFG/assemblecat.elf --ignore-case --equal=\" v\" $(echo $XDG_CONFIG_DIRS | grep -io ".ubuntu" | sed -E 's~^[^a-zA-Z]?(.)~\U\1~') $(sort -r < /etc/os-release | tr -d '\n' | sed -nE 's~.*VERSION(_ID)?="?([-a-zA-Z0-9\._ \(\)/]+)"?.*PRETTY_NAME="([-a-zA-Z0-9\._ \(\)/]+)".*~"\3" " \2"~p')" |tr -d '\n'
+
+
+	eval "$ST_CFG/assemblecat.elf --ignore-case --equal=\" v\" $(echo "$XDG_CONFIG_DIRS" | grep -io ".ubuntu" | sed -E 's~^[^a-zA-Z]?(.)~\U\1~') $(sort -r < /etc/os-release | tr -d '\n' | sed -nE 's~.*VERSION(_ID)?="?([-a-zA-Z0-9\._ \(\)/]+)"?.*PRETTY_NAME="([-a-zA-Z0-9\._ \(\)/]+)".*~"\3" " \2"~p')" |tr -d '\n'
 	if [ -n "$XDG_CURRENT_DESKTOP" ]; then
-		printf " using $XDG_CURRENT_DESKTOP"
+		printf " using %s" "$XDG_CURRENT_DESKTOP"
 	fi
 	#XDG_SESSION_TYPE can be set, even if there isn't a graphical interface (eg, on TTY)
 	if [ -n "$XDG_SESSION_TYPE" ]; then
-		printf " ($XDG_SESSION_TYPE)"
+		printf " (%s)" "$XDG_SESSION_TYPE"
 	fi
 	printf " [%s %s %s]\n" "$(uname --operating-system)" "$(uname --kernel-release)" "$(uname --machine)" #machine is x86-64 or arm or something
 }
@@ -269,10 +286,15 @@ shellver(){
 	fi
 }
 
+SystemStatus(){
+	"$ST_SRC/GENERAL/AptTools.sh" --unattended
+	"$ST_SRC/GENERAL/FlatpakTools.sh"
+	"$ST_SRC/GENERAL/SnapTools.sh"
+}
+
 IsWSL=0
 #use cmd.exe to get windows username, discard cmd's stderr (usually because cmd prints a warning if this was called from somewhere within the linux filesystem), then strip CRLF from the result
 WinUser="$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\n\r')"
-export WinUser
 #the reason I don't just check $WSL_DISTRO_NAME is because I want to know if it's WSL1 or WSL2. there may be differences I need to address at some point
 #this is a command that's EXPECTED to fail every time this is run on a non-WSL installation, so the stderr redirect and masking of the return code are intentional
 #iconv is a tool to convert character encodings. this is needed to change windows's UTF16LE to the UTF-8 I want
@@ -285,10 +307,12 @@ fi
 export IsWSL
 
 if [ $IsWSL -eq 1 ]; then
+	export WinUser
 	#shellcheck source=WSL.sh
 	. "$ST_SRC/ZSH/WSL.sh"
 else
-#check if this is debian-esque, if it's not, it's not supported, exit immediatley
+	unset WinUser
+	#check if this is debian-esque, if it's not, it's not supported, exit immediatley
 	#shellcheck source=BARE.sh
 	. "$ST_SRC/ZSH/BARE.sh"
 fi
@@ -336,6 +360,7 @@ if [ "$devcount" != "0" ]; then
 	fi
 fi
 
-"$ST_SRC/AptTools.sh" --unattended
-"$ST_SRC/FlatpakTools.sh"
-"$ST_SRC/SnapTools.sh"
+SystemStatus
+
+#this is just to force the initial return code to be 0/OK when opening a new shell
+true

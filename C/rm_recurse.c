@@ -4,7 +4,7 @@ if [ ! -d "$TargetDir" ]; then
 	mkdir -p "$TargetDir"
 fi
 TargetName="$(basename "$0" .c).elf"
-printf "compiling %s into $TargetDir/$TargetName" "$0"
+printf "compiling %s into %s/%s" "$0" "$TargetDir" "$TargetName"
 #shellcheck disable=SC2086
 gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$0" -o "$TargetDir/$TargetName" $1
 #the fact I DIDN'T add quotations to the $1 above means I WANT word splitting to happen.

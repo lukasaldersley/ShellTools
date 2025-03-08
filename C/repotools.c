@@ -4,7 +4,7 @@ if [ ! -d "$TargetDir" ]; then
 	mkdir -p "$TargetDir"
 fi
 TargetName="$(basename "$0" .c).elf"
-printf "compiling %s into $TargetDir/$TargetName" "$0"
+printf "compiling %s into %s/%s" "$0" "$TargetDir" "$TargetName"
 #shellcheck disable=SC2086
 gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$0" -o "$TargetDir/$TargetName" $1
 #the fact I DIDN'T add quotations to the $1 above means I WANT word splitting to happen.
@@ -46,7 +46,7 @@ const char* terminators = "\r\n\a";
 
 #define maxGroups 10
 regmatch_t CapturedResults[maxGroups];
-regex_t reg;
+regex_t branchParsingRegex;
 
 #define MaxLocations 10
 char* NAMES[MaxLocations];
@@ -367,7 +367,7 @@ bool CheckBranching(RepoInfo* ri) {
 			}
 			//printf("\n\n%s\n", result);
 			fflush(stdout);
-			int RegexReturnCode = regexec(&reg, result, maxGroups, CapturedResults, 0);
+			int RegexReturnCode = regexec(&branchParsingRegex, result, maxGroups, CapturedResults, 0);
 			if (RegexReturnCode == 0)
 			{
 				char* bname = NULL;
@@ -1296,6 +1296,398 @@ void ListAvailableRemotes() {
 	}
 }
 
+typedef struct {
+	char* ip;
+	uint32_t metric;
+	bool isDefault;
+	uint8_t cidr;
+	char* device;
+	char* linkspeed;
+	char* routedNet; //not used if isDefault is true
+} NetDevice;
+
+typedef struct NetList_t NetList;
+struct NetList_t {
+	NetDevice dev;
+	NetList* next;
+	NetList* prev;
+};
+
+NetList* InitNetListElement() {
+	NetList* a = (NetList*)malloc(sizeof(NetList));
+	if (a == NULL)abortNomem();
+	NetDevice* e = &(a->dev);
+	e->ip = NULL;
+	e->metric = UINT32_MAX;
+	e->isDefault = false;
+	e->cidr = 0;
+	e->device = NULL;
+	e->linkspeed = NULL;
+	e->routedNet = NULL;
+	return a;
+}
+
+NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* ip, int metric, bool isDefault, int cidr, const char* linkspeed, const char* routedNet) {
+	if (head != NULL && head->dev.isDefault == false && isDefault == true) {
+		abortMessage("assumption on the order of routes incorrect (assume default routes are listed first)");
+	}
+	if (head == NULL) {
+		//Create Initial Element (List didn't exist previously)
+		NetList* n = InitNetListElement();
+		n->next = NULL;
+		n->prev = NULL;
+		assert(ip != NULL && device != NULL);//IP and device are the minimum set necessary
+		if (asprintf(&(n->dev.device), "%s", device) == -1)abortNomem();
+		if (asprintf(&(n->dev.ip), "%s", ip) == -1)abortNomem();
+		n->dev.metric = metric;
+		n->dev.isDefault = isDefault;
+		if (cidr != 0) n->dev.cidr = cidr;
+		if (linkspeed != NULL) {
+			if (head->dev.linkspeed != NULL) { free(head->dev.linkspeed); }
+			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1)abortNomem();
+		}
+		if (routedNet != NULL) {
+			if (head->dev.routedNet != NULL) { free(head->dev.routedNet); }
+			if (asprintf(&(head->dev.routedNet), "%s", routedNet) == -1)abortNomem();
+		}
+
+		return n;
+	}
+	else if (Compare(head->dev.device, device)) {
+		//device name matches, this is just additional info
+		head->dev.metric = metric;
+		if (cidr != 0) head->dev.cidr = cidr;
+		head->dev.isDefault = head->dev.isDefault | isDefault;
+		if (linkspeed != NULL) {
+			if (head->dev.linkspeed != NULL) { free(head->dev.linkspeed); }
+			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1)abortNomem();
+		}
+		if (routedNet != NULL) {
+			if (head->dev.routedNet != NULL) { free(head->dev.routedNet); }
+			if (asprintf(&(head->dev.routedNet), "%s", routedNet) == -1)abortNomem();
+		}
+		return head;
+	}
+	else if (metric < head->dev.metric) {
+		//The new Element has a lower metric -> insert before myslef
+		NetList* n = InitNetListElement();
+		n->next = head;
+		n->prev = head->prev;
+		if (head->prev != NULL) head->prev->next = n;
+		head->prev = n;
+		assert(ip != NULL && device != NULL);//IP and device are the minimum set necessary
+		if (asprintf(&(n->dev.device), "%s", device) == -1)abortNomem();
+		if (asprintf(&(n->dev.ip), "%s", ip) == -1)abortNomem();
+		n->dev.metric = metric;
+		n->dev.isDefault = isDefault;
+		if (cidr != 0) n->dev.cidr = cidr;
+		if (linkspeed != NULL) {
+			if (n->dev.linkspeed != NULL) { free(n->dev.linkspeed); }
+			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1)abortNomem();
+		}
+		if (routedNet != NULL) {
+			if (n->dev.routedNet != NULL) { free(n->dev.routedNet); }
+			if (asprintf(&(n->dev.routedNet), "%s", routedNet) == -1)abortNomem();
+		}
+		return n;
+	}
+	else if (head->next == NULL) {
+		//The New Element is NOT Equal to myself and is NOT alphabetically before myself (as per the earlier checks)
+		//on top of that, I AM the LAST element, so I can simply create a new last element
+		NetList* n = InitNetListElement();
+		n->next = head->next;
+		n->prev = head;
+
+		if (head->next != NULL) head->next->prev = n;
+		head->next = n;
+		assert(ip != NULL && device != NULL);//IP and device are the minimum set necessary
+		if (asprintf(&(n->dev.device), "%s", device) == -1)abortNomem();
+		if (asprintf(&(n->dev.ip), "%s", ip) == -1)abortNomem();
+		n->dev.metric = metric;
+		n->dev.isDefault = isDefault;
+		if (cidr != 0) n->dev.cidr = cidr;
+		if (linkspeed != NULL) {
+			if (n->dev.linkspeed != NULL) { free(n->dev.linkspeed); }
+			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1)abortNomem();
+		}
+		if (routedNet != NULL) {
+			if (n->dev.routedNet != NULL) { free(n->dev.routedNet); }
+			if (asprintf(&(n->dev.routedNet), "%s", routedNet) == -1)abortNomem();
+		}
+
+		return head;
+	}
+	else {
+		//The New Element is NOT Equal to myslef and is NOT alphabetically before myself (as per the earlier checks)
+		//This time there IS another element after myself -> defer to it.
+		head->next = InsertIntoNetListSorted(head->next, device, ip, metric, isDefault, cidr, linkspeed, routedNet);
+		return head;
+	}
+}
+
+char* GetIfaceSpeed(const char* iface) {
+	char* ret;
+	int size = 32;
+	char* result = (char*)malloc(sizeof(char) * size);
+	if (result == NULL) {
+		abortNomem();
+	}
+	char* command;
+	if (asprintf(&command, "nmcli -g CAPABILITIES.SPEED device show %s | sed -E 's~([0-9]+) (.).+~\\1\\2~'", iface) == -1)abortNomem();
+	FILE* fp = popen(command, "r");
+	if (fp == NULL)
+	{
+		fprintf(stderr, "failed running process %s\n", command);
+	}
+	else {
+		while (fgets(result, size - 1, fp) != NULL)
+		{
+			TerminateStrOn(result, terminators);
+			if (Compare(result, ""))continue;
+			if (Compare(result, "1000M")) {
+				if (asprintf(&ret, "1G") == -1)abortNomem();
+			}
+			else if (Compare(result, "2500M")) {
+				if (asprintf(&ret, "2.5G") == -1)abortNomem();
+			}
+			else if (Compare(result, "5000M")) {
+				if (asprintf(&ret, "5G") == -1)abortNomem();
+			}
+			else if (Compare(result, "10000M")) {
+				if (asprintf(&ret, "10G") == -1)abortNomem();
+			}
+			else if (Compare(result, "unknown")) {
+				return NULL;
+			}
+			else {
+				if (asprintf(&ret, "%s", result) == -1)abortNomem();
+			}
+			return ret;
+		}
+	}
+	return NULL;
+}
+
+typedef struct {
+	char* BasicIPInfo;
+	char* AdditionalIPInfo;
+	char* RouteInfo;
+} IpTransportStruct;
+
+IpTransportStruct GetBaseIPString() {
+	IpTransportStruct ret;
+	ret.BasicIPInfo = NULL;
+	ret.AdditionalIPInfo = NULL;
+	ret.RouteInfo = NULL;
+
+	uint8_t RouteRegexGroupCount = 13;
+	regmatch_t RouteRegexGroups[RouteRegexGroupCount];
+	regex_t RouteRegex;
+	const char* RouteRegexString = "^(((default) via ([0-9.]+))|(([0-9.]+).([0-9]+))).*?dev ([^ ]+).*?src ([0-9.]+)( metric ([0-9]+))?( linkdown)?.*$";
+#define RouteIsDefaultIndex 3
+#define RouteNextHopIndex 4
+#define RouteRoutedNetIndex 6
+#define RouteCidrIndex 7
+#define RouteDeviceIndex 8
+#define RouteIpIndex 9
+#define RouteMetricIndex 11
+#define RouteLinkDownIndex 12
+	int RegexReturnCode;
+	RegexReturnCode = regcomp(&RouteRegex, RouteRegexString, REG_EXTENDED | REG_NEWLINE);
+	if (RegexReturnCode)
+	{
+		char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
+		if (regErrorBuf == NULL)abortNomem();
+		regerror(RegexReturnCode, &RouteRegex, regErrorBuf, 1024);
+		printf("Could not compile regular expression '%s'. [%i(%s)]\n", RouteRegexString, RegexReturnCode, regErrorBuf);
+		free(regErrorBuf);
+		exit(1);
+	};
+
+
+	NetList* head = NULL;
+
+	int size = 1024;
+	char* result = (char*)malloc(sizeof(char) * size);
+	if (result == NULL) {
+		abortNomem();
+	}
+	const char* command = "ip route show";
+	FILE* fp = popen(command, "r");
+	if (fp == NULL)
+	{
+		fprintf(stderr, "failed running process %s\n", command);
+	}
+	else {
+		while (fgets(result, size - 1, fp) != NULL)
+		{
+			TerminateStrOn(result, terminators);
+			//fprintf(stderr, "\n\nresult: %s\n", result);
+			int RegexReturnCode = regexec(&RouteRegex, result, RouteRegexGroupCount, RouteRegexGroups, 0);
+			if (RegexReturnCode == 0)
+			{
+				if (RouteRegexGroups[RouteLinkDownIndex].rm_eo - RouteRegexGroups[RouteLinkDownIndex].rm_so != 0) {
+					continue; //linkdown matched, therefore ignore this interface
+				}
+				char* device = NULL;
+				char* ip = NULL;
+				uint32_t metric = UINT32_MAX;
+				bool isDefault = false;
+				int cidr = 0;
+				char* linkspeed = NULL;
+				char* routednet = NULL;
+				int len;
+				len = RouteRegexGroups[RouteDeviceIndex].rm_eo - RouteRegexGroups[RouteDeviceIndex].rm_so;
+				if (len > 0) {
+					device = malloc(sizeof(char) * (len + 1));
+					if (device == NULL)abortNomem();
+					strncpy(device, result + RouteRegexGroups[RouteDeviceIndex].rm_so, len);
+					device[len] = 0x00;
+				}
+				if (RouteRegexGroups[RouteIsDefaultIndex].rm_eo - RouteRegexGroups[RouteIsDefaultIndex].rm_so != 0) {
+					isDefault = true;
+				}
+				else {
+					linkspeed = GetIfaceSpeed(device);
+				}
+				len = RouteRegexGroups[RouteIpIndex].rm_eo - RouteRegexGroups[RouteIpIndex].rm_so;
+				if (len > 0) {
+					ip = malloc(sizeof(char) * (len + 1));
+					if (ip == NULL)abortNomem();
+					strncpy(ip, result + RouteRegexGroups[RouteIpIndex].rm_so, len);
+					ip[len] = 0x00;
+				}
+				len = RouteRegexGroups[RouteMetricIndex].rm_eo - RouteRegexGroups[RouteMetricIndex].rm_so;
+				if (len > 0) {
+					char* temp = malloc(sizeof(char) * (len + 1));
+					if (temp == NULL)abortNomem();
+					strncpy(temp, result + RouteRegexGroups[RouteMetricIndex].rm_so, len);
+					temp[len] = 0x00;
+					metric = atoi(temp);
+					free(temp);
+					temp = NULL;
+				}
+				len = RouteRegexGroups[RouteCidrIndex].rm_eo - RouteRegexGroups[RouteCidrIndex].rm_so;
+				if (len > 0) {
+					char* temp = malloc(sizeof(char) * (len + 1));
+					if (temp == NULL)abortNomem();
+					strncpy(temp, result + RouteRegexGroups[RouteCidrIndex].rm_so, len);
+					temp[len] = 0x00;
+					cidr = atoi(temp);
+					free(temp);
+					temp = NULL;
+				}
+				len = RouteRegexGroups[RouteRoutedNetIndex].rm_eo - RouteRegexGroups[RouteRoutedNetIndex].rm_so;
+				if (len > 0) {
+					routednet = malloc(sizeof(char) * (len + 1));
+					if (routednet == NULL)abortNomem();
+					strncpy(routednet, result + RouteRegexGroups[RouteRoutedNetIndex].rm_so, len);
+					routednet[len] = 0x00;
+				}
+				head = InsertIntoNetListSorted(head, device, ip, metric, isDefault, cidr, linkspeed, routednet);
+				if (device != NULL)free(device);
+				if (ip != NULL)free(ip);
+				if (linkspeed != NULL)free(linkspeed);
+				if (routednet != NULL)free(routednet);
+			}
+		}
+	}
+	free(result);
+	pclose(fp);
+
+	//res (the standard IP line should get (numDefaultRoutes+1)*(1+4+8+4+1+(4*(3+1))+4+4+4+4+4+16+4) bytes (space+CSI+device+CSI+:IP+CSI+CIDR+CSI+CSI+CSI+metric+CSI) bytes
+	//the above calculation comes out to 74 bytes, so if I assign 80 bytes per default route I sould be fine.
+	//for the third line (the actual route display) I think 6+(10*numNonDefaultRoutes)+30 should be enough
+
+	NetList* current = head;
+	int numDefaultRoutes = 0;
+	int numNonDefaultRoutes = 0;
+	uint32_t lowestMetric = UINT32_MAX;
+	while (current != NULL) {
+		if (current->dev.isDefault) {
+			numDefaultRoutes++;
+		}
+		else {
+			numNonDefaultRoutes++;
+		}
+		if (current->dev.metric < lowestMetric) {
+			lowestMetric = current->dev.metric;
+		}
+		//fprintf(stderr, "%s:%s/%i@%i %i for %s\n", current->dev.device, current->dev.ip, current->dev.cidr, current->dev.metric, current->dev.isDefault, current->dev.routedNet);
+		current = current->next;
+	}
+	int basicIPStringLen = 2 + (100 * numDefaultRoutes);
+	ret.BasicIPInfo = malloc(sizeof(char) * basicIPStringLen);
+	if (ret.BasicIPInfo == NULL)abortNomem();
+	int nondefaultIpStringLen = 2 + (numNonDefaultRoutes * 80);
+	ret.AdditionalIPInfo = malloc(sizeof(char) * nondefaultIpStringLen);
+	if (ret.AdditionalIPInfo == NULL)abortNomem();
+	int rounteinfoLen = (48 + (12 * numDefaultRoutes));
+	ret.RouteInfo = malloc(sizeof(char) * rounteinfoLen);
+	if (ret.RouteInfo == NULL)abortNomem();
+
+	int baseIPlenUsed = 0;
+	int nondefaultLenUsed = 0;
+	int routeinfoLenUsed = 0;
+
+
+	current = head;
+	for (int i = 0;i < numDefaultRoutes;i++) {
+		baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), " %s%s\e[0m:%s", (current->dev.metric == lowestMetric && numDefaultRoutes > 1 ? "\e[4m" : ""), current->dev.device, current->dev.ip);
+		if (current->dev.cidr > 0) {
+			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;244m/%i\e[0m", current->dev.cidr);
+		}
+		if (numDefaultRoutes > 1) {
+			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;240m\e[2m\e[3m~%i\e[0m", current->dev.metric);
+		}
+		if (current->dev.linkspeed != NULL) {
+			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;238m\e[2m@%s\e[0m", current->dev.linkspeed);
+		}
+		current = current->next;
+	}
+	if (numNonDefaultRoutes > 0) {
+		//I intentionally didn't reset current
+		for (int i = 0;i < numNonDefaultRoutes;i++) {
+			nondefaultLenUsed += snprintf(ret.AdditionalIPInfo + nondefaultLenUsed, nondefaultIpStringLen - (nondefaultLenUsed + 1), " \e[38;5;244m\e[3m%s:%s\e[0m", current->dev.device, current->dev.ip);
+			if (current->dev.cidr > 0) {
+				nondefaultLenUsed += snprintf(ret.AdditionalIPInfo + nondefaultLenUsed, nondefaultIpStringLen - (nondefaultLenUsed + 1), "\e[38;5;240m\e[2m\e[3m/%i\e[0m", current->dev.cidr);
+			}
+			current = current->next;
+		}
+
+		current = head;
+		routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), " \e[38;5;244m\e[2m*->");
+		if (numDefaultRoutes > 1) {
+			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), "{");
+		}
+		routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), "%s", current->dev.device);
+		current = current->next;
+		for (int i = 1;i < numDefaultRoutes;i++) {
+			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), ",%s", current->dev.device);
+			current = current->next;
+		}
+		if (numDefaultRoutes > 1) {
+			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), "}");
+		}
+		if (numNonDefaultRoutes > 1) {
+			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), "  %i additional routes\e[0m", numNonDefaultRoutes);
+		}
+		else {
+			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), " %s/%i->%s\e[0m", current->dev.routedNet, current->dev.cidr, current->dev.device);
+		}
+	}
+	assert(baseIPlenUsed < basicIPStringLen && nondefaultLenUsed < nondefaultIpStringLen && routeinfoLenUsed < rounteinfoLen);
+	ret.BasicIPInfo[baseIPlenUsed] = 0x00;
+	ret.AdditionalIPInfo[nondefaultLenUsed] = 0x00;
+	ret.RouteInfo[routeinfoLenUsed] = 0x00;
+#ifdef DEBUG
+	fprintf(stderr, ">%s< (%i/%i)\n>%s< (%i/%i)\n>%s< (%i/%i)\n", ret.BasicIPInfo, baseIPlenUsed, basicIPStringLen, ret.AdditionalIPInfo, nondefaultLenUsed, nondefaultIpStringLen, ret.RouteInfo, routeinfoLenUsed, rounteinfoLen);
+#endif
+
+	regfree(&RouteRegex);
+	return ret;
+}
+
 int main(int argc, char** argv)
 {
 #ifdef PROFILING
@@ -1306,11 +1698,11 @@ int main(int argc, char** argv)
 
 	const char* RegexString = "^[ *]+([-_/0-9a-zA-Z]*) +([0-9a-fA-F]+) (\\[([-/_0-9a-zA-Z]+)\\])?.*$";
 	int RegexReturnCode;
-	RegexReturnCode = regcomp(&reg, RegexString, REG_EXTENDED | REG_NEWLINE);
+	RegexReturnCode = regcomp(&branchParsingRegex, RegexString, REG_EXTENDED | REG_NEWLINE);
 	if (RegexReturnCode)
 	{
 		char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
-		int elen = regerror(RegexReturnCode, &reg, regErrorBuf, 1024);
+		int elen = regerror(RegexReturnCode, &branchParsingRegex, regErrorBuf, 1024);
 		printf("Could not compile regular expression '%s'. [%i(%s) {len:%i}]\n", RegexString, RegexReturnCode, regErrorBuf, elen);
 		free(regErrorBuf);
 		exit(1);
@@ -1362,6 +1754,12 @@ int main(int argc, char** argv)
 	char* Arg_LocalIPs = NULL;
 	int Arg_LocalIPs_len = 0;
 
+	char* Arg_LocalIPsAdditional = NULL;
+	int Arg_LocalIPsAdditional_len = 0;
+
+	char* Arg_LocalIPsRoutes = NULL;
+	int Arg_LocalIPsRoutes_len = 0;
+
 	char* Arg_ProxyInfo = NULL;
 	int Arg_ProxyInfo_len = 0;
 
@@ -1395,7 +1793,7 @@ int main(int argc, char** argv)
 			{0, 0, 0, 0 }
 		};
 
-		getopt_currentChar = getopt_long(argc, argv, "b:c:d:e:fhi:j:l:n:p:qr:s:t:", long_options, &option_index);
+		getopt_currentChar = getopt_long(argc, argv, "b:c:d:e:fhi:Ij:l:n:p:qr:s:t:", long_options, &option_index);
 		if (getopt_currentChar == -1)
 			break;
 
@@ -1507,9 +1905,29 @@ int main(int argc, char** argv)
 			}
 		case 'i':
 			{
+				if (Arg_LocalIPs != NULL || Arg_LocalIPs_len != 0) {
+					abortMessage("-i and -I are incompatible and should never be used together, but if they both are used -i MUST be BEFORE -I, -I will then be discarded, else the program will fail with this message\n");
+					//unlike the case in -I, if I'm on a system where the basic lookup doesn't work it'll REALLY mess up.
+					//it's not even guaranteed I'll be able to reach this point, the program may error out before this, but if it hasn't just forcibly error out
+				}
 				TerminateStrOn(optarg, terminators);
-				Arg_LocalIPs = optarg;
+				if (asprintf(&Arg_LocalIPs, "%s", optarg) == -1)abortNomem();
 				Arg_LocalIPs_len = strlen_visible(Arg_LocalIPs);
+				break;
+			}
+		case 'I':
+			{
+				if (Arg_LocalIPs == NULL && Arg_LocalIPs_len == 0) {
+					//only do the own lookup if IP hasn't been passed in in the old format.
+					//if this happens the user is just stuck on the old system but it's functional
+					IpTransportStruct temp = GetBaseIPString();
+					Arg_LocalIPs = temp.BasicIPInfo;
+					Arg_LocalIPs_len = strlen_visible(Arg_LocalIPs);
+					Arg_LocalIPsAdditional = temp.AdditionalIPInfo;
+					Arg_LocalIPsAdditional_len = strlen_visible(Arg_LocalIPsAdditional);
+					Arg_LocalIPsRoutes = temp.RouteInfo;
+					Arg_LocalIPsRoutes_len = strlen_visible(Arg_LocalIPsRoutes);
+				}
 				break;
 			}
 		case 'j':
@@ -1582,20 +2000,22 @@ int main(int argc, char** argv)
 
 
 #ifdef DEBUG
-	printf("Arg_NewRemote: %s\n", Arg_NewRemote);fflush(stdout);
-	printf("User: %s\n", User);fflush(stdout);
-	printf("Host: %s\n", Host);fflush(stdout);
-	printf("Arg_TerminalDevice: %s\n", Arg_TerminalDevice);fflush(stdout);
-	printf("Time: %s\n", Time);fflush(stdout);
-	printf("TimeZone: %s\n", TimeZone);fflush(stdout);
-	printf("DateInfo: %s\n", DateInfo);fflush(stdout);
-	printf("CalenderWeek: %s\n", CalenderWeek);fflush(stdout);
-	printf("Arg_LocalIPs: %s\n", Arg_LocalIPs);fflush(stdout);
-	printf("Arg_ProxyInfo: %s\n", Arg_ProxyInfo);fflush(stdout);
-	printf("Arg_PowerState: %s\n", Arg_PowerState);fflush(stdout);
-	printf("Arg_BackgroundJobs: %s\n", Arg_BackgroundJobs);fflush(stdout);
-	printf("Arg_SHLVL: %s\n", Arg_SHLVL);fflush(stdout);
-	printf("Arg_SSHInfo: %s\n", Arg_SSHInfo);fflush(stdout);
+	printf("Arg_NewRemote: >%s< (n/a)\n", Arg_NewRemote);fflush(stdout);
+	printf("User: >%s< (%i)\n", User, User_len);fflush(stdout);
+	printf("Host: >%s< (%i)\n", Host, Host_len);fflush(stdout);
+	printf("Arg_TerminalDevice: >%s< (%i)\n", Arg_TerminalDevice, Arg_TerminalDevice_len);fflush(stdout);
+	printf("Time: >%s< (%i)\n", Time, Time_len);fflush(stdout);
+	printf("TimeZone: >%s< (%i)\n", TimeZone, TimeZone_len);fflush(stdout);
+	printf("DateInfo: >%s< (%i)\n", DateInfo, DateInfo_len);fflush(stdout);
+	printf("CalenderWeek: >%s< (%i)\n", CalenderWeek, CalenderWeek_len);fflush(stdout);
+	printf("Arg_LocalIPs: >%s< (%i)\n", Arg_LocalIPs, Arg_LocalIPs_len);fflush(stdout);
+	printf("Arg_LocalIPsAdditional: >%s< (%i)\n", Arg_LocalIPsAdditional, Arg_LocalIPsAdditional_len);fflush(stdout);
+	printf("Arg_LocalIPsRoutes: >%s< (%i)\n", Arg_LocalIPsRoutes, Arg_LocalIPsRoutes_len);fflush(stdout);
+	printf("Arg_ProxyInfo: >%s< (%i)\n", Arg_ProxyInfo, Arg_ProxyInfo_len);fflush(stdout);
+	printf("Arg_PowerState: >%s< (%i)\n", Arg_PowerState, Arg_PowerState_len);fflush(stdout);
+	printf("Arg_BackgroundJobs: >%s< (%i)\n", Arg_BackgroundJobs, Arg_BackgroundJobs_len);fflush(stdout);
+	printf("Arg_SHLVL: >%s< (%i)\n", Arg_SHLVL, Arg_SHLVL_len);fflush(stdout);
+	printf("Arg_SSHInfo: >%s< (%i)\n", Arg_SSHInfo, Arg_SSHInfo_len);fflush(stdout);
 	for (int i = 0;i < argc;i++) {
 		printf("%soption-arg %i:\t>%s<\n", (i >= optind ? "non-" : "\t"), i, argv[i]);
 	}
@@ -1714,9 +2134,10 @@ int main(int argc, char** argv)
 			Time_len +
 			Arg_ProxyInfo_len +
 			strlen_visible(numBgJobsStr) +
-			Arg_PowerState_len + 1);
+			Arg_PowerState_len + 2);
 
-		uint32_t AdditionalElementAvailabilityPackedBool = determinePossibleCombinations(&RemainingPromptWidth, 9,
+#define AdditionalElementCount 11
+		uint32_t AdditionalElementAvailabilityPackedBool = determinePossibleCombinations(&RemainingPromptWidth, AdditionalElementCount,
 			gitSegment4_remoteinfo_len,
 			Arg_LocalIPs_len,
 			CalenderWeek_len,
@@ -1725,6 +2146,8 @@ int main(int argc, char** argv)
 			Arg_TerminalDevice_len,
 			gitSegment2_parentRepoLoc_len,
 			Arg_BackgroundJobs_len,
+			Arg_LocalIPsAdditional_len,
+			Arg_LocalIPsRoutes_len,
 			Arg_SSHInfo_len);
 
 #define AdditionalElementPriorityGitRemoteInfo 0
@@ -1735,7 +2158,9 @@ int main(int argc, char** argv)
 #define AdditionalElementPriorityTerminalDevice 5
 #define AdditionalElementPriorityParentRepoLocation 6
 #define AdditionalElementPriorityBackgroundJobDetail 7
-#define AdditionalElementPrioritySSHInfo 8
+#define AdditinoalElementPriorityNonDefaultNetworks 8
+#define AdditionalElementPriorityRoutingInfo 9
+#define AdditionalElementPrioritySSHInfo 10
 
 		//if the seventh-prioritized element (ssh connection info) has space, print it "<SSH: 123.123.13.123:54321 -> 321.312.321.321:22> "
 		if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPrioritySSHInfo)) {
@@ -1799,6 +2224,15 @@ int main(int argc, char** argv)
 			printf("%s", Arg_LocalIPs);
 		}
 
+		//Arg_LocalIPsRoutes and Arg_LocalIPsAdditional can AND WILL be NULL if the old IP-system is used (for example on WSL)
+		if (Arg_LocalIPsAdditional != NULL && (AdditionalElementAvailabilityPackedBool & (1 << AdditinoalElementPriorityNonDefaultNetworks))) {
+			printf("%s", Arg_LocalIPsAdditional);
+		}
+
+		if (Arg_LocalIPsRoutes != NULL && (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityRoutingInfo))) {
+			printf("%s", Arg_LocalIPsRoutes);
+		}
+
 		printf("%s", numBgJobsStr);
 		//if the sixth-prioritized element (background tasks) has space, print it " {1S-  2S+}"
 		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityBackgroundJobDetail))) {
@@ -1807,6 +2241,9 @@ int main(int argc, char** argv)
 
 		//print the battery state (the first unicode char can be any of ▲,≻,▽ or ◊[for not charging,but not discharging]), while the second unicode char indicates the presence of AC power "≻ 100% ↯"
 		printf("%s", Arg_PowerState);
+
+		//the last two chars on screen were intentionally empty, I am now printing  ' !' there if ANY additional element had to be omitted
+		printf("%s", ~AdditionalElementAvailabilityPackedBool & ~(~0 << AdditionalElementCount) ? " !" : "");
 
 
 		if (ri->isGit) {
@@ -1820,6 +2257,18 @@ int main(int argc, char** argv)
 		}
 		DeallocRepoInfoStrings(ri);
 		free(ri);
+		if (Arg_LocalIPs != NULL) {
+			free(Arg_LocalIPs);
+			Arg_LocalIPs = NULL;
+		}
+		if (Arg_LocalIPsAdditional != NULL) {
+			free(Arg_LocalIPsAdditional);
+			Arg_LocalIPsAdditional = NULL;
+		}
+		if (Arg_LocalIPsRoutes != NULL) {
+			free(Arg_LocalIPsRoutes);
+			Arg_LocalIPsRoutes = NULL;
+		}
 #ifndef PROFILING
 		return 0; //I am unsure why there even is a special return here, I commented it out then moved it into a preproc block because it interfers with profiling
 		//I think it may be to not clobber return codes from something else, but I don't know.
@@ -1982,7 +2431,7 @@ int main(int argc, char** argv)
 		printf("unknown command %s\n", argv[1]);
 		return -1;
 	}
-	regfree(&reg);
+	regfree(&branchParsingRegex);
 
 #ifdef PROFILING
 	struct timespec ts_end;

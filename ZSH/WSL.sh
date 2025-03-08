@@ -3,6 +3,9 @@
 printf "\e[38;5;240mSourcing WSL %s specifics\e[0m\n" "$WSL_VERSION"
 export DISPLAY=localhost:0.0
 
+PROXY_NOAPT=0
+export PROXY_NOAPT
+
 function SetupRemoteX11 (){
 	echo "On the remote server you might need to install the following and reboot: xauth"
 	sudo apt install xauth
@@ -35,6 +38,7 @@ function sshSync_int(){
 }
 
 function SSHsync(){
+	#shellcheck disable=SC2154 #reason: WinUser is guaranteed to be set if WSL has been loaded by zshc-loader
 	sshSync_int "/mnt/c/Users/$WinUser/.ssh/" "$HOME/.ssh/"
 	sshSync_int "$HOME/.ssh/" "/mnt/c/Users/$WinUser/.ssh/"
 }

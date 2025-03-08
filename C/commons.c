@@ -316,8 +316,12 @@ char* AbbreviatePath(const char* path, uint16_t KeepAllIfShorterThan, uint8_t De
 }
 
 void abortNomem() {
-	printf("Out of memory\n");
-	fprintf(stderr, "Out of memory\n");
+	abortMessage("Out of memory\n");
+}
+
+void abortMessage(const char* message) {
+	printf("%s", message);
+	fprintf(stderr, "%s", message);
 	fflush(stdout);
 	fflush(stderr);
 	exit(1);

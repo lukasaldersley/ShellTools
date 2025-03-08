@@ -20,6 +20,7 @@ printf "\e[38;5;240mSourcing $0\e[0m\n"
 #conditional syntax: %(TestChar.TrueVal.FalseVal) (for testChar doc see https://zsh.sourceforge.io/Doc/Release/Prompt-Expansion.html#Conditional-Substrings-in-Prompts)
 #conditional: the seperator doesn't need to be . it is arbitrary
 #https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit
+#NOTE at several points in here the character \a (the control char to ring a bell) is used. this is as a marker for repotools to treat that as if it were 0x00, but the substitution is only done in repotools to make it easier to pass all the required data around without something in the chain breaking because it found a null-byte
 
 
 #this will be set by oh-my-zsh anyway but it won't hurt to, for sanity, set it here as well
@@ -79,25 +80,32 @@ function GetBackgroundTaskInfo (){
 #and https://unix.stackexchange.com/questions/14961/how-to-find-out-which-interface-am-i-using-for-connecting-to-the-internet (the bit about ip route ls |grep defult (the sed is my own work))
 #another way would be to cause a dns lookup like so and grep that ip route get 8.8.8.8
 function GetLocalIP (){
-	IpAddrList=""
-	for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices for any 'default routes'
-	do
-		#TODO possibly display metric (lower is better) or mark lowest metric route with a star
-		#TODO find out what metrics I get if a system has two valid conns (eg serenity) -> both connections (provided they are on the same network have the same metric (wsl:0; win:35), this holds true even in windows (cmd: route print))
-		#I tested conecting to mobile hostpot while also on enternet->result: in wsl both have metric 0, whereas in windows the wifi from mobile tethering had metric 50 while ethernet remained at 35
-		#lookup the IP for those devices
-		#the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
-		isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
-		if [ "$isupstate" ]; then
-			IpAddrList="$IpAddrList $i:$isupstate"
+	if [ ${WSL_VERSION:-0} -ne 0 ]; then
+		#WSL_VERSION is set and non-zero -> on WSL
+		#since WSL's networking is at best (WSL1) a direct representation of Windows's config or at worst (WSL2) a VM with nonstandard networking I'm just not going to bother with advanced concepts like metrics etc
+		IpAddrList=""
+		for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices for any 'default routes'
+		do
+			#TODO possibly display metric (lower is better) or mark lowest metric route with a star
+			#TODO find out what metrics I get if a system has two valid conns (eg serenity) -> both connections (provided they are on the same network have the same metric (wsl:0; win:35), this holds true even in windows (cmd: route 	print))
+			#I tested conecting to mobile hostpot while also on enternet->result: in wsl both have metric 0, whereas in windows the wifi from mobile tethering had metric 50 while ethernet remained at 35
+			#lookup the IP for those devices
+			#the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
+			isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
+			if [ "$isupstate" ]; then
+				IpAddrList="$IpAddrList $i:$isupstate"
+			fi
+		done
+
+		if [ ! "$IpAddrList" ]; then
+			IpAddrList=" NC"
 		fi
-	done
-
-	if [ ! "$IpAddrList" ]; then
-		IpAddrList=" NC"
+		echo "-i$IpAddrList\a"
+		#echo "$IpAddrList" #|cut -c2- #bin the first space
+	else
+		# we are on a bare-metal linux or at least on a non-wsl platform so IP resolution is to be done by repotools.c which is also responsible for gatehring and parsing everything itself
+		echo "-I"
 	fi
-
-	echo "$IpAddrList" #|cut -c2- #bin the first space
 }
 
 GetProxyInfo(){
@@ -234,8 +242,10 @@ function PowerState (){
 	echo -e "%B$__PWR_COND_STATUS$__PWR_COND_LVL\a%%%f%b$__PWR_EXT_STATUS"
 }
 
+#the print -P wrappers are to replace ZSH escape sequences with what they actually mean such as replacing %y with the terminal device and also to transform the sequence \a from effectively \\a (0x5c 0x61) into the real \a (0x07)
 function MainPrompt(){
-	print -P "\n$($ST_CFG/repotools.elf --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" -i"$(print -P "$(GetLocalIP)\a")" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -l" [$SHLVL]" -s"$(print "$(GetSSHInfo)\a")" "$(pwd)")"
+	#print -P "\n$($ST_CFG/repotools.elf --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" -i"$(print -P "$(GetLocalIP)\a")" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -l" [$SHLVL]" -s"$(print "$(GetSSHInfo)\a")" "$(pwd)")"
+	print -P "\n$($ST_CFG/repotools.elf --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" "$(GetLocalIP)" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -l" [$SHLVL]" -s"$(print -P "$(GetSSHInfo)\a")" "$(pwd)")"
 }
 
 add-zsh-hook precmd MainPrompt
@@ -252,7 +262,7 @@ PROMPT='$("$ST_CFG/repotools.elf" --lowprompt -r"$?" -c"$COLUMNS" -t"$CmdDur" "$
 # - : GetBackgroundTasks was being executed, but kept returning empty strings (probably because jobs is a zsh builtin and the prompt building was happening in another subshell with no jobs or something)
 # - : having a linebreak in PROMPT messed with the positioning of RPROMPT and the carret behaviour for editing typed commands
 # - : hitting 'HOME' or 'POS1' often would send the carret to the top line and was showing editing that but in reality it was invisibly editing the command string
-# - : on slow systems (eg the 8-ish watt Laptops, or any ARM device I've tried) the creation of the prompt may take a few seconds, and even with warm cache and optimal conditions still takes about a second (on the real computers (120+W TDP desktops) it'll run in 0.1s or less but on the laptops it's fucking slow, run it with -DPROFILING, you'll see)
+# - : on slow systems (eg the 8-ish watt Laptops, or any ARM device I've tried) the creation of the prompt may take a few seconds, and even with warm cache and optimal conditions still takes about a second (on the real computers (120+W TDP desktops under WSL) it'll run in 0.1s or less (on native linux it's even faster) but on the laptops it's fucking slow, run it with -DPROFILING, you'll see)
 #Conclusion: Make top line single-fire evaluation
 
 echo -e "\e[38;5;240mdone loading $(basename $0)\e[0m"

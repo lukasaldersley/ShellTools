@@ -62,4 +62,6 @@ fi
 #flatpak list shows different branches of installed packages as seperate, but hides any *.Locale packages (I assume the .Locale packages just provide translations)
 #for now I am going to go with flatpak list's interpretation but add the convenience feature of showing how many user facing apps there are by parsing /var/lib/flatpak/app as well
 
-printf "Out of %s installed flatpaks (%s apps), there are %s to be updated\n" "$(flatpak list | tail -n+1 | wc -l)" "$(ls /var/lib/flatpak/app | wc -l)" "$(flatpak remote-ls --updates | tail -n+1 | wc -l)"
+# Flatpak remote-ls --updates uses the same logic as flatpak list, the confirmation for flatpak update (the actual update command does show the locale packages)
+
+printf "Out of %s installed flatpaks (%s apps) [Ignoring Localisation], there are %s to be updated\n" "$(flatpak list | tail -n+1 | wc -l)" "$(find /var/lib/flatpak/app -maxdepth 1 -mindepth 1 -type d | wc -l)" "$(flatpak remote-ls --updates | tail -n+1 | wc -l)"
