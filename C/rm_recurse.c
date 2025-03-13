@@ -27,10 +27,10 @@ I should mention a simple rm -rf from WSL didn't fix the problem, I assume since
 void func(const char* dir) {
 	printf("start recursive rm on %s\n", dir);
 	DIR* directoryPointer;
-	struct dirent* direntptr;
 	directoryPointer = opendir(dir);
 	if (directoryPointer != NULL)
 	{
+		const struct dirent* direntptr;
 		while ((direntptr = readdir(directoryPointer)))
 		{
 			//printf("testing: %s (directory: %s)\n", direntptr->d_name, (direntptr->d_type == DT_DIR ? "TRUE" : "NO"));

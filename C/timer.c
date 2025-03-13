@@ -64,7 +64,17 @@ void stopTimer(unsigned long long start) {
 
 int main(int argc, char** argv) {
 	if (!(argc == 2 || argc == 3 || argc == 8)) {
-		fprintf(stderr, "usage: '%1$s START' OR '%1$s STOP x' where x is the output this program gave when called with START\nYou supplied %2$i arguments but only 1, 2 or 7 are valid", argv[0], argc - 1);
+		/*cppcheck completely looses it's mind over this.
+		const char* txt = "Some String";
+		//CppCheck belives the following is correct, but it obviously isn't. argv is char**, not int
+		//printf("1: %1$s  2: %1$s  3: %2$i", txt, argv);
+		//CppCheck believes the following is incorrect, but it definitly is.
+		printf("1: %1$s  2: %1$s  3: %2$i", txt, argc);
+		//gcc -with -Wall or -Wformat agrees with me. In this case if I get cppcheck to shut up, the compiler will be pissed and vice versa
+		//therefore I will agree with gcc and in-line suppress cppcheck
+		*/
+		// cppcheck-suppress invalidPrintfArgType_s
+		printf("usage: '%1$s START' OR '%1$s STOP x' where x is the output this program gave when called with START\nYou supplied %2$i arguments but only 1, 2 or 7 are valid", argv[0], argc);
 		return 1;
 	}
 	if (Compare(argv[1], "START") && argc == 2) {

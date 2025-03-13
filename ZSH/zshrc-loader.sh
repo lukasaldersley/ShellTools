@@ -255,7 +255,9 @@ enableProxy(){
 
 disableProxy(){
 	unset {http,https,ftp,no}_proxy
-	echo "">/etc/apt/apt.conf.d/proxy
+	if [ "$PROXY_NOAPT" -eq 0 ]; then
+		echo "">/etc/apt/apt.conf.d/proxy
+	fi
 	echo "disabled proxy"
 }
 

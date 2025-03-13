@@ -44,7 +44,7 @@ StringRelations CompareStrings(const char* a, const char* b) {
 	return result;
 }
 
-inline char ToLowerCase(char c)
+inline char ToLowerCase(const char c)
 {
 	if (c >= 'A' && c <= 'Z')
 	{
@@ -56,7 +56,7 @@ inline char ToLowerCase(char c)
 	}
 }
 
-inline char ToUpperCase(char c)
+inline char ToUpperCase(const char c)
 {
 	if (c >= 'a' && c <= 'z')
 	{
@@ -70,25 +70,35 @@ inline char ToUpperCase(char c)
 
 bool StartsWith(const char* a, const char* b)
 {
+	if (a == b) {
+		return true;
+	}
+	if (a == NULL || b == NULL) {
+		return false;
+	}
 	bool matching = true;
 	int idx = 0;
 	while (matching && a[idx] != 0x00 && b[idx] != 0x00)
 	{
-		//fprintf(stderr, "a: %1$c <0x%1$x> b: %2$c <0x%2$x>\n", a[idx], b[idx]);
+#ifdef DEBUG
+		fprintf(stderr, "a: %1$c <0x%1$x> b: %2$c <0x%2$x>\n", a[idx], b[idx]);
+#endif
 		if (a[idx] != b[idx])
 		{
-			//fprintf(stderr, "mismatch between %1$c <0x%1$x> and %2$c <0x%2$x>\n", a[idx], b[idx]);
+#ifdef DEBUG
+			fprintf(stderr, "mismatch between %1$c <0x%1$x> and %2$c <0x%2$x>\n", a[idx], b[idx]);
+#endif
 			matching = false;
 			break;
 		}
-		else if (b[idx] == 0x00)
-		{
-			//fprintf(stderr, "reached end of b -> full match complete\n");
-			matching = true;
-			break;
-			// the two strings differ, but the difference is b ended whil a continues, therefore a starts with b
-		}
 		idx++;
+	}
+	if (b[idx] != 0x00 && a[idx] == 0x00) {
+		//a ended, but b hasn't -> a cannot contain b
+#ifdef DEBUG
+		fprintf(stderr, "a ended, but b continues with %1$c <0x%1$x>\n", b[idx]);
+#endif
+		return false;
 	}
 	return matching;
 }
@@ -116,9 +126,9 @@ bool ContainsString(const char* str, const char* test)
 
 uint32_t TerminateStrOn(char* str, const char* terminators) {
 	uint32_t i = 0;
-	while (str[i] != 0x00 && i < UINT32_MAX) {
+	while (i < UINT32_MAX && str[i] != 0x00) {
 		int8_t t = 0;
-		while (terminators[t] != 0x00 && t < UINT8_MAX) {
+		while (t < UINT8_MAX && terminators[t] != 0x00) {
 			if (str[i] == terminators[t]) {
 				str[i] = 0x00;
 				return i;
@@ -130,7 +140,38 @@ uint32_t TerminateStrOn(char* str, const char* terminators) {
 	return i;
 }
 
+int16_t NextIndexOf(const char* txt, char tst, int startindex) {
+	if (txt == NULL || startindex < 0) {
+		//basically nonsense inputs (start before the first element or passed unallocated string) -> just quit with error
+		return -2;
+	}
+	int16_t idx = -1;
+	int16_t searchIndex = 0;
+	while (searchIndex < startindex) {
+		if (txt[searchIndex] == 0x00) {
+			//sanity check; ensure end of string isn't before startindex
+#ifdef DEBUG
+			fprintf(stderr, "WARNING: StartIndex %i is out of bounds at %i for %s in NextIndexOf()\n", startindex, searchIndex, txt);
+#endif
+			return -2;
+		}
+		searchIndex++;
+	}
+	searchIndex = startindex;
+	while (txt[searchIndex] != 0x00) {
+		if (txt[searchIndex] == tst) {
+			idx = searchIndex;
+			break;
+		}
+		searchIndex++;
+	}
+	return idx;
+}
+
 int16_t LastIndexOf(const char* txt, char tst) {
+	if (txt == NULL) {
+		return -2;
+	}
 	int16_t idx = -1;
 	int16_t searchIndex = 0;
 	while (txt[searchIndex] != 0x00) {
@@ -139,15 +180,17 @@ int16_t LastIndexOf(const char* txt, char tst) {
 		}
 		searchIndex++;
 	}
+	if (tst == 0x00) {
+		//if I searched for the last index of the null-byte, return what is essentially strlen
+		return searchIndex;
+	}
 	return idx;
 }
 
 char* ExecuteProcess(const char* command) {
 	int size = 1024;
 	char* result = malloc(sizeof(char) * size);
-	if (result == NULL) {
-		return NULL;
-	}
+	if (result == NULL) ABORT_NO_MEMORY;
 	FILE* fp = popen(command, "r");
 	if (fp == NULL)
 	{
@@ -164,8 +207,8 @@ char* ExecuteProcess(const char* command) {
 			//show superprojet working tree returns 0 bytes if it's a toplevel thing -> just print back an empty string
 			result[0] = 0x00;
 		}
+		pclose(fp);
 	}
-	pclose(fp);
 	return result;
 }
 
@@ -223,7 +266,7 @@ int strlen_visible(const char* s) {
 		if ((c & 0b11000000) == 0b11000000) {
 			//begins with 11... -> UTF8
 			count++;
-			while (s[idx] != 0x00 && (c & 0b11000000) == 0b10000000) {
+			while (s[idx] != 0x00 && (s[idx] & 0b11000000) == 0b10000000) {
 				//in utf-8 the first byte is 11------ while all following bytes are 10------
 				idx++;
 			}
@@ -248,20 +291,20 @@ char* AbbreviatePathAuto(const char* path, uint16_t KeepAllIfShorterThan, uint8_
 char* AbbreviatePath(const char* path, uint16_t KeepAllIfShorterThan, uint8_t DesiredKeepElementsFront, uint8_t DesiredKeepElementsBack) {
 	if (KeepAllIfShorterThan < 1) { KeepAllIfShorterThan = 1; }
 	char* Workpath;
-	if (asprintf(&Workpath, "%s", path) == -1)abortNomem();
+	if (asprintf(&Workpath, "%s", path) == -1) ABORT_NO_MEMORY;
 	uint16_t len = strlen(Workpath);
 	char* ret = NULL;
 	if (len <= KeepAllIfShorterThan) {
 		//text is so short, it won't be shortened anymore -> done
-		if (asprintf(&ret, "%s", Workpath) == -1)abortNomem();
+		if (asprintf(&ret, "%s", Workpath) == -1) ABORT_NO_MEMORY;
 	}
 	else {
 		char* FromBack = Workpath + len - 1;
 		char* FromFront = Workpath;
-		uint8_t foundFront = 0;
-		uint8_t foundBack = 0;
-		uint16_t backLen = 0;
-		uint16_t frontLen = 0;
+		// cppcheck-suppress variableScope ; Reson: readability
+		uint16_t backLen = 0, frontLen = 0;
+		// cppcheck-suppress variableScope ; Reson: readability
+		uint8_t foundFront = 0, foundBack = 0;
 		//if the string ends with / (or multiple of them), delete them, but keep at least one char in the entire string (eg the string is "/////", which in Unix just means /, so I too can shorten the string to /)
 		while (*FromBack == '/' && FromBack > FromFront) {
 			*FromBack = 0x00;
@@ -270,7 +313,7 @@ char* AbbreviatePath(const char* path, uint16_t KeepAllIfShorterThan, uint8_t De
 		}
 		//the string has potentially become short enough to be done already
 		if (len <= KeepAllIfShorterThan) {
-			if (asprintf(&ret, "%s", Workpath) == -1)abortNomem();
+			if (asprintf(&ret, "%s", Workpath) == -1) ABORT_NO_MEMORY;
 		}
 		else {
 			//walk backwards over the string until I identified DesiredKeepElementsBack elements (while NOT overruning the start of the string if there's fewer)
@@ -287,7 +330,7 @@ char* AbbreviatePath(const char* path, uint16_t KeepAllIfShorterThan, uint8_t De
 				frontLen++;
 				if (*FromFront == '/' || *FromFront == '\\') {
 					if (frontLen == 4 && *(FromFront + 2) == '/' && StartsWith(Workpath, "/mnt/")) {
-						;//this is a special case: I wan to count "/mnt/*/" as a single element, since just /mnt alone is kinda worthless -> skip over a single / if the conditions are right; this is mostly relevant for WSL where windows's Drive letters are assigned that way. C:\ becomes /mnt/c/
+						;//this is a special case: I want to count "/mnt/*/" as a single element, since just /mnt alone is kinda worthless -> skip over a single / if the conditions are right; this is mostly relevant for WSL where windows's Drive letters are assigned that way. C:\ becomes /mnt/c/
 					}
 					else {
 						foundFront++;
@@ -295,19 +338,18 @@ char* AbbreviatePath(const char* path, uint16_t KeepAllIfShorterThan, uint8_t De
 				}
 			}
 		}
-		if (FromBack - FromFront <= 3) {
+		if ((uint64_t)FromBack - (uint64_t)FromFront <= 6) {
 			//the text would become longer by inserting the ..., so just keep the original text
 			//this would happen with something like AbbreviatePath(/mnt/c/WS/CODE/BAT_VBS,20,3) where WS would be abbreiviated, but the abreviation ... is longer than the original name -> it doesn't make sense
-			//printf("Front and bacl coincide\n");
-			if (asprintf(&ret, "%s", Workpath) == -1)abortNomem();
+			if (asprintf(&ret, "%s", Workpath) == -1) ABORT_NO_MEMORY;
 		}
 		else if (frontLen == 0) {
 			//if the front segment doesn't exist, only print the back segment WITHOUT clobbering a seperator in front
-			if (asprintf(&ret, "%s", FromBack + 1) == -1)abortNomem();
+			if (asprintf(&ret, "%s", FromBack + 1) == -1) ABORT_NO_MEMORY;
 		}
 		else {
 			*(Workpath + frontLen) = 0x00;//truncate the work text to only contain the front segment
-			if (asprintf(&ret, "%s/[...]/%s", Workpath, FromBack + 1) == -1)abortNomem();
+			if (asprintf(&ret, "%s/[...]/%s", Workpath, FromBack + 1) == -1)ABORT_NO_MEMORY;
 		}
 		//printf("%s & %s (%i + %i)\n", Workpath, FromBack + 1, frontLen, backLen);
 	}

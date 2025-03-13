@@ -17,7 +17,7 @@ if [ "$(eval "$TargetDir/$TargetName --equal=\" v\" AbBxB B Bdef efghiC v3.17 \"
 	[ "$(eval "$TargetDir/$TargetName -i -e \" v\" Kubuntu \"Ubuntu 24.10\" \" 24.10 (Oracular Oriole)\"")" = "Kubuntu 24.10 (Oracular Oriole)" ] && \
 	[ "$(eval "$TargetDir/$TargetName --ignore-case aaaa aaa aaAaa aab aa aaa aac")" = "aaaaabaaac" ] ;
 then
-	printf "Tests for %s completed \e[32mOK\e[0m\n" "$TargetDir/$TargetName"
+	printf "Tests for %s completed \e[32mPASS\e[0m\n" "$TargetDir/$TargetName"
 	exit 0
 else
 	if [ $# -ne 0 ]; then
@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
 	int numeqlists = 0;
 	//allocate space for as many pointers to equality lists as there are arguments (for the worst case of every single argument is an equality list definition [that doesn't make sense, but it is the upper boundary])
 	char** eqlists = (char**)malloc(sizeof(char*) * argc);
-	if (eqlists == NULL)abortNomem();
+	if (eqlists == NULL) ABORT_NO_MEMORY;
 	//null-initialize array to cause obvious errors if something goes wrong
 	for (int i = 0;i < argc;i++) {
 		*(eqlists + i) = NULL;
@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
 		int getopt_currentChar;
 		int option_index = 0;
 
-		static struct option long_options[] = {
+		const static struct option long_options[] = {
 			{"equal", required_argument, 0, 'e' },
 			{"ignore-case", no_argument, 0, 'i'},
 			{0, 0, 0, 0 }
@@ -181,6 +181,7 @@ int main(int argc, char** argv) {
 #endif
 	}
 	char* base = (char*)malloc(sizeof(char) * maxSize);
+	if (base == NULL) ABORT_NO_MEMORY;
 	for (int i = 0;i < maxSize;i++) {
 		*(base + i) = 0x00;
 	}
@@ -188,7 +189,7 @@ int main(int argc, char** argv) {
 
 #ifdef DEBUG
 	for (int i = 0;i < numeqlists;i++) {
-		char* clist = *(eqlists + i);
+		const char* clist = *(eqlists + i);
 		printf("%i. equality list: >%s<\n", i, clist);
 	}
 #endif
@@ -199,7 +200,7 @@ int main(int argc, char** argv) {
 #endif
 		knownlen = assemble(base, maxSize, knownlen, *(argv + i), strlen(*(argv + i)), eqlists, numeqlists, ignoreCase);
 		if (knownlen < 0) {
-			fprintf(stderr, "something went HORRIBLY wrong and my algorithm is FUNDAMENTALLY FALSE\n");
+			fprintf(stderr, "something went HORRIBLY wrong and my algorithm is FUNDAMENTALLY INCORRECT\n");
 			return 1;
 		}
 #ifdef DEBUG

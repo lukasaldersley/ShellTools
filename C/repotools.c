@@ -123,7 +123,7 @@ struct RepoInfo_t {
 
 RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName) {
 	RepoInfo* ri = (RepoInfo*)malloc(sizeof(RepoInfo));
-	if (ri == NULL)abortNomem();
+	if (ri == NULL) ABORT_NO_MEMORY;
 	ri->ParentDirectory = NULL;
 	ri->SubDirectories = NULL;
 	ri->DirectoryName = NULL;
@@ -157,8 +157,8 @@ RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName) {
 	ri->CountFullyMergedBranches = 0;
 	ri->CheckedOutBranchIsNotInRemote = false;
 
-	if (asprintf(&(ri->DirectoryName), "%s", directoryName) == -1)abortNomem();
-	if (asprintf(&(ri->DirectoryPath), "%s%s%s", directoryPath, ((strlen(directoryPath) > 0) ? "/" : ""), directoryName) == -1)abortNomem();
+	if (asprintf(&(ri->DirectoryName), "%s", directoryName) == -1) ABORT_NO_MEMORY;
+	if (asprintf(&(ri->DirectoryPath), "%s%s%s", directoryPath, ((strlen(directoryPath) > 0) ? "/" : ""), directoryName) == -1) ABORT_NO_MEMORY;
 	return ri;
 }
 
@@ -174,19 +174,19 @@ void DeallocRepoInfoStrings(RepoInfo* ri) {
 }
 
 void AllocUnsetStringsToEmpty(RepoInfo* ri) {
-	if (ri->DirectoryName == NULL) { ri->DirectoryName = (char*)malloc(sizeof(char));ri->DirectoryName[0] = 0x00; }
-	if (ri->DirectoryPath == NULL) { ri->DirectoryPath = (char*)malloc(sizeof(char));ri->DirectoryPath[0] = 0x00; }
-	if (ri->RepositoryName == NULL) { ri->RepositoryName = (char*)malloc(sizeof(char));ri->RepositoryName[0] = 0x00; }
-	if (ri->RepositoryDisplayedOrigin == NULL) { ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char));ri->RepositoryDisplayedOrigin[0] = 0x00; }
-	if (ri->RepositoryUnprocessedOrigin == NULL) { ri->RepositoryUnprocessedOrigin = (char*)malloc(sizeof(char));ri->RepositoryUnprocessedOrigin[0] = 0x00; }
-	if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { ri->RepositoryUnprocessedOrigin_PREVIOUS = (char*)malloc(sizeof(char));ri->RepositoryUnprocessedOrigin_PREVIOUS[0] = 0x00; }
-	if (ri->branch == NULL) { ri->branch = (char*)malloc(sizeof(char));ri->branch[0] = 0x00; }
-	if (ri->parentRepo == NULL) { ri->parentRepo = (char*)malloc(sizeof(char));ri->parentRepo[0] = 0x00; }
+	if (ri->DirectoryName == NULL) { ri->DirectoryName = (char*)malloc(sizeof(char)); if (ri->DirectoryName == NULL) { ABORT_NO_MEMORY; } ri->DirectoryName[0] = 0x00; }
+	if (ri->DirectoryPath == NULL) { ri->DirectoryPath = (char*)malloc(sizeof(char)); if (ri->DirectoryPath == NULL) { ABORT_NO_MEMORY; } ri->DirectoryPath[0] = 0x00; }
+	if (ri->RepositoryName == NULL) { ri->RepositoryName = (char*)malloc(sizeof(char)); if (ri->RepositoryName == NULL) { ABORT_NO_MEMORY; } ri->RepositoryName[0] = 0x00; }
+	if (ri->RepositoryDisplayedOrigin == NULL) { ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char)); if (ri->RepositoryDisplayedOrigin == NULL) { ABORT_NO_MEMORY; } ri->RepositoryDisplayedOrigin[0] = 0x00; }
+	if (ri->RepositoryUnprocessedOrigin == NULL) { ri->RepositoryUnprocessedOrigin = (char*)malloc(sizeof(char)); if (ri->RepositoryUnprocessedOrigin == NULL) { ABORT_NO_MEMORY; } ri->RepositoryUnprocessedOrigin[0] = 0x00; }
+	if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { ri->RepositoryUnprocessedOrigin_PREVIOUS = (char*)malloc(sizeof(char)); if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { ABORT_NO_MEMORY; } ri->RepositoryUnprocessedOrigin_PREVIOUS[0] = 0x00; }
+	if (ri->branch == NULL) { ri->branch = (char*)malloc(sizeof(char)); if (ri->branch == NULL) { ABORT_NO_MEMORY; } ri->branch[0] = 0x00; }
+	if (ri->parentRepo == NULL) { ri->parentRepo = (char*)malloc(sizeof(char)); if (ri->parentRepo == NULL) { ABORT_NO_MEMORY; } ri->parentRepo[0] = 0x00; }
 }
 
 BranchListSorted* InitBranchListSortedElement() {
 	BranchListSorted* a = (BranchListSorted*)malloc(sizeof(BranchListSorted));
-	if (a == NULL)abortNomem();
+	if (a == NULL) ABORT_NO_MEMORY;
 	BranchInfo* e = &(a->branchinfo);
 	e->BranchName = NULL;
 	e->CommitHashLocal = NULL;
@@ -202,22 +202,22 @@ BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char* branc
 		BranchListSorted* n = InitBranchListSortedElement();
 		n->next = NULL;
 		n->prev = NULL;
-		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1)abortNomem();
+		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1) ABORT_NO_MEMORY;
 		if (remote) {
-			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1)abortNomem();
+			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		else {
-			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1)abortNomem();
+			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		return n;
 	}
 	else if (Compare(head->branchinfo.BranchName, branchname)) {
 		//Branch Name matches, this means I know of the local copy and am adding the remote one or vice versa
 		if (remote) {
-			if (asprintf(&(head->branchinfo.CommitHashRemote), "%s", hash) == -1)abortNomem();
+			if (asprintf(&(head->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		else {
-			if (asprintf(&(head->branchinfo.CommitHashLocal), "%s", hash) == -1)abortNomem();
+			if (asprintf(&(head->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		return head;
 	}
@@ -228,12 +228,12 @@ BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char* branc
 		n->prev = head->prev;
 		if (head->prev != NULL) head->prev->next = n;
 		head->prev = n;
-		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1)abortNomem();
+		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1) ABORT_NO_MEMORY;
 		if (remote) {
-			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1)abortNomem();
+			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		else {
-			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1)abortNomem();
+			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		return n;
 	}
@@ -241,16 +241,15 @@ BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char* branc
 		//The New Element is NOT Equal to myself and is NOT alphabetically before myself (as per the earlier checks)
 		//on top of that, I AM the LAST element, so I can simply create a new last element
 		BranchListSorted* n = InitBranchListSortedElement();
-		n->next = head->next;
+		n->next = NULL;
 		n->prev = head;
-		if (head->next != NULL) head->next->prev = n;
 		head->next = n;
-		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1)abortNomem();
+		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1) ABORT_NO_MEMORY;
 		if (remote) {
-			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1)abortNomem();
+			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		else {
-			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1)abortNomem();
+			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		return head;
 	}
@@ -265,12 +264,13 @@ BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char* branc
 bool IsMergeCommit(const char* repoPath, const char* commitHash) {
 	const int size = 32;
 	char* result = (char*)malloc(sizeof(char) * size);
+	if (result == NULL) ABORT_NO_MEMORY;
 	char* cmd;
 	bool RES = false;
 	//this looks up the commit hashes for all parents of a given commit
 	//usually a commit has EXACTLY ONE parent, the only exceptions are the initial commit (no parents) or a merge commit (two parents)
 	//therefore if a commit has 2 parents it's a merge commit
-	if (asprintf(&cmd, "git -C \"%s\" cat-file -p %s |grep parent|wc -l", repoPath, commitHash) == -1)abortNomem();
+	if (asprintf(&cmd, "git -C \"%s\" cat-file -p %s |grep parent|wc -l", repoPath, commitHash) == -1) ABORT_NO_MEMORY;
 	FILE* fp = popen(cmd, "r");
 	if (fp == NULL)
 	{
@@ -284,9 +284,9 @@ bool IsMergeCommit(const char* repoPath, const char* commitHash) {
 				RES = true;
 			}
 		}
+		pclose(fp);
 	}
 	free(result);
-	pclose(fp);
 	free(cmd);
 	return RES;
 }
@@ -304,9 +304,10 @@ bool IsMerged(const char* repopath, const char* commithash) {
 	//for each check if merge commit, if at least one is a merge commit, then this branch has been merged
 	const int size = 64;
 	char* result = (char*)malloc(sizeof(char) * size);
+	if (result == NULL) ABORT_NO_MEMORY;
 	char* cmd;
 	bool RES = false;
-	if (asprintf(&cmd, "git -C \"%s\" rev-list --children --all | grep ^%s | cut -c42- | tr ' ' '\n'", repopath, commithash) == -1)abortNomem();
+	if (asprintf(&cmd, "git -C \"%s\" rev-list --children --all | grep ^%s | cut -c42- | tr ' ' '\n'", repopath, commithash) == -1) ABORT_NO_MEMORY;
 	FILE* fp = popen(cmd, "r");
 	if (fp == NULL)
 	{
@@ -324,9 +325,9 @@ bool IsMerged(const char* repopath, const char* commithash) {
 			//printf("%s is%s a merge commit\n", result, imc ? "" : " NOT");
 			RES = RES || imc;
 		}
+		pclose(fp);
 	}
 	free(result);
-	pclose(fp);
 	free(cmd);
 	return RES;
 }
@@ -339,7 +340,8 @@ bool CheckBranching(RepoInfo* ri) {
 	char* command;
 	int size = 1024;
 	char* result = (char*)malloc(sizeof(char) * size);
-	if (asprintf(&command, "git -C \"%s\" branch -vva", ri->DirectoryPath) == -1)abortNomem();
+	if (result == NULL) ABORT_NO_MEMORY;
+	if (asprintf(&command, "git -C \"%s\" branch -vva", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
 	FILE* fp = popen(command, "r");
 	if (fp == NULL)
 	{
@@ -368,6 +370,7 @@ bool CheckBranching(RepoInfo* ri) {
 			//printf("\n\n%s\n", result);
 			fflush(stdout);
 			int RegexReturnCode = regexec(&branchParsingRegex, result, maxGroups, CapturedResults, 0);
+			//man regex (3): regexec() returns zero for a successful match or REG_NOMATCH for failure.
 			if (RegexReturnCode == 0)
 			{
 				char* bname = NULL;
@@ -384,20 +387,25 @@ bool CheckBranching(RepoInfo* ri) {
 					int len = end - start;
 
 					char* x = malloc(sizeof(char) * (len + 1));
+					if (x == NULL) ABORT_NO_MEMORY;
 					strncpy(x, result + start, len);
 					x[len] = 0x00;
 					if (GroupID == 1) {
 						int offs = 0;
 						if (StartsWith(x, "remotes/")) {
-							offs = LastIndexOf(x, '/') + 1;
+							//offs = LastIndexOf(x, '/') + 1; //if the branch name contains / such as feature/SOMETHING that would fail.
+							//now I check not the text after the last / but the text after remotes/***/ to allow remotes other than origin
+							offs = NextIndexOf(x, '/', 8) + 1;
 							rm = true;
 						}
 						bname = malloc(sizeof(char) * ((len - offs) + 1));
+						if (bname == NULL) ABORT_NO_MEMORY;
 						strncpy(bname, result + start + offs, len - offs);
 						bname[len - offs] = 0x00;
 					}
 					else if (GroupID == 2) {
 						hash = malloc(sizeof(char) * (len + 1));
+						if (hash == NULL) ABORT_NO_MEMORY;
 						strncpy(hash, result + start, len);
 						hash[len] = 0x00;
 					}
@@ -488,12 +496,9 @@ bool CheckBranching(RepoInfo* ri) {
 bool CheckExtendedGitStatus(RepoInfo* ri) {
 	int size = 1024;
 	char* result = malloc(sizeof(char) * size);
-	if (result == NULL) {
-		fprintf(stderr, "OUT OF MEMORY");
-		return 0;
-	}
+	if (result == NULL) ABORT_NO_MEMORY;
 	char* command;
-	if (asprintf(&command, "git -C \"%s\" status --ignore-submodules=dirty --porcelain=v2 -b --show-stash", ri->DirectoryPath) == -1)abortNomem();
+	if (asprintf(&command, "git -C \"%s\" status --ignore-submodules=dirty --porcelain=v2 -b --show-stash", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
 	FILE* fp = popen(command, "r");
 	//printf("have opened git status\r");
 	if (fp == NULL)
@@ -534,13 +539,13 @@ bool CheckExtendedGitStatus(RepoInfo* ri) {
 
 			}
 			else if (StartsWith(result, "# stash ")) {
-				char* num = result + 8;
+				const char* num = result + 8;
 				ri->stashes = atoi(num);
 			}
 		}
+		pclose(fp);
 	}
 	free(result);
-	pclose(fp);
 	free(command);
 	return size != 0;//if I set size to 0 when erroring out, return false/0; else 1
 }
@@ -549,6 +554,7 @@ void AddChild(RepoInfo* parent, RepoInfo* child) {
 	//if the ParentDirectory node doesn't have any SubDirectories, it also won't have the list structure -> allocate and create it.
 	if (parent->SubDirectories == NULL) {
 		parent->SubDirectories = (RepoList*)malloc(sizeof(RepoList));
+		if (parent->SubDirectories == NULL) ABORT_NO_MEMORY;
 		parent->SubDirectories->self = child;
 		parent->SubDirectories->next = NULL;
 		parent->SubDirectories->prev = NULL;
@@ -561,6 +567,7 @@ void AddChild(RepoInfo* parent, RepoInfo* child) {
 			current = current->next;
 		}
 		current->next = (RepoList*)malloc(sizeof(RepoList));
+		if (current->next == NULL) ABORT_NO_MEMORY;
 		current->next->prev = current;
 		current->next->self = child;
 		current->next->next = NULL;
@@ -575,11 +582,11 @@ char* FixImplicitProtocol(const char* input)
 	if (ContainsString(input, "@") && !ContainsString(input, "://"))
 	{
 		// repo contains @ but not :// ie it is a ssh://, but ssh:// is implicit
-		if (asprintf(&reply, "ssh://%s", input) == -1)abortNomem();
+		if (asprintf(&reply, "ssh://%s", input) == -1) ABORT_NO_MEMORY;
 	}
 	else
 	{
-		if (asprintf(&reply, "%s", input) == -1)abortNomem();
+		if (asprintf(&reply, "%s", input) == -1) ABORT_NO_MEMORY;
 	}
 	return reply;
 }
@@ -602,11 +609,11 @@ int cpyString(char* dest, const char* src, int maxCount) {
 	*/
 
 bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoProcessWorktree, bool BeThorough) {
-	//the return value is just: has an error occurred
+	//the return value is just: has this successfully executed
 
 	char* cmd;
 	if (BeThorough || DoProcessWorktree) {
-		if (asprintf(&cmd, "git -C \"%s\" rev-parse --is-bare-repository 2>/dev/null", ri->DirectoryPath) == -1)abortNomem();
+		if (asprintf(&cmd, "git -C \"%s\" rev-parse --is-bare-repository 2>/dev/null", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
 		char* bareRes = ExecuteProcess(cmd);
 		free(cmd);
 		if (bareRes == NULL) {
@@ -622,7 +629,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 		ri->isGit = ri->isBare;//initial value
 
 		if (!ri->isBare) {
-			if (asprintf(&cmd, "git -C \"%s\" rev-parse --show-toplevel 2>/dev/null", ri->DirectoryPath) == -1)abortNomem();
+			if (asprintf(&cmd, "git -C \"%s\" rev-parse --show-toplevel 2>/dev/null", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
 			char* tlres = ExecuteProcess(cmd);
 			TerminateStrOn(tlres, terminators);
 			free(cmd);
@@ -631,7 +638,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			free(tlres);
 			if (DoProcessWorktree && !(ri->isGit)) {
 				//usually we are done at this stage (only treat as git if in toplevel, but this is for the prompt substitution where it needs to work anywhere in git)
-				if (asprintf(&cmd, "git -C \"%s\" rev-parse --is-inside-work-tree 2>/dev/null", ri->DirectoryPath) == -1)abortNomem();
+				if (asprintf(&cmd, "git -C \"%s\" rev-parse --is-inside-work-tree 2>/dev/null", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
 				char* wtres = ExecuteProcess(cmd);
 				TerminateStrOn(wtres, terminators);
 				free(cmd);
@@ -648,14 +655,14 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	//as of here it's guaranteed that the current folder IS a git directory OF SOME TYPE (if it wasn't I would have exited above)
 
 	//this tries to obtain the branch, or if that fails tag and if both fail the commit hash
-	if (asprintf(&cmd, "git -C  \"%1$s\" symbolic-ref --short HEAD 2>/dev/null || git -C \"%1$s\" describe --tags --exact-match HEAD 2>/dev/null || git -C \"%1$s\" rev-parse --short HEAD", ri->DirectoryPath) == -1)abortNomem();
+	if (asprintf(&cmd, "git -C  \"%1$s\" symbolic-ref --short HEAD 2>/dev/null || git -C \"%1$s\" describe --tags --exact-match HEAD 2>/dev/null || git -C \"%1$s\" rev-parse --short HEAD", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
 	ri->branch = ExecuteProcess(cmd);
 	TerminateStrOn(ri->branch, terminators);
 	free(cmd);
 	cmd = NULL;
 
 	//if 'git rev-parse --show-superproject-working-tree' outputs NOTHING, a repo is standalone, if there is output it will point to the parent repo
-	if (asprintf(&cmd, "git -C \"%s\" rev-parse --show-superproject-working-tree", ri->DirectoryPath) == -1)abortNomem();
+	if (asprintf(&cmd, "git -C \"%s\" rev-parse --show-superproject-working-tree", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
 	char* temp = ExecuteProcess(cmd);
 	ri->parentRepo = AbbreviatePath(temp, 15, 1, 2);
 	free(temp);
@@ -673,7 +680,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	}
 
 
-	if (asprintf(&cmd, "git -C \"%s\" ls-remote --get-url origin", ri->DirectoryPath) == -1)abortNomem();
+	if (asprintf(&cmd, "git -C \"%s\" ls-remote --get-url origin", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
 	ri->RepositoryUnprocessedOrigin = ExecuteProcess(cmd);
 	free(cmd);
 	if (ri->RepositoryUnprocessedOrigin == NULL) {
@@ -687,16 +694,16 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 		//if git ls-remote --get-url origin returns 'origin' it means either the folder is not a git repository OR it's a repository without remote (local only)
 		//in this case since I already checked this IS a repo, it MUST be a repo without remote
 		ri->HasRemote = false;
-		if (asprintf(&ri->RepositoryDisplayedOrigin, "NO_REMOTE") == -1)abortNomem();
+		if (asprintf(&ri->RepositoryDisplayedOrigin, "NO_REMOTE") == -1) ABORT_NO_MEMORY;
 		int i = 0;
-		char* tempPtr = ri->DirectoryPath;
+		const char* tempPtr = ri->DirectoryPath;
 		while (ri->DirectoryPath[i] != 0x00) {
 			if (ri->DirectoryPath[i] == '/') {
 				tempPtr = ri->DirectoryPath + i + 1;
 			}
 			i++;
 		}
-		if (asprintf(&ri->RepositoryName, "%s", tempPtr) == -1)abortNomem();
+		if (asprintf(&ri->RepositoryName, "%s", tempPtr) == -1) ABORT_NO_MEMORY;
 		return true;
 	}
 	else {
@@ -714,7 +721,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			{
 				//fprintf(stderr, "\tSUCCESS\n");
 				ri->RepositoryOriginID = i;
-				if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", NAMES[i]) == -1)abortNomem();
+				if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", NAMES[i]) == -1) ABORT_NO_MEMORY;
 				break;
 			}
 		}
@@ -735,7 +742,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 		//9->reponame
 		//10->Non-Capturing(.git)
 		//DO NOT CHANGE THIS REGEX WITHOUT UPDATING THE Regex101 VARIANT, THE GROUP DEFINITIONS AND THE DESCRIPTION
-		if (asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin) == -1)abortNomem();
+		if (asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin) == -1) ABORT_NO_MEMORY;
 		//I take the capturing groups and paste them into a | seperated sting. There's 6 words (5 |), so I'll need 6 pointers into this memory area to resolve the six words
 #define REPO_ORIGIN_WORDS_IN_STRING 6
 #define REPO_ORIGIN_GROUP_PROTOCOL 0
@@ -751,9 +758,9 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			if (ri->RepositoryOriginID == -1)
 			{
 				ri->RepositoryDisplayedOrigin = AbbreviatePath(FixedProtoOrigin, 15, 2, 2);
-				//if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", FixedProtoOrigin) == -1)abortNomem();
+				//if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", FixedProtoOrigin) == -1)ABORT_NO_MEMORY;
 			}
-			char* tempptr = FixedProtoOrigin;
+			const char* tempptr = FixedProtoOrigin;
 			char* walker = FixedProtoOrigin;
 			while (*walker != 0x00) {
 				if (*walker == '/') {
@@ -761,7 +768,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 				}
 				walker++;
 			}
-			if (asprintf(&ri->RepositoryName, "%s", tempptr) == -1)abortNomem();
+			if (asprintf(&ri->RepositoryName, "%s", tempptr) == -1) ABORT_NO_MEMORY;
 
 			// in the .sh implementation I had used realpath relative to pwd to "shorten" the path, but I think it'd be better if I properly regex this up or something.
 			// like /folder/folder/[...]/folder/NAME or /folder/[...]/NAME, though if the path is short enough, I'd like the full path
@@ -792,24 +799,26 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 
 			//I take the base name of the remote rep from this parsed string regardless of the fact if it is a LOCLANET/GLOBAL or a known GitHub derivative something unknown
 			if (*ptrs[REPO_ORIGIN_GROUP_RepoName] != 0x00) {//repo name
-				if (asprintf(&ri->RepositoryName, "%s", ptrs[REPO_ORIGIN_GROUP_RepoName]) == -1)abortNomem();
+				if (asprintf(&ri->RepositoryName, "%s", ptrs[REPO_ORIGIN_GROUP_RepoName]) == -1) ABORT_NO_MEMORY;
 			}
 
 			//the rest of this only makes sense for stuff that's NOT LOCALNET/GLOBAL etc.
 			if (ri->RepositoryOriginID == -1)//not a known repo origin (ie not from LOCALNET, NONE etc)
 			{
-				ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char) * 256);
+				const int OriginLen = 255;
+				ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char) * OriginLen + 1);
+				if (ri->RepositoryDisplayedOrigin == NULL) ABORT_NO_MEMORY;
 				int currlen = 0;
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PROTOCOL], 255 - currlen);//proto
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
+				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PROTOCOL], OriginLen - currlen);//proto
+				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen);//:
 				if (!Compare(ptrs[REPO_ORIGIN_GROUP_USER], "git") && Compare(ptrs[REPO_ORIGIN_GROUP_PROTOCOL], "ssh")) {//if name is NOT git then print it but only print if it was ssh
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_USER], 255 - currlen);//username
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, "@", 255 - currlen);//@
+					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_USER], OriginLen - currlen);//username
+					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, "@", OriginLen - currlen);//@
 				}
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_Host], 255 - currlen);//host
+				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_Host], OriginLen - currlen);//host
 				if (*ptrs[3] != 0x00) {//if port is given print it
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PORT], 255 - currlen);//username
+					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen);//:
+					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PORT], OriginLen - currlen);//username
 				}
 				if (*ptrs[4] != 0x00) {//host is github or gitlab and I can parse a github username also add it
 					bool knownServer = false;
@@ -819,10 +828,11 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 						i++;
 					}
 					if (knownServer) {
-						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", 255 - currlen);//:
-						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], 255 - currlen);//service username
+						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen);//:
+						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], OriginLen - currlen);//service username
 					}
 				}
+				*(ri->RepositoryDisplayedOrigin + (currlen < OriginLen ? currlen : OriginLen)) = 0x00; //ensure nullbyte
 			}
 			for (int i = 0;i < REPO_ORIGIN_WORDS_IN_STRING;i++) {
 				ptrs[i] = NULL;//to prevent UseAfterFree vulns
@@ -846,9 +856,9 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { free(ri->RepositoryUnprocessedOrigin_PREVIOUS); }
 			ri->RepositoryUnprocessedOrigin_PREVIOUS = ri->RepositoryUnprocessedOrigin;
 			ri->RepositoryOriginID = desiredorigin;
-			if (asprintf(&ri->RepositoryUnprocessedOrigin, "%s/%s", LOCS[ri->RepositoryOriginID], ri->RepositoryName) == -1)abortNomem();
+			if (asprintf(&ri->RepositoryUnprocessedOrigin, "%s/%s", LOCS[ri->RepositoryOriginID], ri->RepositoryName) == -1) ABORT_NO_MEMORY;
 			char* changeCmd;
-			if (asprintf(&changeCmd, "git -C \"%s\" remote set-url origin %s", ri->DirectoryPath, ri->RepositoryUnprocessedOrigin) == -1)abortNomem();
+			if (asprintf(&changeCmd, "git -C \"%s\" remote set-url origin %s", ri->DirectoryPath, ri->RepositoryUnprocessedOrigin) == -1) ABORT_NO_MEMORY;
 			printf("%s\n", changeCmd);
 			ExecuteProcess(changeCmd);
 			free(changeCmd);
@@ -868,7 +878,7 @@ RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, 
 	}
 
 	DIR* directoryPointer;
-	struct dirent* direntptr;
+	const struct dirent* direntptr;
 	directoryPointer = opendir(ri->DirectoryPath);
 	if (directoryPointer != NULL)
 	{
@@ -899,15 +909,15 @@ RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, 
 	return ri;
 }
 
-char* ConstructGitBranchInfoString(RepoInfo* ri) {
+char* ConstructGitBranchInfoString(const RepoInfo* ri) {
 #define MALEN 64
 	int rbLen = 0;
 	char* rb = (char*)malloc(sizeof(char) * MALEN);
+	if (rb == NULL) ABORT_NO_MEMORY;
 	rb[0] = 0x00;
 	if (ri->HasRemote) { //if the repo doesn't have a remote, it doesn't make sense to count the branch differences betwen remote and local since ther is no remote
-		int temp;
 		if (ri->CountRemoteOnlyBranches > 0 || ri->CountLocalOnlyBranches > 0 || ri->CountUnequalBranches > 0) {
-			temp = snprintf(rb + rbLen, MALEN - rbLen, ": ⟨");
+			int temp = snprintf(rb + rbLen, MALEN - rbLen, ": ⟨");
 			if (temp < MALEN && temp>0) {
 				rbLen += temp;
 			}
@@ -941,13 +951,15 @@ char* ConstructGitBranchInfoString(RepoInfo* ri) {
 			}
 		}
 	}
+	rb[rbLen < MALEN ? rbLen : MALEN - 1] = 0x00; //just as 'belt and bracers' absolutely ensure there is a nullbyte in there
 	return rb;
 }
 
-char* ConstructGitStatusString(RepoInfo* ri) {
+char* ConstructGitStatusString(const RepoInfo* ri) {
 #define GIT_SEG_5_MAX_LEN 128
 	int rbLen = 0;
 	char* rb = (char*)malloc(sizeof(char) * GIT_SEG_5_MAX_LEN);
+	if (rb == NULL) ABORT_NO_MEMORY;
 	rb[0] = 0x00;
 	int temp;
 	if (ri->LocalCommits > 0 || ri->RemoteCommits > 0 || ri->stashes > 0) {
@@ -985,7 +997,7 @@ char* ConstructGitStatusString(RepoInfo* ri) {
 		//////		//I will also have found the base if I find a commit with more than one child (one of them being me) IFF one of the OTHER children has a child somewhere down the line which itself IS a branch tip on remote
 		//////		//the best way to figure this out would be to create a in-memory graph, start at all nodes that mark a remote branch tip and bfs/dfs my way through the graph, marking all parents as 'on remote'
 		//////		//then start at all non-remote branch tips and bfs how many nodes I need to visit until I reach a 'on remote' node or run out of nodes
-		//////		if(asprintf(&cmd, "git -C \"%s\" cat-file -p %s |grep parent|cut -c8-", ri->DirectoryPath, current) == -1)abortNomem();
+		//////		if(asprintf(&cmd, "git -C \"%s\" cat-file -p %s |grep parent|cut -c8-", ri->DirectoryPath, current) == -1)ABORT_NO_MEMORY;
 		//////		int parentcount = 0;
 		//////		FILE* fp = popen(cmd, "r");
 		//////		if (fp == NULL)
@@ -1062,6 +1074,7 @@ char* ConstructGitStatusString(RepoInfo* ri) {
 			rbLen += temp;
 		}
 	}
+	rb[rbLen < GIT_SEG_5_MAX_LEN ? rbLen : GIT_SEG_5_MAX_LEN - 1] = 0x00; //just as 'belt and bracers' absolutely ensure there is a nullbyte in there
 	return rb;
 }
 
@@ -1123,7 +1136,7 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 	RepoList* current = ri->SubDirectories;
 	int procedSubDirs = 0;
 	char* temp;
-	if (asprintf(&temp, "%s%s", parentPrefix, (ri->ParentDirectory != NULL) ? (anotherSameLevelEntryFollows ? "\u2502   " : "    ") : "") == -1)abortNomem();
+	if (asprintf(&temp, "%s%s", parentPrefix, (ri->ParentDirectory != NULL) ? (anotherSameLevelEntryFollows ? "\u2502   " : "    ") : "") == -1) ABORT_NO_MEMORY;
 	while (current != NULL)
 	{
 		procedSubDirs++;
@@ -1131,10 +1144,6 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 		current = current->next;
 	}
 	free(temp);
-}
-
-void printTreeBasic(RepoInfo* ri) {
-	printTree_internal(ri, "", ri->SubDirectoryCount > 1, false);
 }
 
 void printTree(RepoInfo* ri, bool Detailed) {
@@ -1193,10 +1202,11 @@ void DoSetup() {
 	errno = 0;
 
 	char* file;
-	char* fileName = "/repoconfig.cfg";
-	char* pointerIntoEnv = getenv("ST_CFG");
+	const char* fileName = "/repoconfig.cfg";
+	const char* pointerIntoEnv = getenv("ST_CFG");
 	//TODO check if dir exists
 	file = (char*)malloc(strlen(pointerIntoEnv) + strlen(fileName) + 1); // to account for NULL terminator
+	if (file == NULL) ABORT_NO_MEMORY;
 	strcpy(file, pointerIntoEnv);
 	strcat(file, fileName);
 	FILE* fp = fopen(file, "r");//open for read, will fail if file doesn't exist
@@ -1218,9 +1228,7 @@ void DoSetup() {
 
 	int buf_max_len = 1024;
 	char* buf = (char*)malloc(sizeof(char) * buf_max_len);
-	if (buf == NULL) {
-		printf("couldn't malloc required buffer");
-	}
+	if (buf == NULL) ABORT_NO_MEMORY;
 
 	//at this point I know for certain a config file does exist
 	while (fgets(buf, buf_max_len - 1, fp) != NULL) {
@@ -1234,7 +1242,7 @@ void DoSetup() {
 			while (i < buf_max_len - 8 && actbuf[i] != '\t') {
 				i++;
 			}
-			if (actbuf[i] == '\t' && i < (buf_max_len - 8 - 1)) {
+			if (i < (buf_max_len - 8 - 1) && actbuf[i] == '\t') {
 				if (TerminateStrOn(actbuf + i + 1, terminators) > 0) {
 					if (asprintf(&LOCS[numLOCS], "%s", actbuf + i + 1) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
 					actbuf[i] = 0x00;
@@ -1315,7 +1323,7 @@ struct NetList_t {
 
 NetList* InitNetListElement() {
 	NetList* a = (NetList*)malloc(sizeof(NetList));
-	if (a == NULL)abortNomem();
+	if (a == NULL) ABORT_NO_MEMORY;
 	NetDevice* e = &(a->dev);
 	e->ip = NULL;
 	e->metric = UINT32_MAX;
@@ -1337,18 +1345,18 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 		n->next = NULL;
 		n->prev = NULL;
 		assert(ip != NULL && device != NULL);//IP and device are the minimum set necessary
-		if (asprintf(&(n->dev.device), "%s", device) == -1)abortNomem();
-		if (asprintf(&(n->dev.ip), "%s", ip) == -1)abortNomem();
+		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
+		if (asprintf(&(n->dev.ip), "%s", ip) == -1) ABORT_NO_MEMORY;
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
 		if (cidr != 0) n->dev.cidr = cidr;
 		if (linkspeed != NULL) {
 			if (head->dev.linkspeed != NULL) { free(head->dev.linkspeed); }
-			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1)abortNomem();
+			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
 		}
 		if (routedNet != NULL) {
 			if (head->dev.routedNet != NULL) { free(head->dev.routedNet); }
-			if (asprintf(&(head->dev.routedNet), "%s", routedNet) == -1)abortNomem();
+			if (asprintf(&(head->dev.routedNet), "%s", routedNet) == -1) ABORT_NO_MEMORY;
 		}
 
 		return n;
@@ -1357,14 +1365,14 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 		//device name matches, this is just additional info
 		head->dev.metric = metric;
 		if (cidr != 0) head->dev.cidr = cidr;
-		head->dev.isDefault = head->dev.isDefault | isDefault;
+		head->dev.isDefault = head->dev.isDefault || isDefault;
 		if (linkspeed != NULL) {
 			if (head->dev.linkspeed != NULL) { free(head->dev.linkspeed); }
-			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1)abortNomem();
+			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
 		}
 		if (routedNet != NULL) {
 			if (head->dev.routedNet != NULL) { free(head->dev.routedNet); }
-			if (asprintf(&(head->dev.routedNet), "%s", routedNet) == -1)abortNomem();
+			if (asprintf(&(head->dev.routedNet), "%s", routedNet) == -1) ABORT_NO_MEMORY;
 		}
 		return head;
 	}
@@ -1376,18 +1384,18 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 		if (head->prev != NULL) head->prev->next = n;
 		head->prev = n;
 		assert(ip != NULL && device != NULL);//IP and device are the minimum set necessary
-		if (asprintf(&(n->dev.device), "%s", device) == -1)abortNomem();
-		if (asprintf(&(n->dev.ip), "%s", ip) == -1)abortNomem();
+		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
+		if (asprintf(&(n->dev.ip), "%s", ip) == -1) ABORT_NO_MEMORY;
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
 		if (cidr != 0) n->dev.cidr = cidr;
 		if (linkspeed != NULL) {
 			if (n->dev.linkspeed != NULL) { free(n->dev.linkspeed); }
-			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1)abortNomem();
+			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
 		}
 		if (routedNet != NULL) {
 			if (n->dev.routedNet != NULL) { free(n->dev.routedNet); }
-			if (asprintf(&(n->dev.routedNet), "%s", routedNet) == -1)abortNomem();
+			if (asprintf(&(n->dev.routedNet), "%s", routedNet) == -1) ABORT_NO_MEMORY;
 		}
 		return n;
 	}
@@ -1395,24 +1403,23 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 		//The New Element is NOT Equal to myself and is NOT alphabetically before myself (as per the earlier checks)
 		//on top of that, I AM the LAST element, so I can simply create a new last element
 		NetList* n = InitNetListElement();
-		n->next = head->next;
+		n->next = NULL;
 		n->prev = head;
 
-		if (head->next != NULL) head->next->prev = n;
 		head->next = n;
 		assert(ip != NULL && device != NULL);//IP and device are the minimum set necessary
-		if (asprintf(&(n->dev.device), "%s", device) == -1)abortNomem();
-		if (asprintf(&(n->dev.ip), "%s", ip) == -1)abortNomem();
+		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
+		if (asprintf(&(n->dev.ip), "%s", ip) == -1) ABORT_NO_MEMORY;
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
 		if (cidr != 0) n->dev.cidr = cidr;
 		if (linkspeed != NULL) {
 			if (n->dev.linkspeed != NULL) { free(n->dev.linkspeed); }
-			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1)abortNomem();
+			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
 		}
 		if (routedNet != NULL) {
 			if (n->dev.routedNet != NULL) { free(n->dev.routedNet); }
-			if (asprintf(&(n->dev.routedNet), "%s", routedNet) == -1)abortNomem();
+			if (asprintf(&(n->dev.routedNet), "%s", routedNet) == -1) ABORT_NO_MEMORY;
 		}
 
 		return head;
@@ -1429,11 +1436,9 @@ char* GetIfaceSpeed(const char* iface) {
 	char* ret;
 	int size = 32;
 	char* result = (char*)malloc(sizeof(char) * size);
-	if (result == NULL) {
-		abortNomem();
-	}
+	if (result == NULL) ABORT_NO_MEMORY;
 	char* command;
-	if (asprintf(&command, "nmcli -g CAPABILITIES.SPEED device show %s | sed -E 's~([0-9]+) (.).+~\\1\\2~'", iface) == -1)abortNomem();
+	if (asprintf(&command, "nmcli -g CAPABILITIES.SPEED device show %s | sed -E 's~([0-9]+) (.).+~\\1\\2~'", iface) == -1) ABORT_NO_MEMORY;
 	FILE* fp = popen(command, "r");
 	if (fp == NULL)
 	{
@@ -1445,22 +1450,22 @@ char* GetIfaceSpeed(const char* iface) {
 			TerminateStrOn(result, terminators);
 			if (Compare(result, ""))continue;
 			if (Compare(result, "1000M")) {
-				if (asprintf(&ret, "1G") == -1)abortNomem();
+				if (asprintf(&ret, "1G") == -1) ABORT_NO_MEMORY;
 			}
 			else if (Compare(result, "2500M")) {
-				if (asprintf(&ret, "2.5G") == -1)abortNomem();
+				if (asprintf(&ret, "2.5G") == -1) ABORT_NO_MEMORY;
 			}
 			else if (Compare(result, "5000M")) {
-				if (asprintf(&ret, "5G") == -1)abortNomem();
+				if (asprintf(&ret, "5G") == -1) ABORT_NO_MEMORY;
 			}
 			else if (Compare(result, "10000M")) {
-				if (asprintf(&ret, "10G") == -1)abortNomem();
+				if (asprintf(&ret, "10G") == -1) ABORT_NO_MEMORY;
 			}
 			else if (Compare(result, "unknown")) {
 				return NULL;
 			}
 			else {
-				if (asprintf(&ret, "%s", result) == -1)abortNomem();
+				if (asprintf(&ret, "%s", result) == -1) ABORT_NO_MEMORY;
 			}
 			return ret;
 		}
@@ -1492,14 +1497,14 @@ IpTransportStruct GetBaseIPString() {
 #define RouteIpIndex 9
 #define RouteMetricIndex 11
 #define RouteLinkDownIndex 12
-	int RegexReturnCode;
-	RegexReturnCode = regcomp(&RouteRegex, RouteRegexString, REG_EXTENDED | REG_NEWLINE);
-	if (RegexReturnCode)
+	int IpRegexReturnCode;
+	IpRegexReturnCode = regcomp(&RouteRegex, RouteRegexString, REG_EXTENDED | REG_NEWLINE);
+	if (IpRegexReturnCode)
 	{
 		char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
-		if (regErrorBuf == NULL)abortNomem();
-		regerror(RegexReturnCode, &RouteRegex, regErrorBuf, 1024);
-		printf("Could not compile regular expression '%s'. [%i(%s)]\n", RouteRegexString, RegexReturnCode, regErrorBuf);
+		if (regErrorBuf == NULL) ABORT_NO_MEMORY;
+		regerror(IpRegexReturnCode, &RouteRegex, regErrorBuf, 1024);
+		printf("Could not compile regular expression '%s'. [%i(%s)]\n", RouteRegexString, IpRegexReturnCode, regErrorBuf);
 		free(regErrorBuf);
 		exit(1);
 	};
@@ -1509,9 +1514,7 @@ IpTransportStruct GetBaseIPString() {
 
 	int size = 1024;
 	char* result = (char*)malloc(sizeof(char) * size);
-	if (result == NULL) {
-		abortNomem();
-	}
+	if (result == NULL) ABORT_NO_MEMORY;
 	const char* command = "ip route show";
 	FILE* fp = popen(command, "r");
 	if (fp == NULL)
@@ -1523,8 +1526,9 @@ IpTransportStruct GetBaseIPString() {
 		{
 			TerminateStrOn(result, terminators);
 			//fprintf(stderr, "\n\nresult: %s\n", result);
-			int RegexReturnCode = regexec(&RouteRegex, result, RouteRegexGroupCount, RouteRegexGroups, 0);
-			if (RegexReturnCode == 0)
+			IpRegexReturnCode = regexec(&RouteRegex, result, RouteRegexGroupCount, RouteRegexGroups, 0);
+			//man regex (3): regexec() returns zero for a successful match or REG_NOMATCH for failure.
+			if (IpRegexReturnCode == 0)
 			{
 				if (RouteRegexGroups[RouteLinkDownIndex].rm_eo - RouteRegexGroups[RouteLinkDownIndex].rm_so != 0) {
 					continue; //linkdown matched, therefore ignore this interface
@@ -1540,7 +1544,7 @@ IpTransportStruct GetBaseIPString() {
 				len = RouteRegexGroups[RouteDeviceIndex].rm_eo - RouteRegexGroups[RouteDeviceIndex].rm_so;
 				if (len > 0) {
 					device = malloc(sizeof(char) * (len + 1));
-					if (device == NULL)abortNomem();
+					if (device == NULL) ABORT_NO_MEMORY;
 					strncpy(device, result + RouteRegexGroups[RouteDeviceIndex].rm_so, len);
 					device[len] = 0x00;
 				}
@@ -1553,14 +1557,14 @@ IpTransportStruct GetBaseIPString() {
 				len = RouteRegexGroups[RouteIpIndex].rm_eo - RouteRegexGroups[RouteIpIndex].rm_so;
 				if (len > 0) {
 					ip = malloc(sizeof(char) * (len + 1));
-					if (ip == NULL)abortNomem();
+					if (ip == NULL) ABORT_NO_MEMORY;
 					strncpy(ip, result + RouteRegexGroups[RouteIpIndex].rm_so, len);
 					ip[len] = 0x00;
 				}
 				len = RouteRegexGroups[RouteMetricIndex].rm_eo - RouteRegexGroups[RouteMetricIndex].rm_so;
 				if (len > 0) {
 					char* temp = malloc(sizeof(char) * (len + 1));
-					if (temp == NULL)abortNomem();
+					if (temp == NULL) ABORT_NO_MEMORY;
 					strncpy(temp, result + RouteRegexGroups[RouteMetricIndex].rm_so, len);
 					temp[len] = 0x00;
 					metric = atoi(temp);
@@ -1570,7 +1574,7 @@ IpTransportStruct GetBaseIPString() {
 				len = RouteRegexGroups[RouteCidrIndex].rm_eo - RouteRegexGroups[RouteCidrIndex].rm_so;
 				if (len > 0) {
 					char* temp = malloc(sizeof(char) * (len + 1));
-					if (temp == NULL)abortNomem();
+					if (temp == NULL) ABORT_NO_MEMORY;
 					strncpy(temp, result + RouteRegexGroups[RouteCidrIndex].rm_so, len);
 					temp[len] = 0x00;
 					cidr = atoi(temp);
@@ -1580,7 +1584,7 @@ IpTransportStruct GetBaseIPString() {
 				len = RouteRegexGroups[RouteRoutedNetIndex].rm_eo - RouteRegexGroups[RouteRoutedNetIndex].rm_so;
 				if (len > 0) {
 					routednet = malloc(sizeof(char) * (len + 1));
-					if (routednet == NULL)abortNomem();
+					if (routednet == NULL) ABORT_NO_MEMORY;
 					strncpy(routednet, result + RouteRegexGroups[RouteRoutedNetIndex].rm_so, len);
 					routednet[len] = 0x00;
 				}
@@ -1591,9 +1595,9 @@ IpTransportStruct GetBaseIPString() {
 				if (routednet != NULL)free(routednet);
 			}
 		}
+		pclose(fp);
 	}
 	free(result);
-	pclose(fp);
 
 	//res (the standard IP line should get (numDefaultRoutes+1)*(1+4+8+4+1+(4*(3+1))+4+4+4+4+4+16+4) bytes (space+CSI+device+CSI+:IP+CSI+CIDR+CSI+CSI+CSI+metric+CSI) bytes
 	//the above calculation comes out to 74 bytes, so if I assign 80 bytes per default route I sould be fine.
@@ -1618,13 +1622,13 @@ IpTransportStruct GetBaseIPString() {
 	}
 	int basicIPStringLen = 2 + (100 * numDefaultRoutes);
 	ret.BasicIPInfo = malloc(sizeof(char) * basicIPStringLen);
-	if (ret.BasicIPInfo == NULL)abortNomem();
+	if (ret.BasicIPInfo == NULL) ABORT_NO_MEMORY;
 	int nondefaultIpStringLen = 2 + (numNonDefaultRoutes * 80);
 	ret.AdditionalIPInfo = malloc(sizeof(char) * nondefaultIpStringLen);
-	if (ret.AdditionalIPInfo == NULL)abortNomem();
+	if (ret.AdditionalIPInfo == NULL) ABORT_NO_MEMORY;
 	int rounteinfoLen = (48 + (12 * numDefaultRoutes));
 	ret.RouteInfo = malloc(sizeof(char) * rounteinfoLen);
-	if (ret.RouteInfo == NULL)abortNomem();
+	if (ret.RouteInfo == NULL) ABORT_NO_MEMORY;
 
 	int baseIPlenUsed = 0;
 	int nondefaultLenUsed = 0;
@@ -1638,7 +1642,7 @@ IpTransportStruct GetBaseIPString() {
 			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;244m/%i\e[0m", current->dev.cidr);
 		}
 		if (numDefaultRoutes > 1) {
-			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;240m\e[2m\e[3m~%i\e[0m", current->dev.metric);
+			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;240m\e[2m\e[3m~%ui\e[0m", current->dev.metric);
 		}
 		if (current->dev.linkspeed != NULL) {
 			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;238m\e[2m@%s\e[0m", current->dev.linkspeed);
@@ -1702,27 +1706,26 @@ int main(int argc, char** argv)
 	if (RegexReturnCode)
 	{
 		char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
+		if (regErrorBuf == NULL) ABORT_NO_MEMORY;
 		int elen = regerror(RegexReturnCode, &branchParsingRegex, regErrorBuf, 1024);
 		printf("Could not compile regular expression '%s'. [%i(%s) {len:%i}]\n", RegexString, RegexReturnCode, regErrorBuf, elen);
 		free(regErrorBuf);
 		exit(1);
 	};
 
-	DoSetup();
-
 	//stuff to obtain the time/date/calendarweek for prompt
 	time_t tm;
 	tm = time(NULL);
-	struct tm* localtm = localtime(&tm);
+	const struct tm* localtm = localtime(&tm);
 
 	bool IsPrompt = 0, IsSet = 0, IsShow = 0, IsList = 0, IsLowPrompt = 0;
 
 	bool IsThoroughSearch = 0;
 	int PromptRetCode = 0;
 	int Arg_TotalPromptWidth = 0;
-	char* Arg_NewRemote = NULL;
+	const char* Arg_NewRemote = NULL;
 
-	char* Arg_CmdTime = NULL;
+	const char* Arg_CmdTime = NULL;
 
 	char* User = ExecuteProcess("whoami");
 	TerminateStrOn(User, terminators);
@@ -1732,19 +1735,23 @@ int main(int argc, char** argv)
 	TerminateStrOn(Host, terminators);
 	int Host_len = strlen_visible(Host);
 
-	char* Arg_TerminalDevice = NULL;
+	const char* Arg_TerminalDevice = NULL;
 	int Arg_TerminalDevice_len = 0;
 
 	char* Time = malloc(sizeof(char) * 16);
+	if (Time == NULL) ABORT_NO_MEMORY;
 	int Time_len = strftime(Time, 16, "%T", localtm);
 
 	char* TimeZone = malloc(sizeof(char) * 17);
+	if (TimeZone == NULL) ABORT_NO_MEMORY;
 	int TimeZone_len = strftime(TimeZone, 17, " UTC%z (%Z)", localtm);
 
 	char* DateInfo = malloc(sizeof(char) * 16);
+	if (DateInfo == NULL) ABORT_NO_MEMORY;
 	int DateInfo_len = strftime(DateInfo, 16, " %a %d.%m.%Y", localtm);
 
 	char* CalenderWeek = malloc(sizeof(char) * 8);
+	if (CalenderWeek == NULL) ABORT_NO_MEMORY;
 	int CalenderWeek_len = strftime(CalenderWeek, 8, " KW%V", localtm);
 
 	if (Time_len == 0 || TimeZone_len == 0 || DateInfo_len == 0 || CalenderWeek_len == 0) {
@@ -1760,19 +1767,19 @@ int main(int argc, char** argv)
 	char* Arg_LocalIPsRoutes = NULL;
 	int Arg_LocalIPsRoutes_len = 0;
 
-	char* Arg_ProxyInfo = NULL;
+	const char* Arg_ProxyInfo = NULL;
 	int Arg_ProxyInfo_len = 0;
 
-	char* Arg_PowerState = NULL;
+	const char* Arg_PowerState = NULL;
 	int Arg_PowerState_len = 0;
 
-	char* Arg_BackgroundJobs = NULL;
+	const char* Arg_BackgroundJobs = NULL;
 	int Arg_BackgroundJobs_len = 0;
 
 	char* Arg_SHLVL = NULL;
 	int Arg_SHLVL_len = 0;
 
-	char* Arg_SSHInfo = NULL;
+	const char* Arg_SSHInfo = NULL;
 	int Arg_SSHInfo_len = 0;
 
 	int getopt_currentChar;//the char for getop switch
@@ -1780,7 +1787,7 @@ int main(int argc, char** argv)
 	while (1) {
 		int option_index = 0;
 
-		static struct option long_options[] = {
+		const static struct option long_options[] = {
 			{"prompt", no_argument, 0, '0' },
 			{"show", no_argument, 0, '1' },
 			{"set", no_argument, 0, '2' },
@@ -1808,7 +1815,7 @@ int main(int argc, char** argv)
 			}
 		case '0':
 			{
-				if (IsSet | IsShow | IsList) {
+				if (IsSet || IsShow || IsList) {
 					printf("prompt is mutex with set|show|list|lowprompt\n");
 					break;
 				}
@@ -1817,7 +1824,7 @@ int main(int argc, char** argv)
 			}
 		case '1':
 			{
-				if (IsSet | IsPrompt | IsList) {
+				if (IsSet || IsPrompt || IsList) {
 					printf("show is mutex with set|prompt|list|lowprompt\n");
 					break;
 				}
@@ -1826,7 +1833,7 @@ int main(int argc, char** argv)
 			}
 		case '2':
 			{
-				if (IsPrompt | IsShow | IsList) {
+				if (IsPrompt || IsShow || IsList) {
 					printf("set is mutex with prompt|show|list|lowprompt\n");
 					break;
 				}
@@ -1835,7 +1842,7 @@ int main(int argc, char** argv)
 			}
 		case '3':
 			{
-				if (IsPrompt | IsShow | IsSet) {
+				if (IsPrompt || IsShow || IsSet) {
 					printf("list is mutex with prompt|show|set|lowprompt\n");
 					break;
 				}
@@ -1844,7 +1851,7 @@ int main(int argc, char** argv)
 			}
 		case '4':
 			{
-				if (IsPrompt | IsShow | IsSet | IsList) {
+				if (IsPrompt || IsShow || IsSet || IsList) {
 					printf("list is mutex with prompt|show|set|list\n");
 					break;
 				}
@@ -1911,8 +1918,16 @@ int main(int argc, char** argv)
 					//it's not even guaranteed I'll be able to reach this point, the program may error out before this, but if it hasn't just forcibly error out
 				}
 				TerminateStrOn(optarg, terminators);
-				if (asprintf(&Arg_LocalIPs, "%s", optarg) == -1)abortNomem();
+				if (asprintf(&Arg_LocalIPs, "%s", optarg) == -1) ABORT_NO_MEMORY;
 				Arg_LocalIPs_len = strlen_visible(Arg_LocalIPs);
+				Arg_LocalIPsAdditional = (char*)malloc(sizeof(char) * 1);
+				if (Arg_LocalIPsAdditional == NULL) ABORT_NO_MEMORY;
+				Arg_LocalIPsAdditional[0] = 0x00;
+				Arg_LocalIPsAdditional_len = 0;
+				Arg_LocalIPsRoutes = (char*)malloc(sizeof(char) * 1);
+				if (Arg_LocalIPsRoutes == NULL) ABORT_NO_MEMORY;
+				Arg_LocalIPsRoutes[0] = 0x00;
+				Arg_LocalIPsRoutes_len = 0;
 				break;
 			}
 		case 'I':
@@ -2031,7 +2046,12 @@ int main(int argc, char** argv)
 	if (!IsList && !(optind < argc)) {
 		printf("You must supply one non-option parameter (if not in --list mode)");
 	}
-	char* path = argv[optind];
+	const char* path = argv[optind];
+
+
+	if (IsSet || IsShow || IsPrompt) {
+		DoSetup();
+	}
 
 	if (LIMIT_BRANCHES == -2) {
 		//if IsPrompt, default 25; if IsSet, default 50; else default -1
@@ -2042,12 +2062,8 @@ int main(int argc, char** argv)
 	if (IsPrompt) //show origin info for command prompt
 	{
 		RepoInfo* ri = AllocRepoInfo("", path);
-		//printf("Pre entering repocheck\r");
-		//fflush(stdout);
-		TestPathForRepoAndParseIfExists(ri, -1, true, true);
-		//printf("returned out of repocheck\r");
-		//fflush(stdout);
-		if (ri == NULL) {
+		if (!TestPathForRepoAndParseIfExists(ri, -1, true, true)) {
+			//if TestPathForRepoAndParseIfExists fails it'll do it's own cleanup (= deallocation etc)
 			fprintf(stderr, "error at main: TestPathForRepoAndParseIfExists returned null\n");
 			return 1;
 		}
@@ -2069,10 +2085,11 @@ int main(int argc, char** argv)
 
 		char* numBgJobsStr;
 		if (numBgJobs != 0) {
-			if (asprintf(&numBgJobsStr, "  %i Jobs", numBgJobs) == -1)abortNomem();
+			if (asprintf(&numBgJobsStr, "  %i Jobs", numBgJobs) == -1) ABORT_NO_MEMORY;
 		}
 		else {
 			numBgJobsStr = (char*)malloc(sizeof(char));
+			if (numBgJobsStr == NULL) ABORT_NO_MEMORY;
 			numBgJobsStr[0] = 0x00;
 		}
 
@@ -2088,9 +2105,9 @@ int main(int argc, char** argv)
 		int gitSegment5_gitStatus_len = 0;
 
 		if (ri->isGit) {
-			if (asprintf(&gitSegment1_BaseMarkerStart, " [" COLOUR_GIT_BARE "%s" COLOUR_GIT_INDICATOR "GIT%s", ri->isBare ? "BARE " : "", ri->isSubModule ? "-SM" : "") == -1)abortNomem();//[%F{006}BARE %F{002}GIT-SM
+			if (asprintf(&gitSegment1_BaseMarkerStart, " [" COLOUR_GIT_BARE "%s" COLOUR_GIT_INDICATOR "GIT%s", ri->isBare ? "BARE " : "", ri->isSubModule ? "-SM" : "") == -1) ABORT_NO_MEMORY;//[%F{006}BARE %F{002}GIT-SM
 			if (ri->isSubModule) {
-				if (asprintf(&gitSegment2_parentRepoLoc, COLOUR_CLEAR "@" COLOUR_GIT_PARENT "%s" COLOUR_CLEAR, ri->parentRepo) == -1)abortNomem();
+				if (asprintf(&gitSegment2_parentRepoLoc, COLOUR_CLEAR "@" COLOUR_GIT_PARENT "%s" COLOUR_CLEAR, ri->parentRepo) == -1) ABORT_NO_MEMORY;
 			}
 
 			char* gitBranchInfo = NULL;
@@ -2099,6 +2116,7 @@ int main(int argc, char** argv)
 			}
 			else {
 				gitBranchInfo = malloc(sizeof(char));
+				if (gitBranchInfo == NULL) ABORT_NO_MEMORY;
 				gitBranchInfo[0] = 0x00;
 			}
 			if (asprintf(&gitSegment3_BaseMarkerEnd, COLOUR_CLEAR "] " COLOUR_GIT_NAME "%s" COLOUR_CLEAR " on "COLOUR_GIT_BRANCH "%s" COLOUR_GREYOUT "/%i+%i%s" COLOUR_CLEAR,
@@ -2106,14 +2124,15 @@ int main(int argc, char** argv)
 				ri->branch,
 				ri->CountActiveBranches,
 				ri->CountFullyMergedBranches,
-				gitBranchInfo) == -1)abortNomem();
-			if (gitBranchInfo != NULL)free(gitBranchInfo);
-			if (asprintf(&gitSegment4_remoteinfo, " from " COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin) == -1)abortNomem();
+				gitBranchInfo) == -1) ABORT_NO_MEMORY;
+			/*if (gitBranchInfo != NULL)*/free(gitBranchInfo);
+			if (asprintf(&gitSegment4_remoteinfo, " from " COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin) == -1) ABORT_NO_MEMORY;
 			if (!ri->isBare) {
 				gitSegment5_gitStatus = ConstructGitStatusString(ri);
 			}
 			else {
 				gitSegment5_gitStatus = malloc(sizeof(char));
+				if (gitSegment5_gitStatus == NULL) ABORT_NO_MEMORY;
 				gitSegment5_gitStatus[0] = 0x00;
 			}
 
@@ -2225,11 +2244,11 @@ int main(int argc, char** argv)
 		}
 
 		//Arg_LocalIPsRoutes and Arg_LocalIPsAdditional can AND WILL be NULL if the old IP-system is used (for example on WSL)
-		if (Arg_LocalIPsAdditional != NULL && (AdditionalElementAvailabilityPackedBool & (1 << AdditinoalElementPriorityNonDefaultNetworks))) {
+		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditinoalElementPriorityNonDefaultNetworks))) {
 			printf("%s", Arg_LocalIPsAdditional);
 		}
 
-		if (Arg_LocalIPsRoutes != NULL && (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityRoutingInfo))) {
+		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityRoutingInfo))) {
 			printf("%s", Arg_LocalIPsRoutes);
 		}
 
@@ -2269,10 +2288,6 @@ int main(int argc, char** argv)
 			free(Arg_LocalIPsRoutes);
 			Arg_LocalIPsRoutes = NULL;
 		}
-#ifndef PROFILING
-		return 0; //I am unsure why there even is a special return here, I commented it out then moved it into a preproc block because it interfers with profiling
-		//I think it may be to not clobber return codes from something else, but I don't know.
-#endif
 	}
 	else if (IsSet || IsShow)
 	{
@@ -2430,6 +2445,10 @@ int main(int argc, char** argv)
 	else {
 		printf("unknown command %s\n", argv[1]);
 		return -1;
+	}
+
+	if (IsSet || IsShow || IsPrompt) {
+		Cleanup();
 	}
 	regfree(&branchParsingRegex);
 
