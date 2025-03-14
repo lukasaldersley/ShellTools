@@ -5,6 +5,20 @@ if [ ! -d "$TargetDir" ]; then
 fi
 TargetName="$(basename "$0" .c).elf"
 ThisFolder="$(realpath "$(dirname "$0")")"
+
+if command -v shellcheck > /dev/null 2>&1; then
+	ST_Test_ShellCheck_Base="$ST_SRC"
+	if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ]; then
+		#If an extension-loader exists, check it and other extension files as well.
+		ST_Test_ShellCheck_Base="$(realpath "$ST_SRC/../")"
+	fi
+	printf "Running Shellcheck on %s" "$ST_Test_ShellCheck_Base"
+	find "$ST_Test_ShellCheck_Base" -type f \( -name '*.sh' -o -name '*.zsh-theme' \) -execdir shellcheck -x "{}" \;
+	printf " -> DONE\n"
+	unset ST_Test_ShellCheck_Base
+else
+	echo "shellcheck unavailable, skipping"
+fi
 if [ $# -eq 0 ] && command -v cppcheck > /dev/null 2>&1; then
 	#if this is called without arguments, run cppcheck on the entire folder as an additional release check
 	printf "Running cppcheck on %s*" "$ThisFolder/"
@@ -19,9 +33,8 @@ else
 	echo "Skipping cppcheck due to arguments being present or because it isn't installed"
 fi
 printf "compiling %s into %s/%s" "$0" "$TargetDir" "$TargetName"
-#shellcheck disable=SC2086
+#shellcheck disable=SC2086 #in this case I DO want word splitting to happen at $1
 gcc -O3 -std=c2x -Wall "$ThisFolder/commons.c" "$0" -o "$TargetDir/$TargetName" $1
-#the fact I DIDN'T add quotations to the $1 above means I WANT word splitting to happen.
 #I WANT to be able to do things like ./repotools.c -DPROFILING to add the compiler flag profiling but ALSO stuff like ./repotools "-DDEBUG -DPROFILING" to add both profiling and debug
 printf " -> \e[32mDONE\e[0m(%s)\n" $?
 "$TargetDir/$TargetName"

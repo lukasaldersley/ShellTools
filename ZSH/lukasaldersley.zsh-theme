@@ -1,7 +1,7 @@
 #!/bin/false
 # shellcheck shell=bash
 #this should only be sourced or '.' included, not called.
-printf "\e[38;5;240mSourcing $0\e[0m\n"
+printf "\e[38;5;240mSourcing %s\e[0m\n" "$0"
 
 #zsh prompt expansion web doc is at https://zsh.sourceforge.io/Doc/Release/index.html#Top
 #color palette can be found by executing command spectrum_ls
@@ -33,14 +33,13 @@ setopt PROMPT_SUBST
 autoload -Uz add-zsh-hook # load add-zsh-hook with zsh (-z) and suppress aliases (-U)
 
 #### Time Taken for Command Helper functions
-#just declare vars in a script local scope
-local CmdStartTime=""
-local CmdDur="0s"
+ST_CmdStartTime=""
+ST_CmdDur="0s"
 
 GetTimeStart (){
 	#this function is executed via zsh hook on preexec (ie just before the command is actually executed)
 	#%s is seconds since UNIX TIME; %3N gives the first three digits of the current Nanoseconds
-	CmdStartTime="$($ST_CFG/timer-zsh.elf START)"
+	ST_CmdStartTime="$("$ST_CFG/st_timer.elf" START)"
 }
 
 CalcTimeDiff (){
@@ -48,9 +47,10 @@ CalcTimeDiff (){
 	#this function is automatically called via zsh hook on precmd (ie immediatly after the last command execution finishes
 	#but before the next prompt is prepared)
 	#the 'passion' theme shipped with oh-my-zsh does this entirely in shell, but I decided that's too slow and imprecise -> c binary compiled from ./timer.c
-	if [ "$CmdStartTime" ]; then
-		CmdDur="$($ST_CFG/timer-zsh.elf STOP "$CmdStartTime")"
-		CmdStartTime=""
+	# shellcheck disable=SC2034 #reason: it IS used, just in PROMPT, but it's only resolved at runtime
+	if [ "$ST_CmdStartTime" ]; then
+		ST_CmdDur="$("$ST_CFG/st_timer.elf" STOP "$ST_CmdStartTime")"
+		ST_CmdStartTime=""
 	fi
 }
 add-zsh-hook preexec GetTimeStart
@@ -69,7 +69,7 @@ function GetBackgroundTaskInfo (){
 	#NOTE: this isn't straight printed, repotools takes this as input and computes the number of jobs and may then print it if there's space
 	local background_task_info
 	background_task_info="$(jobs|sed -nE 's~^\[([0-9]+)\][^-a-zA-Z+]*([-+]?)[^-a-zA-Z+]*(.).*$~\1\3\2~p'|tr 'a-z\n' 'A-Z '|rev|cut -c2- |rev)"
-	if [ ! -n "${background_task_info}" ]; then
+	if [ -z "${background_task_info}" ]; then
 		echo ""
 	else
 		echo ": {$background_task_info}"
@@ -80,7 +80,7 @@ function GetBackgroundTaskInfo (){
 #and https://unix.stackexchange.com/questions/14961/how-to-find-out-which-interface-am-i-using-for-connecting-to-the-internet (the bit about ip route ls |grep defult (the sed is my own work))
 #another way would be to cause a dns lookup like so and grep that ip route get 8.8.8.8
 function GetLocalIP (){
-	if [ ${WSL_VERSION:-0} -ne 0 ]; then
+	if [ "${WSL_VERSION:-0}" -ne 0 ]; then
 		#WSL_VERSION is set and non-zero -> on WSL
 		#since WSL's networking is at best (WSL1) a direct representation of Windows's config or at worst (WSL2) a VM with nonstandard networking I'm just not going to bother with advanced concepts like metrics etc
 		IpAddrList=""
@@ -100,7 +100,8 @@ function GetLocalIP (){
 		if [ ! "$IpAddrList" ]; then
 			IpAddrList=" NC"
 		fi
-		echo "-i$IpAddrList\a"
+		printf "-i%s\a" "$IpAddrList"
+		#echo "-i$IpAddrList\a"
 		#echo "$IpAddrList" #|cut -c2- #bin the first space
 	else
 		# we are on a bare-metal linux or at least on a non-wsl platform so IP resolution is to be done by repotools.c which is also responsible for gatehring and parsing everything itself
@@ -244,14 +245,16 @@ function PowerState (){
 
 #the print -P wrappers are to replace ZSH escape sequences with what they actually mean such as replacing %y with the terminal device and also to transform the sequence \a from effectively \\a (0x5c 0x61) into the real \a (0x07)
 function MainPrompt(){
-	#print -P "\n$($ST_CFG/repotools.elf --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" -i"$(print -P "$(GetLocalIP)\a")" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -l" [$SHLVL]" -s"$(print "$(GetSSHInfo)\a")" "$(pwd)")"
-	print -P "\n$($ST_CFG/repotools.elf --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" "$(GetLocalIP)" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -l" [$SHLVL]" -s"$(print -P "$(GetSSHInfo)\a")" "$(pwd)")"
+	print -P "\n$("$ST_CFG/repotools.elf" --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" "$(GetLocalIP)" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -l" [$SHLVL]" -s"$(print -P "$(GetSSHInfo)\a")" "$(pwd)")"
 }
 
 add-zsh-hook precmd MainPrompt
 
-#PROMPT='└%F{cyan}%B %2~ %b%f%B%(?:%F{green}:%F{red})[$CmdDur:%?]➜%f%b  '
-PROMPT='$("$ST_CFG/repotools.elf" --lowprompt -r"$?" -c"$COLUMNS" -t"$CmdDur" "$(print -P '%~')")'
+#this is the old PROMPT, before I integrated it into C for speed
+#PROMPT='└%F{cyan}%B %2~ %b%f%B%(?:%F{green}:%F{red})[$ST_CmdDur:%?]➜%f%b  '
+#shellcheck disable=SC2016 #reason: If I allowed expansion here, the prompt would be static, it must only be evaluated at runtime, so this is fine
+#shellcheck disable=SC2034 #reason: It IS used, but PROMPT is a special case -> ignore warning
+PROMPT='$("$ST_CFG/repotools.elf" --lowprompt -r"$?" -c"$COLUMNS" -t"$ST_CmdDur" "$(print -P '%~')")'
 
 #To do multiline Prompts I am printing the top line before the prompt is ever computed.
 #print -P is a zsh builtin (man zshmisc) that does the same substitution the prompt would.
@@ -265,4 +268,4 @@ PROMPT='$("$ST_CFG/repotools.elf" --lowprompt -r"$?" -c"$COLUMNS" -t"$CmdDur" "$
 # - : on slow systems (eg the 8-ish watt Laptops, or any ARM device I've tried) the creation of the prompt may take a few seconds, and even with warm cache and optimal conditions still takes about a second (on the real computers (120+W TDP desktops under WSL) it'll run in 0.1s or less (on native linux it's even faster) but on the laptops it's fucking slow, run it with -DPROFILING, you'll see)
 #Conclusion: Make top line single-fire evaluation
 
-echo -e "\e[38;5;240mdone loading $(basename $0)\e[0m"
+printf "\e[38;5;240mdone loading %s\e[0m\n" "$(basename "$0")"

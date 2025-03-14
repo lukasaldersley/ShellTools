@@ -22,9 +22,30 @@
 #to see what users are running: "who"
 #to forcibly log out a non-gui user: pkill -t "terminalDevice" such as sudo pkill -t pts/1
 
-if [ ! -e "$ST_CFG" ]; then
+UpdateZSH (){
+	echo "Updating/Installing ShellTools"
+	if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ] && [ "$(git -C "$(realpath "$ST_SRC/../")" rev-parse --show-toplevel 2>/dev/null)" != "$(git -C "$ST_SRC" rev-parse --show-toplevel 2>/dev/null)" ]; then
+		#don't just randomly go around updating foreign git repositories without explicit user input
+		printf "ShellToolsExtensionLoader.sh exists (at %s) -> there possibly is a parent repo, if so please update that MANUALLY\nShellTools will NOT automatically update anything other than itself\n" "$(realpath "$ST_SRC/../")"
+	fi
+	git -C "$ST_SRC" pull
+	#compile all .c or .cpp files in the folders ZSH and C using the self-compile trick
+	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
+	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
+	if [ -w ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme ]; then #if file exists and write permission is granted
+		rm ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
+	else
+		echo "WARNING: cannot update ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme: not writeable"
+	fi
+	echo "copying $ST_SRC/ZSH/lukasaldersley.zsh-theme to  ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme"
+	cp "$ST_SRC/ZSH/lukasaldersley.zsh-theme" ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
+	omz reload
+}
+
+if [ ! -e "$ST_CFG" ] || [ ! -e "$ST_CFG/repotools.elf" ]; then
+	echo "$ST_CFG directory or repotools binary didn't exist -> creating now"
 	mkdir -p "$ST_CFG"
-	echo "$ST_CFG directory didn't exist -> creating now"
+	UpdateZSH
 fi
 
 printf "\e[38;5;240mLoading Scripts from\e[0m %s\n" "$ST_SRC"
@@ -90,6 +111,8 @@ alias sf=sortFile
 alias uz=UpdateZSH
 alias ss=SystemStatus
 alias syss=SystemStatus
+alias pkgstatus=SystemStatus
+alias pkgstat=SystemStatus
 alias or="omz reload"
 alias hist='cat "$HOME/.zsh_history" "$HOME/.bash_history" | less'
 alias qlac="qalc"
@@ -104,6 +127,7 @@ searchapt(){
 }
 
 cleanFile(){
+	#the reason I use a temp file is to avoid the same file on both ends of the pipe.
 	___tempfile_local=$(mktemp)
 	sort < "$1" | uniq > "$___tempfile_local"
 	mv "$___tempfile_local" "$1"
@@ -113,19 +137,6 @@ sortFile(){
 	___tempfile_local=$(mktemp)
 	sort < "$1" > "$___tempfile_local"
 	mv "$___tempfile_local" "$1"
-}
-
-UpdateZSH (){
-	git -C "$ST_SRC" pull
-	#compile all .c or .cpp files in the folders ZSH and C using the self-compile trick
-	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
-	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
-	if [ -w ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme ]; then #if file exists and write permission is granted
-		rm ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
-	fi
-	echo "copying $ST_SRC/ZSH/lukasaldersley.zsh-theme to  ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme"
-	cp "$ST_SRC/ZSH/lukasaldersley.zsh-theme" ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
-	omz reload
 }
 
 SetGitBase(){
@@ -289,10 +300,18 @@ shellver(){
 }
 
 SystemStatus(){
+	"$ST_SRC/GENERAL/FWTools.sh"
 	"$ST_SRC/GENERAL/AptTools.sh" --unattended
 	"$ST_SRC/GENERAL/FlatpakTools.sh"
 	"$ST_SRC/GENERAL/SnapTools.sh"
 }
+
+if [ -e "$ST_SRC/../CUSTOM.sh" ]; then
+	echo "Loading Custom Extensions"
+	# shellcheck disable=SC1091 # reason: this file may very well not exist, as it will only exist for some systems where there are non-public ShellTools Extensions.
+	# shellcheck disable=SC1090 # shellcheck can't find the file, obviously
+	. "$ST_SRC/../CUSTOM.sh"
+fi
 
 IsWSL=0
 #use cmd.exe to get windows username, discard cmd's stderr (usually because cmd prints a warning if this was called from somewhere within the linux filesystem), then strip CRLF from the result
@@ -339,28 +358,7 @@ if [ "$WSL_VERSION" -ne 1 ]; then
 fi
 
 # shellcheck disable=SC2046 #reason: I want wordsplitting to happen on the date
-printf "System up since %s (%s)\n" "$(uptime --since)" "$("$ST_CFG/timer-zsh.elf" STOPHUMAN $(uptime --since |tr ':-' ' '))"
-
-devcount="$(fwupdmgr get-devices 2>/dev/null |grep -c 'Device ID')"
-if [ "$devcount" != "0" ]; then
-	sysname="$(cat /sys/class/dmi/id/product_name)"
-	infos="$(fwupdmgr get-upgrades 2>/dev/null |grep -e "Current version" -e "New version" -e "└─" -e "Summary")"
-	#printf "<%s>\n" "$infos"
-
-	adevcount="$(grep -c '^└─' <<< "$infos")"
-
-	printf "%s out of %s devices on %s have Firmware updates available (fwupdmgr)\n" "$adevcount" "$devcount" "$sysname"
-	if [ "$adevcount" != "0" ]; then
-		printf "\t"
-		grep "^└─" <<< "$infos" |cut -c7-|tr '\n' ' '
-		grep "^  └─" <<< "$infos" |cut -c9- |rev |cut -c2- |rev |tr -d '\n'
-		printf " ["
-		grep "Current version" <<< "$infos" |grep -Eo "[0-9\.]+" |tr -d '\n'
-		printf " -> "
-		grep "New version" <<< "$infos" |grep -Eo "[0-9\.]+" |tr -d '\n'
-		printf "]\n"
-	fi
-fi
+printf "System up since %s (%s)\n" "$(uptime --since)" "$("$ST_CFG/st_timer.elf" STOPHUMAN $(uptime --since |tr ':-' ' '))"
 
 SystemStatus
 
