@@ -15,7 +15,7 @@ exit
 #include <stdio.h>
 
 int main(int argc, char** argv) {
-	char* result = ExecuteProcess("pwd");
+	char* result = ExecuteProcess_alloc("pwd");
 	TerminateStrOn(result, "\n");
 	printf("PWD: %s\n", result);
 	free(result);

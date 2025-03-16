@@ -22,13 +22,16 @@
 #to see what users are running: "who"
 #to forcibly log out a non-gui user: pkill -t "terminalDevice" such as sudo pkill -t pts/1
 
+#shellcheck disable=SC2120 # reason: The parameter is optional, therefore it needn't be used. it's only use is in an alias for quicker development
 UpdateZSH (){
 	echo "Updating/Installing ShellTools"
-	if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ] && [ "$(git -C "$(realpath "$ST_SRC/../")" rev-parse --show-toplevel 2>/dev/null)" != "$(git -C "$ST_SRC" rev-parse --show-toplevel 2>/dev/null)" ]; then
-		#don't just randomly go around updating foreign git repositories without explicit user input
-		printf "ShellToolsExtensionLoader.sh exists (at %s) -> there possibly is a parent repo, if so please update that MANUALLY\nShellTools will NOT automatically update anything other than itself\n" "$(realpath "$ST_SRC/../")"
+	if [ "${1:"pull"}" != "nopull" ]; then
+		if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ] && [ "$(git -C "$(realpath "$ST_SRC/../")" rev-parse --show-toplevel 2>/dev/null)" != "$(git -C "$ST_SRC" rev-parse --show-toplevel 2>/dev/null)" ]; then
+			#don't just randomly go around updating foreign git repositories without explicit user input
+			printf "ShellToolsExtensionLoader.sh exists (at %s) -> there possibly is a parent repo, if so please update that MANUALLY\nShellTools will NOT automatically update anything other than itself\n" "$(realpath "$ST_SRC/../")"
+		fi
+		git -C "$ST_SRC" pull
 	fi
-	git -C "$ST_SRC" pull
 	#compile all .c or .cpp files in the folders ZSH and C using the self-compile trick
 	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
 	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
@@ -109,6 +112,7 @@ alias gu=gitupdate
 alias cf=cleanFile
 alias sf=sortFile
 alias uz=UpdateZSH
+alias iuz="UpdateZSH nopull"
 alias ss=SystemStatus
 alias syss=SystemStatus
 alias pkgstatus=SystemStatus

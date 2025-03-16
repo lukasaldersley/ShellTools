@@ -6,42 +6,27 @@ fi
 TargetName="$(basename "$0" .c).elf"
 printf "compiling %s into %s/%s" "$0" "$TargetDir" "$TargetName"
 #shellcheck disable=SC2086 #in this case I DO want word splitting to happen at $1
-gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$0" -o "$TargetDir/$TargetName" $1
+gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$(realpath "$(dirname "$0")")"/gitfunc.c "$0" -o "$TargetDir/$TargetName" $1
 #I WANT to be able to do things like ./repotools.c -DPROFILING to add the compiler flag profiling but ALSO stuff like ./repotools "-DDEBUG -DPROFILING" to add both profiling and debug
 printf " -> \e[32mDONE\e[0m(%s)\n" $?
 exit
 */
 
 #include "commons.h"
+#include "gitfunc.h"
 #include <regex.h>
 #include <string.h>
 #include <errno.h>
-#include <assert.h>
-#include <stdarg.h>
 #include <dirent.h>
 #include <time.h>
 #include <getopt.h>
 #include <signal.h>
 
-#define COLOUR_GIT_BARE "\e[38;5;006m"
-#define COLOUR_GIT_INDICATOR "\e[38;5;002m"
-#define COLOUR_GIT_PARENT "\e[38;5;004m"
-#define COLOUR_GIT_NAME "\e[38;5;009m"
-#define COLOUR_GIT_BRANCH "\e[38;5;001m"
-#define COLOUR_GIT_ORIGIN "\e[38;5;005m"
-#define COLOUR_GIT_COMMITS "\e[38;5;208m"
-#define COLOUR_GIT_MERGES "\e[38;5;009m"
-#define COLOUR_GIT_STAGED "\e[38;5;010m"
-#define COLOUR_GIT_MODIFIED "\e[38;5;226m"
-#define COLOUR_GIT_BRANCH_REMOTEONLY "\e[0m"
-#define COLOUR_GIT_BRANCH_LOCALONLY "\e[38;5;220m"
-#define COLOUR_GIT_BRANCH_UNEQUAL "\e[38;5;009m"
 #define COLOUR_TERMINAL_DEVICE "\e[38;5;242m"
 #define COLOUR_SHLVL "\e[0m"
 #define COLOUR_USER "\e[38;5;010m"
 #define COLOUR_USER_AT_HOST "\e[38;5;007m"
 #define COLOUR_HOST "\e[38;5;033m"
-const char* terminators = "\r\n\a";
 
 #define maxGroups 10
 regmatch_t CapturedResults[maxGroups];
@@ -60,276 +45,6 @@ ORIGIN:	NONE	/dev/null\n\
 ORIGIN:	LOOPBACK	ssh://git@127.0.0.1/data/repos\n\
 HOST:	github.com\n\
 HOST:	gitlab.com\n"
-
-typedef struct {
-	char* BranchName;
-	bool IsMergedLocal;
-	char* CommitHashLocal;
-	bool IsMergedRemote;
-	char* CommitHashRemote;
-} BranchInfo;
-
-typedef struct BranchListSorted_t BranchListSorted;
-struct BranchListSorted_t {
-	BranchInfo branchinfo;
-	BranchListSorted* next;
-	BranchListSorted* prev;
-};
-
-typedef struct RepoInfo_t RepoInfo;
-typedef struct RepoList_t RepoList;
-
-struct RepoList_t {
-	RepoList* prev;
-	RepoList* next;
-	RepoInfo* self;
-};
-
-struct RepoInfo_t {
-	RepoInfo* ParentDirectory;
-	RepoList* SubDirectories;
-	char* DirectoryName;
-	char* DirectoryPath;//path+name
-	char* RepositoryName;//the name of the repo itself
-	char* RepositoryDisplayedOrigin;
-	char* RepositoryUnprocessedOrigin;
-	char* RepositoryUnprocessedOrigin_PREVIOUS;
-	char* branch;
-	char* parentRepo;
-	int SubDirectoryCount;
-	int RepositoryOriginID;
-	int RepositoryOriginID_PREVIOUS;
-	bool isGit;
-	bool isSubModule;
-	bool isBare;
-	bool DirtyWorktree;
-	bool HasRemote;
-	int RemoteCommits;
-	int LocalCommits;
-	int UntrackedFiles;
-	int ModifiedFiles;
-	int StagedChanges;
-	int ActiveMergeFiles;
-	int stashes;
-
-	int CountRemoteOnlyBranches;
-	int CountLocalOnlyBranches;
-	int CountUnequalBranches;
-	int CountActiveBranches;
-	int CountFullyMergedBranches;
-	bool CheckedOutBranchIsNotInRemote;
-};
-
-RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName) {
-	RepoInfo* ri = (RepoInfo*)malloc(sizeof(RepoInfo));
-	if (ri == NULL) ABORT_NO_MEMORY;
-	ri->ParentDirectory = NULL;
-	ri->SubDirectories = NULL;
-	ri->DirectoryName = NULL;
-	ri->DirectoryPath = NULL;
-	ri->RepositoryName = NULL;
-	ri->RepositoryDisplayedOrigin = NULL;
-	ri->RepositoryUnprocessedOrigin = NULL;
-	ri->RepositoryUnprocessedOrigin_PREVIOUS = NULL;
-	ri->branch = NULL;
-	ri->parentRepo = NULL;
-	ri->SubDirectoryCount = 0;
-	ri->RepositoryOriginID = -1;
-	ri->RepositoryOriginID_PREVIOUS = -1;
-	ri->isGit = false;
-	ri->isSubModule = false;
-	ri->isBare = false;
-	ri->DirtyWorktree = false;
-	ri->HasRemote = false;
-	ri->RemoteCommits = 0;
-	ri->LocalCommits = 0;
-	ri->UntrackedFiles = 0;
-	ri->ModifiedFiles = 0;
-	ri->StagedChanges = 0;
-	ri->ActiveMergeFiles = 0;
-	ri->stashes = 0;
-
-	ri->CountRemoteOnlyBranches = 0;
-	ri->CountLocalOnlyBranches = 0;
-	ri->CountUnequalBranches = 0;
-	ri->CountActiveBranches = 0;
-	ri->CountFullyMergedBranches = 0;
-	ri->CheckedOutBranchIsNotInRemote = false;
-
-	if (asprintf(&(ri->DirectoryName), "%s", directoryName) == -1) ABORT_NO_MEMORY;
-	if (asprintf(&(ri->DirectoryPath), "%s%s%s", directoryPath, ((strlen(directoryPath) > 0) ? "/" : ""), directoryName) == -1) ABORT_NO_MEMORY;
-	return ri;
-}
-
-void DeallocRepoInfoStrings(RepoInfo* ri) {
-	if (ri->DirectoryName != NULL) { free(ri->DirectoryName); }
-	if (ri->DirectoryPath != NULL) { free(ri->DirectoryPath); }
-	if (ri->RepositoryName != NULL) { free(ri->RepositoryName); }
-	if (ri->RepositoryDisplayedOrigin != NULL) { free(ri->RepositoryDisplayedOrigin); }
-	if (ri->RepositoryUnprocessedOrigin != NULL) { free(ri->RepositoryUnprocessedOrigin); }
-	if (ri->RepositoryUnprocessedOrigin_PREVIOUS != NULL) { free(ri->RepositoryUnprocessedOrigin_PREVIOUS); }
-	if (ri->branch != NULL) { free(ri->branch); }
-	if (ri->parentRepo != NULL) { free(ri->parentRepo); }
-}
-
-void AllocUnsetStringsToEmpty(RepoInfo* ri) {
-	if (ri->DirectoryName == NULL) { ri->DirectoryName = (char*)malloc(sizeof(char)); if (ri->DirectoryName == NULL) { ABORT_NO_MEMORY; } ri->DirectoryName[0] = 0x00; }
-	if (ri->DirectoryPath == NULL) { ri->DirectoryPath = (char*)malloc(sizeof(char)); if (ri->DirectoryPath == NULL) { ABORT_NO_MEMORY; } ri->DirectoryPath[0] = 0x00; }
-	if (ri->RepositoryName == NULL) { ri->RepositoryName = (char*)malloc(sizeof(char)); if (ri->RepositoryName == NULL) { ABORT_NO_MEMORY; } ri->RepositoryName[0] = 0x00; }
-	if (ri->RepositoryDisplayedOrigin == NULL) { ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char)); if (ri->RepositoryDisplayedOrigin == NULL) { ABORT_NO_MEMORY; } ri->RepositoryDisplayedOrigin[0] = 0x00; }
-	if (ri->RepositoryUnprocessedOrigin == NULL) { ri->RepositoryUnprocessedOrigin = (char*)malloc(sizeof(char)); if (ri->RepositoryUnprocessedOrigin == NULL) { ABORT_NO_MEMORY; } ri->RepositoryUnprocessedOrigin[0] = 0x00; }
-	if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { ri->RepositoryUnprocessedOrigin_PREVIOUS = (char*)malloc(sizeof(char)); if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { ABORT_NO_MEMORY; } ri->RepositoryUnprocessedOrigin_PREVIOUS[0] = 0x00; }
-	if (ri->branch == NULL) { ri->branch = (char*)malloc(sizeof(char)); if (ri->branch == NULL) { ABORT_NO_MEMORY; } ri->branch[0] = 0x00; }
-	if (ri->parentRepo == NULL) { ri->parentRepo = (char*)malloc(sizeof(char)); if (ri->parentRepo == NULL) { ABORT_NO_MEMORY; } ri->parentRepo[0] = 0x00; }
-}
-
-BranchListSorted* InitBranchListSortedElement() {
-	BranchListSorted* a = (BranchListSorted*)malloc(sizeof(BranchListSorted));
-	if (a == NULL) ABORT_NO_MEMORY;
-	BranchInfo* e = &(a->branchinfo);
-	e->BranchName = NULL;
-	e->CommitHashLocal = NULL;
-	e->IsMergedLocal = false;
-	e->CommitHashRemote = NULL;
-	e->IsMergedRemote = false;
-	return a;
-}
-
-BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char* branchname, char* hash, bool remote) {
-	if (head == NULL) {
-		//Create Initial Element (List didn't exist previously)
-		BranchListSorted* n = InitBranchListSortedElement();
-		n->next = NULL;
-		n->prev = NULL;
-		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1) ABORT_NO_MEMORY;
-		if (remote) {
-			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		else {
-			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		return n;
-	}
-	else if (Compare(head->branchinfo.BranchName, branchname)) {
-		//Branch Name matches, this means I know of the local copy and am adding the remote one or vice versa
-		if (remote) {
-			if (asprintf(&(head->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		else {
-			if (asprintf(&(head->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		return head;
-	}
-	else if (CompareStrings(head->branchinfo.BranchName, branchname) == ALPHA_AFTER) {
-		//The new Element is Alphabetically befory myself -> insert new element before myself
-		BranchListSorted* n = InitBranchListSortedElement();
-		n->next = head;
-		n->prev = head->prev;
-		if (head->prev != NULL) head->prev->next = n;
-		head->prev = n;
-		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1) ABORT_NO_MEMORY;
-		if (remote) {
-			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		else {
-			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		return n;
-	}
-	else if (head->next == NULL) {
-		//The New Element is NOT Equal to myself and is NOT alphabetically before myself (as per the earlier checks)
-		//on top of that, I AM the LAST element, so I can simply create a new last element
-		BranchListSorted* n = InitBranchListSortedElement();
-		n->next = NULL;
-		n->prev = head;
-		head->next = n;
-		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1) ABORT_NO_MEMORY;
-		if (remote) {
-			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		else {
-			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		return head;
-	}
-	else {
-		//The New Element is NOT Equal to myslef and is NOT alphabetically before myself (as per the earlier checks)
-		//This time there IS another element after myself -> defer to it.
-		head->next = InsertIntoBranchListSorted(head->next, branchname, hash, remote);
-		return head;
-	}
-}
-
-bool IsMergeCommit(const char* repoPath, const char* commitHash) {
-	const int size = 32;
-	char* result = (char*)malloc(sizeof(char) * size);
-	if (result == NULL) ABORT_NO_MEMORY;
-	char* cmd;
-	bool RES = false;
-	//this looks up the commit hashes for all parents of a given commit
-	//usually a commit has EXACTLY ONE parent, the only exceptions are the initial commit (no parents) or a merge commit (two parents)
-	//therefore if a commit has 2 parents it's a merge commit
-	if (asprintf(&cmd, "git -C \"%s\" cat-file -p %s |grep parent|wc -l", repoPath, commitHash) == -1) ABORT_NO_MEMORY;
-	FILE* fp = popen(cmd, "r");
-	if (fp == NULL)
-	{
-		fprintf(stderr, "failed running process %s\n", cmd);
-	}
-	else {
-		while (fgets(result, size - 1, fp) != NULL)
-		{
-			TerminateStrOn(result, terminators);
-			if (Compare(result, "2")) {
-				RES = true;
-			}
-		}
-		pclose(fp);
-	}
-	free(result);
-	free(cmd);
-	return RES;
-}
-
-bool IsMerged(const char* repopath, const char* commithash) {
-	//to check if a branch is merged, query git for all commits this reference is a parent to (ie search for all child commits)
-	//if any of the child commits is a merge commit, this branch is considered merged.
-	//if there are more than one child it is possible a new branch was created at this commit
-	//it is possible for two children to exist: a merge commit and one non-merge commit
-	//in that case I still consider THIS branch merged with a new branch being created
-	//if there are childen but none of them is a merge commit, this commit could be fast forwarded in some direction but hasn't, it is not merged
-	//the cut -c42- bit is to cut my own hash out of the result and only leave the children
-	//git rev-list --children --all | grep ^a40691c4edac3e3e9cff1f651f79a80dd3bd792a | cut -c42- | tr ' ' '\n'
-	//NOTE: the commit hash is a demo of this case, BUT it's NOT in the public GitHub version, just in the "Ground Truth" repo on a private server
-	//for each check if merge commit, if at least one is a merge commit, then this branch has been merged
-	const int size = 64;
-	char* result = (char*)malloc(sizeof(char) * size);
-	if (result == NULL) ABORT_NO_MEMORY;
-	char* cmd;
-	bool RES = false;
-	if (asprintf(&cmd, "git -C \"%s\" rev-list --children --all | grep ^%s | cut -c42- | tr ' ' '\n'", repopath, commithash) == -1) ABORT_NO_MEMORY;
-	FILE* fp = popen(cmd, "r");
-	if (fp == NULL)
-	{
-		fprintf(stderr, "failed running process %s\n", cmd);
-	}
-	else {
-		while (fgets(result, size - 1, fp) != NULL)
-		{
-			TerminateStrOn(result, terminators);
-			if (result[0] == 0x00) {
-				//if the line is empty -> no need to check if it's a merge commit if it's not even a commit at all
-				continue;
-			}
-			bool imc = IsMergeCommit(repopath, result);
-			//printf("%s is%s a merge commit\n", result, imc ? "" : " NOT");
-			RES = RES || imc;
-		}
-		pclose(fp);
-	}
-	free(result);
-	free(cmd);
-	return RES;
-}
 
 bool CheckBranching(RepoInfo* ri) {
 	//this method checks the status of all branches on a given repo
@@ -350,7 +65,7 @@ bool CheckBranching(RepoInfo* ri) {
 		int branchcount = 0;
 		while (fgets(result, size - 1, fp) != NULL)
 		{
-			TerminateStrOn(result, terminators);
+			TerminateStrOn(result, DEFAULT_TERMINATORS);
 			branchcount++;
 			if (LIMIT_BRANCHES != -1 && branchcount > LIMIT_BRANCHES) {
 				free(result);
@@ -492,114 +207,6 @@ bool CheckBranching(RepoInfo* ri) {
 	return true;
 }
 
-bool CheckExtendedGitStatus(RepoInfo* ri) {
-	int size = 1024;
-	char* result = malloc(sizeof(char) * size);
-	if (result == NULL) ABORT_NO_MEMORY;
-	char* command;
-	if (asprintf(&command, "git -C \"%s\" status --ignore-submodules=dirty --porcelain=v2 -b --show-stash", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-	FILE* fp = popen(command, "r");
-	//printf("have opened git status\r");
-	if (fp == NULL)
-	{
-		size = 0;
-		fprintf(stderr, "failed running process `%s`\n", command);
-	}
-	else {
-		while (fgets(result, size - 1, fp) != NULL)
-		{
-			if (result[0] == '1' || result[1] == '2') {//standard changes(add/modify/delete/...) and rename/copy
-				if (result[2] != '.') {
-					//staged change
-					ri->StagedChanges++;
-				}
-				if (result[3] != '.') {
-					//not staged change
-					ri->ModifiedFiles++;
-				}
-			}
-			else if (result[0] == '?') {
-				//untracked file
-				ri->UntrackedFiles++;
-			}
-			else if (result[0] == 'u') {//merge in progress
-				ri->ActiveMergeFiles++;
-			}
-			else if (StartsWith(result, "# branch.ab ")) {
-				//local/remote commits
-				int offset = 13;
-				int i = 0;
-				while (result[offset + i] >= 0x30 && result[offset + i] <= 0x39) {
-					i++;
-				}
-				result[offset + i] = 0x00;
-				ri->LocalCommits = atoi(result + offset);
-				ri->RemoteCommits = atoi(result + offset + i + 2);
-
-			}
-			else if (StartsWith(result, "# stash ")) {
-				const char* num = result + 8;
-				ri->stashes = atoi(num);
-			}
-		}
-		pclose(fp);
-	}
-	free(result);
-	free(command);
-	return size != 0;//if I set size to 0 when erroring out, return false/0; else 1
-}
-
-void AddChild(RepoInfo* parent, RepoInfo* child) {
-	//if the ParentDirectory node doesn't have any SubDirectories, it also won't have the list structure -> allocate and create it.
-	if (parent->SubDirectories == NULL) {
-		parent->SubDirectories = (RepoList*)malloc(sizeof(RepoList));
-		if (parent->SubDirectories == NULL) ABORT_NO_MEMORY;
-		parent->SubDirectories->self = child;
-		parent->SubDirectories->next = NULL;
-		parent->SubDirectories->prev = NULL;
-	}
-	//the ParentDirectory already has a child -> find the end of the list and insert it there
-	else {
-		RepoList* current = parent->SubDirectories;
-		while (current->next != NULL)
-		{
-			current = current->next;
-		}
-		current->next = (RepoList*)malloc(sizeof(RepoList));
-		if (current->next == NULL) ABORT_NO_MEMORY;
-		current->next->prev = current;
-		current->next->self = child;
-		current->next->next = NULL;
-	}
-	child->ParentDirectory = parent;
-	parent->SubDirectoryCount++;
-}
-
-char* FixImplicitProtocol(const char* input)
-{
-	char* reply;
-	if (ContainsString(input, "@") && !ContainsString(input, "://"))
-	{
-		// repo contains @ but not :// ie it is a ssh://, but ssh:// is implicit
-		if (asprintf(&reply, "ssh://%s", input) == -1) ABORT_NO_MEMORY;
-	}
-	else
-	{
-		if (asprintf(&reply, "%s", input) == -1) ABORT_NO_MEMORY;
-	}
-	return reply;
-}
-
-int cpyString(char* dest, const char* src, int maxCount) {
-	for (int i = 0; i < maxCount; i++) {
-		dest[i] = src[i];
-		if (src[i] == 0x00) {
-			return i;
-		}
-	}
-	return maxCount;
-}
-
 /*
 	I can get the list of all submodules by using
 	git -C *TARGET_FOLDER* submodule status --recursive | sed -n 's|.[0-9a-fA-F]\+ \([^ ]\+\)\( .*\)\?|\1|p'
@@ -613,7 +220,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	char* cmd;
 	if (BeThorough || DoProcessWorktree) {
 		if (asprintf(&cmd, "git -C \"%s\" rev-parse --is-bare-repository 2>/dev/null", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-		char* bareRes = ExecuteProcess(cmd);
+		char* bareRes = ExecuteProcess_alloc(cmd);
 		free(cmd);
 		if (bareRes == NULL) {
 			//Encountered error -> quit
@@ -621,7 +228,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			free(ri);
 			return false;
 		}
-		TerminateStrOn(bareRes, terminators);
+		TerminateStrOn(bareRes, DEFAULT_TERMINATORS);
 		ri->isBare = Compare(bareRes, "true");
 		free(bareRes);
 		bareRes = NULL;
@@ -629,8 +236,8 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 
 		if (!ri->isBare) {
 			if (asprintf(&cmd, "git -C \"%s\" rev-parse --show-toplevel 2>/dev/null", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-			char* tlres = ExecuteProcess(cmd);
-			TerminateStrOn(tlres, terminators);
+			char* tlres = ExecuteProcess_alloc(cmd);
+			TerminateStrOn(tlres, DEFAULT_TERMINATORS);
 			free(cmd);
 			ri->isGit = Compare(ri->DirectoryPath, tlres);
 			//printf("dir %s tl: %s (%i) dpw: %i\n", ri->DirectoryPath, tlres, ri->isGit, DoProcessWorktree);
@@ -638,8 +245,8 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			if (DoProcessWorktree && !(ri->isGit)) {
 				//usually we are done at this stage (only treat as git if in toplevel, but this is for the prompt substitution where it needs to work anywhere in git)
 				if (asprintf(&cmd, "git -C \"%s\" rev-parse --is-inside-work-tree 2>/dev/null", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-				char* wtres = ExecuteProcess(cmd);
-				TerminateStrOn(wtres, terminators);
+				char* wtres = ExecuteProcess_alloc(cmd);
+				TerminateStrOn(wtres, DEFAULT_TERMINATORS);
 				free(cmd);
 				ri->isGit = Compare(wtres, "true");
 				free(wtres);
@@ -655,18 +262,18 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 
 	//this tries to obtain the branch, or if that fails tag and if both fail the commit hash
 	if (asprintf(&cmd, "git -C  \"%1$s\" symbolic-ref --short HEAD 2>/dev/null || git -C \"%1$s\" describe --tags --exact-match HEAD 2>/dev/null || git -C \"%1$s\" rev-parse --short HEAD", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-	ri->branch = ExecuteProcess(cmd);
-	TerminateStrOn(ri->branch, terminators);
+	ri->branch = ExecuteProcess_alloc(cmd);
+	TerminateStrOn(ri->branch, DEFAULT_TERMINATORS);
 	free(cmd);
 	cmd = NULL;
 
 	//if 'git rev-parse --show-superproject-working-tree' outputs NOTHING, a repo is standalone, if there is output it will point to the parent repo
 	if (asprintf(&cmd, "git -C \"%s\" rev-parse --show-superproject-working-tree", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-	char* temp = ExecuteProcess(cmd);
-	ri->parentRepo = AbbreviatePath(temp, 15, 1, 2);
+	char* temp = ExecuteProcess_alloc(cmd);
+	AbbreviatePath(&(ri->parentRepo), temp, 15, 1, 2);
 	free(temp);
 	temp = NULL;
-	TerminateStrOn(ri->parentRepo, terminators);
+	TerminateStrOn(ri->parentRepo, DEFAULT_TERMINATORS);
 	ri->isSubModule = !((ri->parentRepo)[0] == 0x00);
 	free(cmd);
 
@@ -680,7 +287,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 
 
 	if (asprintf(&cmd, "git -C \"%s\" ls-remote --get-url origin", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-	ri->RepositoryUnprocessedOrigin = ExecuteProcess(cmd);
+	ri->RepositoryUnprocessedOrigin = ExecuteProcess_alloc(cmd);
 	free(cmd);
 	if (ri->RepositoryUnprocessedOrigin == NULL) {
 		DeallocRepoInfoStrings(ri);
@@ -688,7 +295,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 		return false;
 	}
 	cmd = NULL;
-	TerminateStrOn(ri->RepositoryUnprocessedOrigin, terminators);
+	TerminateStrOn(ri->RepositoryUnprocessedOrigin, DEFAULT_TERMINATORS);
 	if (Compare(ri->RepositoryUnprocessedOrigin, "origin")) {
 		//if git ls-remote --get-url origin returns 'origin' it means either the folder is not a git repository OR it's a repository without remote (local only)
 		//in this case since I already checked this IS a repo, it MUST be a repo without remote
@@ -743,20 +350,20 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 		//DO NOT CHANGE THIS REGEX WITHOUT UPDATING THE Regex101 VARIANT, THE GROUP DEFINITIONS AND THE DESCRIPTION
 		if (asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin) == -1) ABORT_NO_MEMORY;
 		//I take the capturing groups and paste them into a | seperated sting. There's 6 words (5 |), so I'll need 6 pointers into this memory area to resolve the six words
-#define REPO_ORIGIN_WORDS_IN_STRING 6
-#define REPO_ORIGIN_GROUP_PROTOCOL 0
-#define REPO_ORIGIN_GROUP_USER 1
-#define REPO_ORIGIN_GROUP_Host 2
-#define REPO_ORIGIN_GROUP_PORT 3
-#define REPO_ORIGIN_GROUP_GitHubUser 4 /*(if not GitHub, it's the path on remote)*/
-#define REPO_ORIGIN_GROUP_RepoName 5
-		char* sedRes = ExecuteProcess(sedCmd);
-		TerminateStrOn(sedRes, terminators);
+		const int REPO_ORIGIN_WORDS_IN_STRING = 6;
+		const int REPO_ORIGIN_GROUP_PROTOCOL = 0;
+		const int REPO_ORIGIN_GROUP_USER = 1;
+		const int REPO_ORIGIN_GROUP_Host = 2;
+		const int REPO_ORIGIN_GROUP_PORT = 3;
+		const int REPO_ORIGIN_GROUP_GitHubUser = 4; /*(if not GitHub, it's the path on remote)*/
+		const int REPO_ORIGIN_GROUP_RepoName = 5;
+		char* sedRes = ExecuteProcess_alloc(sedCmd);
+		TerminateStrOn(sedRes, DEFAULT_TERMINATORS);
 		if (sedRes[0] == 0x00) {//sed output was empty -> it must be a local repo, just parse the last folder as repo name and the rest as parentrepopath
 			// local repo
 			if (ri->RepositoryOriginID == -1)
 			{
-				ri->RepositoryDisplayedOrigin = AbbreviatePath(FixedProtoOrigin, 15, 2, 2);
+				AbbreviatePath(&(ri->RepositoryDisplayedOrigin), FixedProtoOrigin, 15, 2, 2);
 				//if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", FixedProtoOrigin) == -1)ABORT_NO_MEMORY;
 			}
 			const char* tempptr = FixedProtoOrigin;
@@ -837,13 +444,6 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 				ptrs[i] = NULL;//to prevent UseAfterFree vulns
 			}
 		}
-#undef REPO_ORIGIN_WORDS_IN_STRING
-#undef REPO_ORIGIN_GROUP_PROTOCOL
-#undef REPO_ORIGIN_GROUP_USER
-#undef REPO_ORIGIN_GROUP_Host
-#undef REPO_ORIGIN_GROUP_PORT
-#undef REPO_ORIGIN_GROUP_GitHubUser
-#undef REPO_ORIGIN_GROUP_RepoName
 		free(sedRes);
 		sedRes = NULL;
 
@@ -859,7 +459,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			char* changeCmd;
 			if (asprintf(&changeCmd, "git -C \"%s\" remote set-url origin %s", ri->DirectoryPath, ri->RepositoryUnprocessedOrigin) == -1) ABORT_NO_MEMORY;
 			printf("%s\n", changeCmd);
-			ExecuteProcess(changeCmd);
+			ExecuteProcess_alloc(changeCmd);
 			free(changeCmd);
 		}
 	}
@@ -906,175 +506,6 @@ RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, 
 		TestPathForRepoAndParseIfExists(ri, newRepoSpec, false, false);
 	}
 	return ri;
-}
-
-char* ConstructGitBranchInfoString(const RepoInfo* ri) {
-#define MALEN 64
-	int rbLen = 0;
-	char* rb = (char*)malloc(sizeof(char) * MALEN);
-	if (rb == NULL) ABORT_NO_MEMORY;
-	rb[0] = 0x00;
-	if (ri->HasRemote) { //if the repo doesn't have a remote, it doesn't make sense to count the branch differences betwen remote and local since ther is no remote
-		if (ri->CountRemoteOnlyBranches > 0 || ri->CountLocalOnlyBranches > 0 || ri->CountUnequalBranches > 0) {
-			int temp = snprintf(rb + rbLen, MALEN - rbLen, ": ⟨");
-			if (temp < MALEN && temp>0) {
-				rbLen += temp;
-			}
-
-			if (ri->CountRemoteOnlyBranches > 0) {
-				temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_REMOTEONLY "%d⇣ ", ri->CountRemoteOnlyBranches);
-				if (temp < MALEN && temp>0) {
-					rbLen += temp;
-				}
-			}
-
-			if (ri->CountLocalOnlyBranches > 0) {
-				temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_LOCALONLY "%d⇡ ", ri->CountLocalOnlyBranches);
-				if (temp < MALEN && temp>0) {
-					rbLen += temp;
-				}
-			}
-
-			if (ri->CountUnequalBranches > 0) {
-				temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_UNEQUAL "%d⇕ ", ri->CountUnequalBranches);
-				if (temp < MALEN && temp>0) {
-					rbLen += temp;
-				}
-			}
-
-			rb[--rbLen] = 0x00;//bin a space (after the file listings)
-
-			temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GREYOUT "⟩");
-			if (temp < MALEN && temp>0) {
-				rbLen += temp;
-			}
-		}
-	}
-	rb[rbLen < MALEN ? rbLen : MALEN - 1] = 0x00; //just as 'belt and bracers' absolutely ensure there is a nullbyte in there
-	return rb;
-}
-
-char* ConstructGitStatusString(const RepoInfo* ri) {
-#define GIT_SEG_5_MAX_LEN 128
-	int rbLen = 0;
-	char* rb = (char*)malloc(sizeof(char) * GIT_SEG_5_MAX_LEN);
-	if (rb == NULL) ABORT_NO_MEMORY;
-	rb[0] = 0x00;
-	int temp;
-	if (ri->LocalCommits > 0 || ri->RemoteCommits > 0 || ri->stashes > 0) {
-		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " {" COLOUR_GIT_COMMITS "%i\u21e3 %i\u21e1" COLOUR_CLEAR, ri->RemoteCommits, ri->LocalCommits);
-		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
-			rbLen += temp;
-		}
-		if (ri->stashes > 0) {
-			temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " %i#", ri->stashes);
-			if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
-				rbLen += temp;
-			}
-		}
-		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, "}");
-		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
-			rbLen += temp;
-		}
-	}
-	else if (ri->CheckedOutBranchIsNotInRemote && ri->HasRemote) { //only display if there even is a remote
-		//Initially I wanted not {NEW BRANCH} but {1⇡+}, where 1 is the number of commits since branching.
-		//to do that I would have to start at the branch tip, look at it's parent and see how many children that has.
-		//I would need to continue this chain until I find a commit with more than one child (the latest branching point) or I run out of commits (nothing on remote at all, no branches whatsoever)
-
-		//////{
-		//////	int numCommitsOnBranch = 0;
-		//////	bool CheckFurter = false;
-		//////	char current[64] = "HEAD";
-		//////	do {
-		//////		numCommitsOnBranch++;
-		//////		const int size = 256;
-		//////		char* result = (char*)malloc(sizeof(char) * size);
-		//////		char* cmd;
-		//////		bool RES = false;
-		//////		//look up the commit's parent. if the parent is a branch tip on remote or the initial commit, I found the base.
-		//////		//I will also have found the base if I find a commit with more than one child (one of them being me) IFF one of the OTHER children has a child somewhere down the line which itself IS a branch tip on remote
-		//////		//the best way to figure this out would be to create a in-memory graph, start at all nodes that mark a remote branch tip and bfs/dfs my way through the graph, marking all parents as 'on remote'
-		//////		//then start at all non-remote branch tips and bfs how many nodes I need to visit until I reach a 'on remote' node or run out of nodes
-		//////		if(asprintf(&cmd, "git -C \"%s\" cat-file -p %s |grep parent|cut -c8-", ri->DirectoryPath, current) == -1)ABORT_NO_MEMORY;
-		//////		int parentcount = 0;
-		//////		FILE* fp = popen(cmd, "r");
-		//////		if (fp == NULL)
-		//////		{
-		//////			fprintf(stderr, "failed running process %s\n", cmd);
-		//////		}
-		//////		else {
-		//////			while (fgets(result, size - 1, fp) != NULL)
-		//////			{
-		//////				TerminateStrOn(result, terminators);
-		//////				if (parentcount == 0) {
-		//////					strncpy(current, result, 63);
-		//////					current[63] = 0x00;
-		//////					if (current[0] == 0x00) {
-		//////						break;
-		//////					}
-		//////				}
-		//////				parentcount++;
-		//////			}
-		//////		}
-		//////		free(result);
-		//////		pclose(fp);
-		//////		free(cmd);
-		//////		if (parentcount != 1) {
-		//////			CheckFurter = false;
-		//////		}
-		//////	} while (CheckFurter);
-		//////	printf("%s/%s has %i new commits\n", ri->RepositoryName, ri->branch, numCommitsOnBranch);
-		//////}
-		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " {" COLOUR_GIT_COMMITS "NEW BRANCH" COLOUR_CLEAR "}");
-		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
-			rbLen += temp;
-		}
-	}
-
-	if (ri->StagedChanges > 0 || ri->ModifiedFiles > 0 || ri->UntrackedFiles > 0 || ri->ActiveMergeFiles > 0) {
-		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " <");
-		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
-			rbLen += temp;
-		}
-
-		if (ri->ActiveMergeFiles > 0) {
-			temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, COLOUR_GIT_MERGES "%d!" COLOUR_CLEAR " ", ri->ActiveMergeFiles);
-			if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
-				rbLen += temp;
-			}
-		}
-
-		if (ri->StagedChanges > 0) {
-			temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, COLOUR_GIT_STAGED "%d+" COLOUR_CLEAR " ", ri->StagedChanges);
-			if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
-				rbLen += temp;
-			}
-		}
-
-		if (ri->ModifiedFiles > 0) {
-			temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, COLOUR_GIT_MODIFIED "%d*" COLOUR_CLEAR " ", ri->ModifiedFiles);
-			if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
-				rbLen += temp;
-			}
-		}
-
-		if (ri->UntrackedFiles > 0) {
-			temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, "%d? ", ri->UntrackedFiles);
-			if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
-				rbLen += temp;
-			}
-		}
-
-		rb[--rbLen] = 0x00;//bin a space (after the file listings)
-
-		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, ">");
-		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
-			rbLen += temp;
-		}
-	}
-	rb[rbLen < GIT_SEG_5_MAX_LEN ? rbLen : GIT_SEG_5_MAX_LEN - 1] = 0x00; //just as 'belt and bracers' absolutely ensure there is a nullbyte in there
-	return rb;
 }
 
 void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSameLevelEntryFollows, bool fullOut) {
@@ -1149,38 +580,6 @@ void printTree(RepoInfo* ri, bool Detailed) {
 	printTree_internal(ri, "", ri->SubDirectoryCount > 1, Detailed);
 }
 
-bool pruneTreeForGit(RepoInfo* ri) {
-	bool hasGitInTree = false;
-	if (ri->SubDirectories != NULL) {
-		RepoList* current = ri->SubDirectories;
-		RepoList* next = NULL;
-		while (current != NULL)
-		{
-			next = current->next;
-			if (pruneTreeForGit(current->self)) {
-				hasGitInTree = true;
-			}
-			else {
-				if (current->prev != NULL) {
-					current->prev->next = current->next;
-				}
-				else {
-					//it was the first->ri pointed to this initially
-					ri->SubDirectories = current->next;
-				}
-				if (current->next != NULL) {
-					current->next->prev = current->prev;
-				}
-				ri->SubDirectoryCount--;
-				//printf("removing %s\n", current->self->DirectoryName);
-				free(current);
-				current = NULL;
-			}
-			current = next;
-		}
-	}
-	return ri->isGit || hasGitInTree;
-}
 
 void Cleanup() {
 	for (int i = 0;i < maxGroups;i++) {
@@ -1242,7 +641,7 @@ void DoSetup() {
 				i++;
 			}
 			if (i < (buf_max_len - 8 - 1) && actbuf[i] == '\t') {
-				if (TerminateStrOn(actbuf + i + 1, terminators) > 0) {
+				if (TerminateStrOn(actbuf + i + 1, DEFAULT_TERMINATORS) > 0) {
 					if (asprintf(&LOCS[numLOCS], "%s", actbuf + i + 1) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
 					actbuf[i] = 0x00;
 					if (asprintf(&NAMES[numLOCS], "%s", actbuf) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
@@ -1253,7 +652,7 @@ void DoSetup() {
 		}
 		else if (StartsWith(buf, "HOST:	")) {
 			//found host
-			if (TerminateStrOn(buf, terminators) > 0) {
+			if (TerminateStrOn(buf, DEFAULT_TERMINATORS) > 0) {
 				if (asprintf(&GitHubs[numGitHubs], "%s", buf + 6) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
 				//the +6 is the offset to just after "HOST:	"
 				//printf("host>%s<\n", GitHubs[numGitHubs]);
@@ -1265,36 +664,6 @@ void DoSetup() {
 		}
 	}
 	free(buf);
-}
-
-uint32_t determinePossibleCombinations(int* availableLength, int NumElements, ...) {
-	//this function takes a poiner to an int containing the total available size and the number of variadic arguments to be expected.
-	//the variadic elements are the size of individual blocks.
-	//the purpose of this function is to figure out which blocks can fit into the total size in an optimal fashion.
-	//an optimal fashion means: as many as possible, but the blocks are given in descending priority.
-	//example: if there's a total size of 10 and the blocks 5,7,6,3,4,2,8,1,1,1,1,1,1,1,1 the solution would be to take 5+3+2 since 5 is the most important which means there's a size of 5 left that can be filled again.
-	//7 doesn't fit, so we'll take the next best thing that will fit, in this case 3, which leaves 2, which in turn can be taken by the 2.
-	//if the goal was just to have "as many as possible" the example should have picked all 1es, but since I need priorities, take the first that'll fit and find the next hightest priority that'll fit
-	//(which will be further back in the list, otherwise it would already have been selected)
-	//this function then returns a bitfield of which blocks were selected
-	assert(NumElements > 0 && NumElements <= 32);
-	uint32_t res = 0;
-	va_list ELEMENTS;
-	va_start(ELEMENTS, NumElements);//start variadic function param handling, NumElements is the Identifier of the LAST NON-VARIADIC parameter passed to this function
-	for (int i = 0; i < NumElements; i++)
-	{
-		//va_arg returns the next of the variadic emlements, assuming it's type is compatible with the provided one (here int)
-		//if it's not compatible, it's undefined behaviour
-		int nextElem = va_arg(ELEMENTS, int);
-		//if the next element fits, select it and reduce the available space
-		if (*availableLength > nextElem) {
-			res |= 1 << i;
-			*availableLength -= nextElem;
-		}
-	}
-	va_end(ELEMENTS);//a bit like malloc/free there has to be a va_end for each va_start
-
-	return res;
 }
 
 void ListAvailableRemotes() {
@@ -1446,7 +815,7 @@ char* GetIfaceSpeed(const char* iface) {
 	else {
 		while (fgets(result, size - 1, fp) != NULL)
 		{
-			TerminateStrOn(result, terminators);
+			TerminateStrOn(result, DEFAULT_TERMINATORS);
 			if (Compare(result, ""))continue;
 			if (Compare(result, "1000M")) {
 				if (asprintf(&ret, "1G") == -1) ABORT_NO_MEMORY;
@@ -1523,7 +892,7 @@ IpTransportStruct GetBaseIPString() {
 	else {
 		while (fgets(result, size - 1, fp) != NULL)
 		{
-			TerminateStrOn(result, terminators);
+			TerminateStrOn(result, DEFAULT_TERMINATORS);
 			//fprintf(stderr, "\n\nresult: %s\n", result);
 			IpRegexReturnCode = regexec(&RouteRegex, result, RouteRegexGroupCount, RouteRegexGroups, 0);
 			//man regex (3): regexec() returns zero for a successful match or REG_NOMATCH for failure.
@@ -1726,12 +1095,12 @@ int main(int argc, char** argv)
 
 	const char* Arg_CmdTime = NULL;
 
-	char* User = ExecuteProcess("whoami");
-	TerminateStrOn(User, terminators);
+	char* User = ExecuteProcess_alloc("whoami");
+	TerminateStrOn(User, DEFAULT_TERMINATORS);
 	int User_len = strlen_visible(User);
 
-	char* Host = ExecuteProcess("hostname");
-	TerminateStrOn(Host, terminators);
+	char* Host = ExecuteProcess_alloc("hostname");
+	TerminateStrOn(Host, DEFAULT_TERMINATORS);
 	int Host_len = strlen_visible(Host);
 
 	const char* Arg_TerminalDevice = NULL;
@@ -1859,19 +1228,19 @@ int main(int argc, char** argv)
 			}
 		case 'b':
 			{
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				LIMIT_BRANCHES = atoi(optarg);
 				break;
 			}
 		case 'c':
 			{
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_TotalPromptWidth = atoi(optarg);
 				break;
 			}
 		case 'd':
 			{
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_TerminalDevice = optarg;
 				Arg_TerminalDevice_len = strlen_visible(Arg_TerminalDevice);
 				break;
@@ -1886,7 +1255,7 @@ int main(int argc, char** argv)
 					}
 					temp++;
 				}
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_PowerState = optarg;
 				Arg_PowerState_len = strlen_visible(Arg_PowerState);
 				break;
@@ -1916,7 +1285,7 @@ int main(int argc, char** argv)
 					//unlike the case in -I, if I'm on a system where the basic lookup doesn't work it'll REALLY mess up.
 					//it's not even guaranteed I'll be able to reach this point, the program may error out before this, but if it hasn't just forcibly error out
 				}
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				if (asprintf(&Arg_LocalIPs, "%s", optarg) == -1) ABORT_NO_MEMORY;
 				Arg_LocalIPs_len = strlen_visible(Arg_LocalIPs);
 				Arg_LocalIPsAdditional = (char*)malloc(sizeof(char) * 1);
@@ -1946,14 +1315,14 @@ int main(int argc, char** argv)
 			}
 		case 'j':
 			{
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_BackgroundJobs = optarg;
 				Arg_BackgroundJobs_len = strlen_visible(Arg_BackgroundJobs);
 				break;
 			}
 		case 'l':
 			{
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_SHLVL = optarg;
 				//if the shell level is 1, don't print it, only if shell level >1 show it
 				if (Compare(Arg_SHLVL, " [1]")) {
@@ -1965,13 +1334,13 @@ int main(int argc, char** argv)
 		case 'n':
 			{
 				//printf("option n: %s", optarg);fflush(stdout);
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_NewRemote = optarg;
 				break;
 			}
 		case 'p':
 			{
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_ProxyInfo = optarg;
 				Arg_ProxyInfo_len = strlen_visible(Arg_ProxyInfo);
 				break;
@@ -1983,20 +1352,20 @@ int main(int argc, char** argv)
 			}
 		case 'r':
 			{
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				PromptRetCode = atoi(optarg);
 				break;
 			}
 		case 's':
 			{
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_SSHInfo = optarg;
 				Arg_SSHInfo_len = strlen_visible(Arg_SSHInfo);
 				break;
 			}
 		case 't':
 			{
-				TerminateStrOn(optarg, terminators);
+				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_CmdTime = optarg;
 				break;
 			}
@@ -2040,7 +1409,7 @@ int main(int argc, char** argv)
 	if (!(IsPrompt || IsShow || IsSet || IsList || IsLowPrompt)) {
 		printf("you must specify EITHER --prompt --set --show --list or --lowprompt\n");
 		exit(1);
-	}
+}
 
 	if (!IsList && !(optind < argc)) {
 		printf("You must supply one non-option parameter (if not in --list mode)");
@@ -2325,7 +1694,8 @@ int main(int argc, char** argv)
 	else if (IsLowPrompt) {
 		int chars = Arg_TotalPromptWidth / 4; //allow a quarter of the screen width to be current working directory
 		int segments = chars / 16; //impose a limit on how many segments make sense. if the terminal is 256 wide, chars would be 64 and I would allow 4 segements
-		char* temp = AbbreviatePathAuto(path, chars, segments);
+		char* temp;
+		AbbreviatePathAuto(&temp, path, chars, segments);
 		//fprintf(stderr, "(%i %i)%s | %s\n", chars, segments, temp, path);
 		printf("└%%F{cyan}%%B %s %s[%s:%i", temp, (PromptRetCode == 0 ? "%F{green}" : "%F{red}"), Arg_CmdTime, PromptRetCode);
 		switch (PromptRetCode) {

@@ -86,9 +86,6 @@ function GetLocalIP (){
 		IpAddrList=""
 		for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices for any 'default routes'
 		do
-			#TODO possibly display metric (lower is better) or mark lowest metric route with a star
-			#TODO find out what metrics I get if a system has two valid conns (eg serenity) -> both connections (provided they are on the same network have the same metric (wsl:0; win:35), this holds true even in windows (cmd: route 	print))
-			#I tested conecting to mobile hostpot while also on enternet->result: in wsl both have metric 0, whereas in windows the wifi from mobile tethering had metric 50 while ethernet remained at 35
 			#lookup the IP for those devices
 			#the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
 			isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
@@ -105,6 +102,7 @@ function GetLocalIP (){
 		#echo "$IpAddrList" #|cut -c2- #bin the first space
 	else
 		# we are on a bare-metal linux or at least on a non-wsl platform so IP resolution is to be done by repotools.c which is also responsible for gatehring and parsing everything itself
+		# in that case Linkspeed and metric are also used
 		echo "-I"
 	fi
 }
