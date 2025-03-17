@@ -480,6 +480,7 @@ RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, 
 	}
 
 	DIR* directoryPointer;
+	//On success, readdir() returns a pointer to a dirent structure.  (This structure may be statically allocated; do not attempt to free(3) it.)
 	const struct dirent* direntptr;
 	directoryPointer = opendir(ri->DirectoryPath);
 	if (directoryPointer != NULL)
@@ -490,7 +491,8 @@ RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, 
 			if (!BeThorough && Compare(direntptr->d_name, ".git")) {
 				ri->isGit = true;
 			}
-			if (Compare(direntptr->d_name, ".") || Compare(direntptr->d_name, "..")) {
+			if (direntptr->d_type != DT_DIR || Compare(direntptr->d_name, ".") || Compare(direntptr->d_name, "..")) {
+				//if the current file isn't a directory I needn't check for subdirectories
 				continue;
 			}
 			else if (direntptr->d_type == DT_DIR && !ri->isBare) {
