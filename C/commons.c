@@ -252,13 +252,14 @@ uint32_t TerminateStrOn(char* str, const char* terminators) {
 }
 
 int cpyString(char* dest, const char* src, int maxCount) {
-	for (int i = 0; i < maxCount; i++) {
+	int i = 0;
+	for (; i < maxCount; i++) {
 		dest[i] = src[i];
 		if (src[i] == 0x00) {
 			return i;
 		}
 	}
-	return maxCount;//shouldn't this be i?
+	return i;
 }
 
 inline char ToLowerCase(const char c)

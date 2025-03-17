@@ -30,6 +30,11 @@ UpdateZSH (){
 			#don't just randomly go around updating foreign git repositories without explicit user input
 			printf "ShellToolsExtensionLoader.sh exists (at %s) -> there possibly is a parent repo, if so please update that MANUALLY\nShellTools will NOT automatically update anything other than itself\n" "$(realpath "$ST_SRC/../")"
 		fi
+		if ! git symbolic-ref --short HEAD 1>/dev/null 2>&1 ; then
+			#if I am on any branch, stay there, if I'm on a tag or a detached commit, go to master
+			printf "INFO: ShellTools was on %s, checking out master\n" "$(git -C  "$ST_SRC" symbolic-ref --short HEAD 2>/dev/null || git -C "$ST_SRC" describe --tags --exact-match HEAD 2>/dev/null || git -C "$ST_SRC" rev-parse --short HEAD)"
+			git -C "$ST_SRC" checkout master
+		fi
 		git -C "$ST_SRC" pull
 	fi
 	#compile all .c or .cpp files in the folders ZSH and C using the self-compile trick

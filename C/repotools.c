@@ -39,12 +39,13 @@ char* GitHubs[MaxLocations];
 uint8_t numGitHubs = 0;
 int LIMIT_BRANCHES = -2;
 uint8_t numLOCS = 0;
-#define DEFAULT_CONFIG_FILE "\
-# Lines starting with # are Comments, seperator between Entries is TAB (Spaces DO NOT WORK [by design])\n\
-ORIGIN:	NONE	/dev/null\n\
-ORIGIN:	LOOPBACK	ssh://git@127.0.0.1/data/repos\n\
-HOST:	github.com\n\
-HOST:	gitlab.com\n"
+bool WarnBranchlimit = true;
+
+int CONFIG_LSGIT_QUICK_BRANCHLIMIT = 100;
+int CONFIG_LSGIT_THOROUGH_BRANCHLIMIT = -1;
+int CONFIG_PROMPT_BRANCHLIMIT = 25;
+bool CONFIG_PROMPT_WARN_BRANCHLIMIT = true;
+bool CONFIG_LSGIT_WARN_BRANCHLIMIT = true;
 
 bool CheckBranching(RepoInfo* ri) {
 	//this method checks the status of all branches on a given repo
@@ -71,7 +72,9 @@ bool CheckBranching(RepoInfo* ri) {
 				free(result);
 				pclose(fp);
 				free(command);
-				fprintf(stderr, "more than %i branches -> aborting branchhandling\n", LIMIT_BRANCHES);
+				if (WarnBranchlimit) {
+					fprintf(stderr, "more than %i branches for repo %s -> aborting branchhandling\n", LIMIT_BRANCHES, ri->DirectoryPath);
+				}
 				while (ListBase != NULL) {
 					BranchListSorted* temp = ListBase;
 					ListBase = ListBase->next;
@@ -599,70 +602,137 @@ void DoSetup() {
 	numGitHubs = 0;
 	errno = 0;
 
-	char* file;
-	const char* fileName = "/repoconfig.cfg";
-	const char* pointerIntoEnv = getenv("ST_CFG");
-	//TODO check if dir exists
-	file = (char*)malloc(strlen(pointerIntoEnv) + strlen(fileName) + 1); // to account for NULL terminator
-	if (file == NULL) ABORT_NO_MEMORY;
-	strcpy(file, pointerIntoEnv);
-	strcat(file, fileName);
-	FILE* fp = fopen(file, "r");//open for read, will fail if file doesn't exist
-	if (fp == NULL) {
-		printf("config file didn't exist (%i: %s)\n", errno, strerror(errno));
-		errno = 0;
-		fp = fopen(file, "w+");//open for read/write -> create if not exists, then fill defaults, then read
-		if (fp == NULL) {
-			fprintf(stderr, "couldn't create file (%i: %s)\n", errno, strerror(errno));
-		}
-		else {
-			fprintf(fp, DEFAULT_CONFIG_FILE);
-			fflush(fp);
-			rewind(fp);
-			printf("created default config file: %s\n", file);
-		}
-	}
-	free(file);
-
 	int buf_max_len = 1024;
 	char* buf = (char*)malloc(sizeof(char) * buf_max_len);
 	if (buf == NULL) ABORT_NO_MEMORY;
+
+	char* configFilePath;
+	const char* fileName = "/config.cfg";
+	const char* pointerIntoEnv = getenv("ST_CFG");
+	configFilePath = (char*)malloc(strlen(pointerIntoEnv) + strlen(fileName) + 1); // to account for NULL terminator
+	if (configFilePath == NULL) ABORT_NO_MEMORY;
+	strcpy(configFilePath, pointerIntoEnv);
+	strcat(configFilePath, fileName);
+	FILE* fp = fopen(configFilePath, "r");//open for read, will fail if configFilePath doesn't exist
+	if (fp == NULL) {
+		printf("config file didn't exist (%i: %s)\n", errno, strerror(errno));
+		errno = 0;
+		fp = fopen(configFilePath, "w+");//open for read/write -> create if not exists, then fill defaults, then read
+		if (fp == NULL) {
+			fprintf(stderr, "couldn't create file (%i: %s)\n", errno, strerror(errno));
+			free(configFilePath);
+			free(buf);
+			return;
+		}
+		else {
+			//Create (or rather copy) default file
+			const char* defaultConfigFileRelativePath = "/DEFAULTCONFIG.cfg";
+			const char* defaultConfigFileDir = getenv("ST_SRC");
+			char* defaultConfigFileFullPath;
+			if (asprintf(&defaultConfigFileFullPath, "%s%s", defaultConfigFileDir, defaultConfigFileRelativePath) == -1) ABORT_NO_MEMORY;
+			FILE* dfp = fopen(defaultConfigFileFullPath, "r");
+			if (dfp != NULL) {
+				while (fgets(buf, buf_max_len - 1, dfp) != NULL) {
+					if (!StartsWith(buf, "###")) {
+						//a line starting with ### is the "DO NOT EDIT" warning, skip that but copy everything else
+						fprintf(fp, "%s", buf);
+					}
+				}
+
+				printf("created default config file %s from %s\n", configFilePath, defaultConfigFileFullPath);
+				fclose(dfp);
+			}
+			else {
+				printf("WARNING: COULD NOT READ CONFIG FILE TEMPLATE %s (%i: %s)\nTHEREFORE CANNOT POPULATE DEFAULT CONFIG FILE %s\nCONFIG FILE AT %s WILL EXIST BUT BE EMPTY, PLEASE MANUALLY CHECK THE FILE", defaultConfigFileFullPath, errno, strerror(errno), configFilePath, configFilePath);
+				free(configFilePath);
+				free(buf);
+				free(defaultConfigFileFullPath);
+				fclose(fp);
+				return;
+			}
+			fflush(fp);
+			rewind(fp);
+			free(defaultConfigFileFullPath);
+			defaultConfigFileFullPath = NULL;
+		}
+	}
+	free(configFilePath);
+
 
 	//at this point I know for certain a config file does exist
 	while (fgets(buf, buf_max_len - 1, fp) != NULL) {
 		if (buf[0] == '#') {
 			continue;
 		}
-		else if (StartsWith(buf, "ORIGIN:	")) {
-			//found origin
-			char* actbuf = buf + 8;//the 8 is the offset to just behind "ORIGIN:	"
-			int i = 0;
-			while (i < buf_max_len - 8 && actbuf[i] != '\t') {
-				i++;
+		else {
+			if (TerminateStrOn(buf, DEFAULT_TERMINATORS) == 0) {
+				continue;
 			}
-			if (i < (buf_max_len - 8 - 1) && actbuf[i] == '\t') {
-				if (TerminateStrOn(actbuf + i + 1, DEFAULT_TERMINATORS) > 0) {
+			if (StartsWith(buf, "ORIGIN_ALIAS:	")) {
+				//found origin
+				char* actbuf = buf + 14;//the 8 is the offset to just behind "ORIGIN:	"
+				int i = 0;
+				while (i < buf_max_len - 14 && actbuf[i] != '\t') {
+					i++;
+				}
+				if (i < (buf_max_len - 14 - 1) && actbuf[i] == '\t') {
 					if (asprintf(&LOCS[numLOCS], "%s", actbuf + i + 1) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
 					actbuf[i] = 0x00;
 					if (asprintf(&NAMES[numLOCS], "%s", actbuf) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
-					//printf("origin>%s|%s<\n", NAMES[numLOCS], LOCS[numLOCS]);
+#ifdef DEBUG
+					printf("origin>%s|%s<\n", NAMES[numLOCS], LOCS[numLOCS]);
+#endif
 					numLOCS++;
 				}
 			}
-		}
-		else if (StartsWith(buf, "HOST:	")) {
-			//found host
-			if (TerminateStrOn(buf, DEFAULT_TERMINATORS) > 0) {
-				if (asprintf(&GitHubs[numGitHubs], "%s", buf + 6) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
+			else if (StartsWith(buf, "GITHUB_HOST:	")) {
+				//found host
+				if (asprintf(&GitHubs[numGitHubs], "%s", buf + 13) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
 				//the +6 is the offset to just after "HOST:	"
-				//printf("host>%s<\n", GitHubs[numGitHubs]);
+#ifdef DEBUG
+				printf("host>%s<\n", GitHubs[numGitHubs]);
+#endif
 				numGitHubs++;
 			}
-		}
-		else {
-			fprintf(stderr, "Warning: unknown entry in config file: >%s<", buf);
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.MAXBRANCHES:	")) {
+				CONFIG_LSGIT_QUICK_BRANCHLIMIT = atoi(buf + 35);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 35, CONFIG_LSGIT_QUICK_BRANCHLIMIT);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.MAXBRANCHES:	")) {
+				CONFIG_LSGIT_THOROUGH_BRANCHLIMIT = atoi(buf + 38);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_LSGIT_THOROUGH_BRANCHLIMIT);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.WARN_BRANCH_LIMIT:	")) {
+				CONFIG_LSGIT_WARN_BRANCHLIMIT = Compare("true", buf + 35);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 35, CONFIG_LSGIT_WARN_BRANCHLIMIT);
+#endif
+
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.MAXBRANCHES:	")) {
+				CONFIG_PROMPT_BRANCHLIMIT = atoi(buf + 30);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_BRANCHLIMIT);
+#endif
+
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.WARN_BRANCH_LIMIT:	")) {
+				CONFIG_PROMPT_WARN_BRANCHLIMIT = Compare("true", buf + 36);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_WARN_BRANCHLIMIT);
+#endif
+
+			}
+			else {
+				fprintf(stderr, "Warning: unknown entry in config file: >%s<\n", buf);
+			}
 		}
 	}
+	fclose(fp);
 	free(buf);
 }
 
@@ -1409,7 +1479,7 @@ int main(int argc, char** argv)
 	if (!(IsPrompt || IsShow || IsSet || IsList || IsLowPrompt)) {
 		printf("you must specify EITHER --prompt --set --show --list or --lowprompt\n");
 		exit(1);
-}
+	}
 
 	if (!IsList && !(optind < argc)) {
 		printf("You must supply one non-option parameter (if not in --list mode)");
@@ -1423,8 +1493,10 @@ int main(int argc, char** argv)
 
 	if (LIMIT_BRANCHES == -2) {
 		//if IsPrompt, default 25; if IsSet, default 50; else default -1
-		LIMIT_BRANCHES = (IsPrompt ? 25 : (IsSet ? 50 : -1));
+		LIMIT_BRANCHES = (IsPrompt ? CONFIG_PROMPT_BRANCHLIMIT : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_BRANCHLIMIT : CONFIG_LSGIT_QUICK_BRANCHLIMIT));
 	}
+
+	WarnBranchlimit = IsPrompt ? CONFIG_PROMPT_WARN_BRANCHLIMIT : CONFIG_LSGIT_WARN_BRANCHLIMIT;
 
 
 	if (IsPrompt) //show origin info for command prompt
