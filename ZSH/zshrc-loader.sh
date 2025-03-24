@@ -23,14 +23,19 @@
 #to forcibly log out a non-gui user: pkill -t "terminalDevice" such as sudo pkill -t pts/1
 
 #shellcheck disable=SC2120 # reason: The parameter is optional, therefore it needn't be used. it's only use is in an alias for quicker development
-UpdateZSH (){
+UpdateZSH(){
+	ST_CoreUpdate "$@"
+}
+
+#shellcheck disable=SC2120 # reason: The parameter is optional, therefore it needn't be used. it's only use is in an alias for quicker development
+ST_CoreUpdate (){
 	echo "Updating/Installing ShellTools"
-	if [ "${1:"pull"}" != "nopull" ]; then
-		if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ] && [ "$(git -C "$(realpath "$ST_SRC/../")" rev-parse --show-toplevel 2>/dev/null)" != "$(git -C "$ST_SRC" rev-parse --show-toplevel 2>/dev/null)" ]; then
+	if [ "${1:-"pull"}" != "nopull" ]; then
+		if [ "${ST_EXTENSION_DOES_UPDATE:-0}" -ne 1 ] && [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ] && [ "$(git -C "$(realpath "$ST_SRC/../")" rev-parse --show-toplevel 2>/dev/null)" != "$(git -C "$ST_SRC" rev-parse --show-toplevel 2>/dev/null)" ]; then
 			#don't just randomly go around updating foreign git repositories without explicit user input
 			printf "ShellToolsExtensionLoader.sh exists (at %s) -> there possibly is a parent repo, if so please update that MANUALLY\nShellTools will NOT automatically update anything other than itself\n" "$(realpath "$ST_SRC/../")"
 		fi
-		if ! git symbolic-ref --short HEAD 1>/dev/null 2>&1 ; then
+		if ! git -C "$ST_SRC" symbolic-ref --short HEAD 1>/dev/null 2>&1 ; then
 			#if I am on any branch, stay there, if I'm on a tag or a detached commit, go to master
 			printf "INFO: ShellTools was on %s, checking out master\n" "$(git -C  "$ST_SRC" symbolic-ref --short HEAD 2>/dev/null || git -C "$ST_SRC" describe --tags --exact-match HEAD 2>/dev/null || git -C "$ST_SRC" rev-parse --short HEAD)"
 			git -C "$ST_SRC" checkout master
