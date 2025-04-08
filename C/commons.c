@@ -420,7 +420,16 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 			//this would happen with something like AbbreviatePath(/mnt/c/WS/CODE/BAT_VBS,20,3) where WS would be abbreiviated, but the abreviation ... is longer than the original name -> it doesn't make sense
 			if (asprintf(ret, "%s", Workpath) == -1) ABORT_NO_MEMORY;
 		}
+#ifdef PATH_ABBREV_TREAT_SINGLE_ELEMENT_AS_RELATIVE_PATH
+		//this is how this had been implemented in the past.
+		//if the settings were to only keep a single element at the back, none at the front
+		//if then the last directory in $(pwd) was longer than the truncation threshold, this would print that last directory
+		//and ONLY that directory, without the omission marker, thereby behaving as if dieplaying a relative path.
+		//that behaviour is not what I had intended, but I'll leave this in as a compiletime option
 		else if (frontLen == 0) {
+#else
+		else if (frontLen == 0 && DesiredKeepElementsFront > 0) {
+#endif
 			//if the front segment doesn't exist, only print the back segment WITHOUT clobbering a seperator in front
 			if (asprintf(ret, "%s", FromBack + 1) == -1) ABORT_NO_MEMORY;
 		}

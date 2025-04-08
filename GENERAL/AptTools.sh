@@ -172,3 +172,7 @@ echo " ago]"
 if [ -f /var/run/reboot-required ]; then
 	cat /var/run/reboot-required
 fi
+if [ -f /var/run/reboot-required.pkgs ]; then
+	echo "Reboot is required to apply updates for following packages:"
+	sort < /var/run/reboot-required.pkgs | uniq
+fi

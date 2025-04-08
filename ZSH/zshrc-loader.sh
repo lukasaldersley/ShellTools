@@ -3,17 +3,15 @@
 #I am aware this is zsh not bash, but shellcheck doesn't support that
 #usually I would limit myself to POSIX compliant code (=sh) but here I need to deviate from that as zsh's read is similar to bash's but different from POSIX/sh's and if I do that I may as well use features not in sh such as here-strings and brace-expansion
 
-#NOTE: if I clobbered something with an alias 'type -a *whateverIsuspectIsClobbered*' will gibe me a list of every possible meaning
+#NOTE: if I clobbered something with an alias 'type -a *whateverIsuspectIsClobbered*' will give me a list of every possible meaning
 
 ## this script must be sourced in zshrc as follows (obviously adjust ST_SRC and ST_CFG):
 ## ST_CFG can be anything as long as it's writeable by ShellTools, below is just a suggestion
-## Ideally just use setup.sh to create a valid zshrc
 ##
 ### ST_SRC="/path/to/ShellTools"
 ### ST_CFG="$HOME/.shelltools"
 ### export ST_SRC
 ### export ST_CFG
-### ST_CFG=
 ### . "$ST_SRC/ZSH/zshrc-loader.sh"
 ##
 ##NOTE: in bash/ksh/zsh 'export ST_CFG="$HOME/.shelltools"' would also be valid but not in POSIX where the assignement and export must be seperate"
@@ -23,16 +21,13 @@
 #to forcibly log out a non-gui user: pkill -t "terminalDevice" such as sudo pkill -t pts/1
 
 #shellcheck disable=SC2120 # reason: The parameter is optional, therefore it needn't be used. it's only use is in an alias for quicker development
-UpdateZSH(){
-	ST_CoreUpdate "$@"
-}
-
-#shellcheck disable=SC2120 # reason: The parameter is optional, therefore it needn't be used. it's only use is in an alias for quicker development
 ST_CoreUpdate (){
 	echo "Updating/Installing ShellTools"
-	if [ "${1:-"pull"}" != "nopull" ]; then
+	BranchAdvance=0
+	if [ "${1:-"--pull"}" != "--nopull" ]; then
 		if [ "${ST_EXTENSION_DOES_UPDATE:-0}" -ne 1 ] && [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ] && [ "$(git -C "$(realpath "$ST_SRC/../")" rev-parse --show-toplevel 2>/dev/null)" != "$(git -C "$ST_SRC" rev-parse --show-toplevel 2>/dev/null)" ]; then
 			#don't just randomly go around updating foreign git repositories without explicit user input
+			#However if ST_EXTENSION_DOES_UPDATE is set, the currently loaded extension has an update routine which is run in a modified UpdateShellTools. In that case, suppress this warning
 			printf "ShellToolsExtensionLoader.sh exists (at %s) -> there possibly is a parent repo, if so please update that MANUALLY\nShellTools will NOT automatically update anything other than itself\n" "$(realpath "$ST_SRC/../")"
 		fi
 		if ! git -C "$ST_SRC" symbolic-ref --short HEAD 1>/dev/null 2>&1 ; then
@@ -40,25 +35,57 @@ ST_CoreUpdate (){
 			printf "INFO: ShellTools was on %s, checking out master\n" "$(git -C  "$ST_SRC" symbolic-ref --short HEAD 2>/dev/null || git -C "$ST_SRC" describe --tags --exact-match HEAD 2>/dev/null || git -C "$ST_SRC" rev-parse --short HEAD)"
 			git -C "$ST_SRC" checkout master
 		fi
-		git -C "$ST_SRC" pull
+		if git -C "$ST_SRC" pull --ff-only ; then
+			BranchAdvance=1
+			date +%s > "$ST_CFG/.lastfetch"
+		elif git -C "$ST_SRC" merge origin/"$(git -C  "$ST_SRC" symbolic-ref --short HEAD)" --ff-only; then
+			#I can't pull, per se, but I CAN ff-merge (ie I currently don't have network but I do have the stuff cached)
+			BranchAdvance=1
+		else
+			printf "\e[38;5;9mAutomatic git pull --ff-only failed, please check manually\e[0m\n"
+		fi
 	fi
 	#compile all .c or .cpp files in the folders ZSH and C using the self-compile trick
 	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
 	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
 	if [ -w ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme ]; then #if file exists and write permission is granted
 		rm ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
+		echo "copying $ST_SRC/ZSH/lukasaldersley.zsh-theme to  $ZSH/custom/themes/lukasaldersley.zsh-theme"
+		cp "$ST_SRC/ZSH/lukasaldersley.zsh-theme" "$ZSH/custom/themes/lukasaldersley.zsh-theme"
 	else
 		echo "WARNING: cannot update ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme: not writeable"
 	fi
-	echo "copying $ST_SRC/ZSH/lukasaldersley.zsh-theme to  ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme"
-	cp "$ST_SRC/ZSH/lukasaldersley.zsh-theme" ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
-	omz reload
+	if [ "$BranchAdvance" -eq 1 ] || [ "${1:-"--pull"}" = "--nopull" ]; then
+		#if I didn't manage to advance the branch, I don't really need to reload since there were no new files, but if I passed nopull I probably want to debug local changes -> do reload
+		omz reload
+	fi
 }
+
+#This function may be overwritten in Extensions to update those extensions along with ShellTools
+#shellcheck disable=SC2120 # reason: The uzparameter is optional, therefore it needn't be used. it's only use is in an alias for quicker development
+UpdateShellTools(){
+	ST_CoreUpdate "$@"
+}
+
+if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | sed -nE 's~# branch.ab.*-([0-9]+)~\1~p')" -gt 0 ]; then
+#if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | grep  branch.ab)" != "# branch.ab +0 -0" ]; then
+	printf "There are ShellTools Updates available on the current branch (%s).\nDo you wish to update now [Y/n] " "$(git symbolic-ref --short HEAD)"
+	read -r -k 1 versionconfirm
+	printf '\n'
+	case $versionconfirm in
+		[Yy][Ee][Ss] | [Yy] )
+			UpdateShellTools
+			;;
+		* )
+			echo "not updating. You can manually update by running 'uz' or 'UpdateShellTools'"
+			;;
+	esac
+fi
 
 if [ ! -e "$ST_CFG" ] || [ ! -e "$ST_CFG/repotools.elf" ]; then
 	echo "$ST_CFG directory or repotools binary didn't exist -> creating now"
 	mkdir -p "$ST_CFG"
-	UpdateZSH
+	UpdateShellTools --nopull
 fi
 
 printf "\e[38;5;240mLoading Scripts from\e[0m %s\n" "$ST_SRC"
@@ -110,7 +137,8 @@ alias gitauthor='printf "Configured authors for %s:\n\t[System]: %s (%s)\n\t[Glo
 
 #general shorthands
 alias l="ls --time-style=+\"%Y-%m-%d %H:%M:%S\" --color=tty -lash"
-alias zshrc="nano ~/.zshrc"
+alias zshrc='nano "$HOME/.zshrc"'
+alias cfg='nano "$ST_CFG/config.cfg"'
 alias cls=clear
 alias qqq=exit
 alias recrm=rm-recurse
@@ -121,8 +149,10 @@ alias gl=gitlog
 alias gu=gitupdate
 alias cf=cleanFile
 alias sf=sortFile
-alias uz=UpdateZSH
-alias iuz="UpdateZSH nopull"
+alias uz=UpdateShellTools
+alias iuz="UpdateShellTools --nopull"
+#UpdateZSH was the old name for my update function, it now is included as a legacy option
+alias UpdateZSH=UpdateShellTools
 alias ss=SystemStatus
 alias syss=SystemStatus
 alias pkgstatus=SystemStatus
@@ -291,7 +321,7 @@ sysver(){
 	#generally pretty_name will be the topmost entry and version will be somewhere down the line, with version_id below that. Alpine doesn't have version, just version_id, therefore I had to also allow version_id, but due to the always-greedy setup of sed
 	#I would always capture version_id which doesn't contain the version codename. Furthermore in alpine pretty_name is BELOW version_id, so I need to sort the input to be able to regex it. then, to avoid always matching version_id, I reverse sort it,
 	#this makes the first greedy match contain version_id as long as there is version, version_id therefore only is a fallback (I had to flip the capture groups in the regex as well)
-	#--equal=\" v\" tells assemblecat to treat ' ' and 'v' the same to allow assembling of "Alpine Linux v3.17" with " 3.17.0" into "Alpine Linux v3.17.0". I wouldn't need the equality list if there wasn#t a space in the second string
+	#--equal=\" v\" tells assemblecat to treat ' ' and 'v' the same to allow assembling of "Alpine Linux v3.17" with " 3.17.0" into "Alpine Linux v3.17.0". I wouldn't need the equality list if there wasn't a space in the second string
 	#however most distros need that space to avoid "Kali GNU/Linux Rolling2023.3"
 
 
@@ -318,6 +348,7 @@ SystemStatus(){
 	"$ST_SRC/GENERAL/AptTools.sh" --unattended
 	"$ST_SRC/GENERAL/FlatpakTools.sh"
 	"$ST_SRC/GENERAL/SnapTools.sh"
+	sh -c '"$ST_SRC/ZSH/UpdateChecker.sh" &'
 }
 
 if [ -e "$ST_SRC/../CUSTOM.sh" ]; then
@@ -371,7 +402,7 @@ if [ "$WSL_VERSION" -ne 1 ]; then
 	printf "System load averages (1/5/15 min) are %s out of %s\n" "$(cut -f1-3 -d ' ' /proc/loadavg | tr ' ' '/')" "$(grep -c ^processor /proc/cpuinfo).0"
 fi
 
-# shellcheck disable=SC2046 #reason: I want wordsplitting to happen on the date
+# shellcheck disable=SC2046 #reason: I DO want wordsplitting to happen on the date
 printf "System up since %s (%s)\n" "$(uptime --since)" "$("$ST_CFG/st_timer.elf" STOPHUMAN $(uptime --since |tr ':-' ' '))"
 
 SystemStatus

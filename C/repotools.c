@@ -32,7 +32,9 @@ exit
 regmatch_t CapturedResults[maxGroups];
 regex_t branchParsingRegex;
 
-#define MaxLocations 10
+typedef enum { IP_MODE_NONE, IP_MODE_LEGACY, IP_MODE_STANDALONE } IP_MODE;
+
+#define MaxLocations 32
 char* NAMES[MaxLocations];
 char* LOCS[MaxLocations];
 char* GitHubs[MaxLocations];
@@ -41,11 +43,40 @@ int LIMIT_BRANCHES = -2;
 uint8_t numLOCS = 0;
 bool WarnBranchlimit = true;
 
-int CONFIG_LSGIT_QUICK_BRANCHLIMIT = 100;
+int CONFIG_LSGIT_QUICK_BRANCHLIMIT = 10;
 int CONFIG_LSGIT_THOROUGH_BRANCHLIMIT = -1;
+bool CONFIG_LSGIT_WARN_BRANCHLIMIT = true;
+
+bool CONFIG_LOWPROMPT_PATH_LIMIT = true;
+int CONFIG_LOWPROMPT_PATH_MAXLEN = -3;
+bool CONFIG_LOWPROMPT_RETCODE = true;
+bool CONFIG_LOWPROMPT_RETCODE_DECODE = true;
+bool CONFIG_LOWPROMPT_TIMER = true;
+
+bool CONFIG_PROMPT_SSH = true;
+bool CONFIG_PROMPT_DEVICE = true;
+bool CONFIG_PROMPT_TIME = true;
+bool CONFIG_PROMPT_TIMEZONE = true;
+bool CONFIG_PROMPT_DATE = true;
+bool CONFIG_PROMPT_CALENDERWEEK = true;
+bool CONFIG_PROMPT_PROXY = true;
+bool CONFIG_PROMPT_NETWORK = true;
+bool CONFIG_PROMPT_JOBS = true;
+bool CONFIG_PROMPT_POWER = true;
+bool CONFIG_PROMPT_GIT = true;
+
+bool CONFIG_PROMPT_NET_IFACE = true;
+bool CONFIG_PROMPT_NET_ADDITIONAL = true;
+bool CONFIG_PROMPT_NET_ROUTE = true;
+bool CONFIG_PROMPT_NET_LINKSPEED = true;
+
+bool CONFIG_PROMPT_GIT_REMOTE = true;
+bool CONFIG_PROMPT_GIT_BRANCHINFO = true;
+bool CONFIG_PROMPT_GIT_BRANCHNAME = true;
+bool CONFIG_PROMPT_GIT_REPONAME = true;
+bool CONFIG_PROMPT_GIT_GITSTATUS = true;
 int CONFIG_PROMPT_BRANCHLIMIT = 25;
 bool CONFIG_PROMPT_WARN_BRANCHLIMIT = true;
-bool CONFIG_LSGIT_WARN_BRANCHLIMIT = true;
 
 bool CheckBranching(RepoInfo* ri) {
 	//this method checks the status of all branches on a given repo
@@ -587,7 +618,7 @@ void printTree(RepoInfo* ri, bool Detailed) {
 
 
 void Cleanup() {
-	for (int i = 0;i < maxGroups;i++) {
+	for (int i = 0;i < MaxLocations;i++) {
 		if (LOCS[i] != NULL) { free(LOCS[i]); };
 		if (NAMES[i] != NULL) { free(NAMES[i]); };
 		if (GitHubs[i] != NULL) { free(GitHubs[i]); };
@@ -595,7 +626,7 @@ void Cleanup() {
 }
 
 void DoSetup() {
-	for (int i = 0;i < maxGroups;i++) {
+	for (int i = 0;i < MaxLocations;i++) {
 		LOCS[i] = NULL;
 		NAMES[i] = NULL;
 		GitHubs[i] = NULL;
@@ -627,6 +658,7 @@ void DoSetup() {
 			return;
 		}
 		else {
+			fprintf(fp, "###\n###THIS FILE IS NOT AUTOMATICALLY UPDATED AFTER INITIAL CREATION\n###CHECK THE TEMPLATE FILE AT $ST_SRC/DEFAULTCONFIG.cfg FOR POSSIBLE NEW OPTIONS\n###\n");
 			//Create (or rather copy) default file
 			const char* defaultConfigFileRelativePath = "/DEFAULTCONFIG.cfg";
 			const char* defaultConfigFileDir = getenv("ST_SRC");
@@ -660,7 +692,7 @@ void DoSetup() {
 	}
 	free(configFilePath);
 
-
+	bool UnknownConfig = false;
 	//at this point I know for certain a config file does exist
 	while (fgets(buf, buf_max_len - 1, fp) != NULL) {
 		if (buf[0] == '#') {
@@ -671,6 +703,10 @@ void DoSetup() {
 				continue;
 			}
 			if (StartsWith(buf, "ORIGIN_ALIAS:	")) {
+				if (numLOCS >= (MaxLocations - 1)) {
+					fprintf(stderr, "WARNING: YOU HAVE CONFIGURED MORE THAN %1$i ORIGIN_ALIAS ENTRIES. ONLY THE FIRST %1$i WILL BE USED\n", MaxLocations);
+					continue;
+				}
 				//found origin
 				char* actbuf = buf + 14;//the 8 is the offset to just behind "ORIGIN:	"
 				int i = 0;
@@ -688,6 +724,10 @@ void DoSetup() {
 				}
 			}
 			else if (StartsWith(buf, "GITHUB_HOST:	")) {
+				if (numGitHubs >= (MaxLocations - 1)) {
+					fprintf(stderr, "WARNING: YOU HAVE CONFIGURED MORE THAN %1$i GITHUB_HOST ENTRIES. ONLY THE FIRST %1$i WILL BE USED\n", MaxLocations);
+					continue;
+				}
 				//found host
 				if (asprintf(&GitHubs[numGitHubs], "%s", buf + 13) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
 				//the +6 is the offset to just after "HOST:	"
@@ -713,29 +753,180 @@ void DoSetup() {
 #ifdef DEBUG
 				printf("CONFIG:%s : %s -> %i\n", buf, buf + 35, CONFIG_LSGIT_WARN_BRANCHLIMIT);
 #endif
-
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.MAXBRANCHES:	")) {
-				CONFIG_PROMPT_BRANCHLIMIT = atoi(buf + 30);
+			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.PATH.LIMIT_DISPLAY_LENGTH.ENABLE:	")) {
+				CONFIG_LOWPROMPT_PATH_LIMIT = Compare("true", buf + 54);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_BRANCHLIMIT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 54, CONFIG_LOWPROMPT_PATH_LIMIT);
 #endif
-
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.WARN_BRANCH_LIMIT:	")) {
-				CONFIG_PROMPT_WARN_BRANCHLIMIT = Compare("true", buf + 36);
+			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.PATH.LIMIT_DISPLAY_LENGTH.TARGET:	")) {
+				CONFIG_LOWPROMPT_PATH_MAXLEN = atoi(buf + 54);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_WARN_BRANCHLIMIT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 54, CONFIG_LOWPROMPT_PATH_MAXLEN);
 #endif
-
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.RETURNCODE.ENABLE:	")) {
+				CONFIG_LOWPROMPT_RETCODE = Compare("true", buf + 39);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_LOWPROMPT_RETCODE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.RETURNCODE.DECODE.ENABLE:	")) {
+				CONFIG_LOWPROMPT_RETCODE_DECODE = Compare("true", buf + 46);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_LOWPROMPT_RETCODE_DECODE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.COMMAND_TIMER.ENABLE:	")) {
+				CONFIG_LOWPROMPT_TIMER = Compare("true", buf + 42);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 42, CONFIG_LOWPROMPT_TIMER);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.SSHINFO.ENABLE:	")) {
+				CONFIG_PROMPT_SSH = Compare("true", buf + 33);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 33, CONFIG_PROMPT_SSH);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.TERMINALDEVICE.ENABLE:	")) {
+				CONFIG_PROMPT_DEVICE = Compare("true", buf + 40);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_PROMPT_DEVICE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.TIME.ENABLE:	")) {
+				CONFIG_PROMPT_TIME = Compare("true", buf + 30);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_TIME);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.TIMEZONE.ENABLE:	")) {
+				CONFIG_PROMPT_TIMEZONE = Compare("true", buf + 39);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_PROMPT_TIMEZONE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.DATE.ENABLE:	")) {
+				CONFIG_PROMPT_DATE = Compare("true", buf + 35);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 35, CONFIG_PROMPT_DATE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.CALENDERWEEK.ENABLE:	")) {
+				CONFIG_PROMPT_CALENDERWEEK = Compare("true", buf + 48);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 48, CONFIG_PROMPT_CALENDERWEEK);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.PROXYSTATUS.ENABLE:	")) {
+				CONFIG_PROMPT_PROXY = Compare("true", buf + 37);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_PROMPT_PROXY);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.NETWORK.ENABLE:	")) {
+				CONFIG_PROMPT_NETWORK = Compare("true", buf + 33);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 33, CONFIG_PROMPT_NETWORK);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.BACKGROUNDJOBS.ENABLE:	")) {
+				CONFIG_PROMPT_JOBS = Compare("true", buf + 40);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_PROMPT_JOBS);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.POWER.ENABLE:	")) {
+				CONFIG_PROMPT_POWER = Compare("true", buf + 31);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 31, CONFIG_PROMPT_POWER);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.ENABLE:	")) {
+				CONFIG_PROMPT_GIT = Compare("true", buf + 29);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 29, CONFIG_PROMPT_GIT);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.NETWORK.INTERFACES.DEFAULT.ENABLE:	")) {
+				CONFIG_PROMPT_NET_IFACE = Compare("true", buf + 52);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 52, CONFIG_PROMPT_NET_IFACE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.NETWORK.INTERFACES.NONDEFAULT.ENABLE:	")) {
+				CONFIG_PROMPT_NET_ADDITIONAL = Compare("true", buf + 55);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 55, CONFIG_PROMPT_NET_ADDITIONAL);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.NETWORK.ROUTINGINFO.ENABLE:	")) {
+				CONFIG_PROMPT_NET_ROUTE = Compare("true", buf + 45);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 45, CONFIG_PROMPT_NET_ROUTE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.NETWORK.LINKSPEED.ENABLE:	")) {
+				CONFIG_PROMPT_NET_LINKSPEED = Compare("true", buf + 43);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_PROMPT_NET_LINKSPEED);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.REMOTE.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_REMOTE = Compare("true", buf + 36);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_REMOTE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.BRANCH_OVERVIEW.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_BRANCHINFO = Compare("true", buf + 36);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_BRANCHINFO);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.BRANCHNAME.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_BRANCHNAME = Compare("true", buf + 36);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_BRANCHNAME);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.REPONAME.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_REPONAME = Compare("true", buf + 36);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_REPONAME);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.LOCALCHANGES.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_GITSTATUS = Compare("true", buf + 36);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_GITSTATUS);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.MAXBRANCHES:	")) {
+				CONFIG_PROMPT_BRANCHLIMIT = atoi(buf + 34);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_PROMPT_BRANCHLIMIT);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.WARN_BRANCH_LIMIT:	")) {
+				CONFIG_LSGIT_WARN_BRANCHLIMIT = Compare("true", buf + 40);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LSGIT_WARN_BRANCHLIMIT);
+#endif
 			}
 			else {
 				fprintf(stderr, "Warning: unknown entry in config file: >%s<\n", buf);
+				UnknownConfig = true;
 			}
 		}
 	}
 	fclose(fp);
 	free(buf);
+	if (UnknownConfig) {
+		fprintf(stderr, "WARNING: You have unknown entires in your config file (%s/config.cfg).\n\tPlease check the template at %s/DEFAULTCONFIG.cfg for a list of all understood options and correct your own config file\n", getenv("ST_CFG"), getenv("ST_SRC"));
+	}
 }
 
 void ListAvailableRemotes() {
@@ -878,7 +1069,7 @@ char* GetIfaceSpeed(const char* iface) {
 	char* result = (char*)malloc(sizeof(char) * size);
 	if (result == NULL) ABORT_NO_MEMORY;
 	char* command;
-	if (asprintf(&command, "nmcli -g CAPABILITIES.SPEED device show %s | sed -E 's~([0-9]+) (.).+~\\1\\2~'", iface) == -1) ABORT_NO_MEMORY;
+	if (asprintf(&command, "nmcli -g CAPABILITIES.SPEED device show %s 2>/dev/null | sed -E 's~([0-9]+) (.).+~\\1\\2~'", iface) == -1) ABORT_NO_MEMORY;
 	FILE* fp = popen(command, "r");
 	if (fp == NULL)
 	{
@@ -924,11 +1115,24 @@ IpTransportStruct GetBaseIPString() {
 	ret.BasicIPInfo = NULL;
 	ret.AdditionalIPInfo = NULL;
 	ret.RouteInfo = NULL;
+	if (!CONFIG_PROMPT_NETWORK) {
+		//network is completely configured out -> do not do anything
+		ret.BasicIPInfo = malloc(sizeof(char) * 1);
+		if (ret.BasicIPInfo == NULL) ABORT_NO_MEMORY;
+		ret.AdditionalIPInfo = malloc(sizeof(char) * 1);
+		if (ret.AdditionalIPInfo == NULL) ABORT_NO_MEMORY;
+		ret.RouteInfo = malloc(sizeof(char) * 1);
+		if (ret.RouteInfo == NULL) ABORT_NO_MEMORY;
+		ret.BasicIPInfo[0] = 0x00;
+		ret.AdditionalIPInfo[0] = 0x00;
+		ret.RouteInfo[0] = 0x00;
+		return ret;
+	}
 
 	uint8_t RouteRegexGroupCount = 13;
 	regmatch_t RouteRegexGroups[RouteRegexGroupCount];
 	regex_t RouteRegex;
-	const char* RouteRegexString = "^(((default) via ([0-9.]+))|(([0-9.]+).([0-9]+))).*?dev ([^ ]+).*?src ([0-9.]+)( metric ([0-9]+))?( linkdown)?.*$";
+	const char* RouteRegexString = "^(((default) via ([0-9.]+))|(([0-9.]+)/([0-9]+))).*?dev ([^ ]+).*?src ([0-9.]+)( metric ([0-9]+))?( linkdown)?.*$";
 #define RouteIsDefaultIndex 3
 #define RouteNextHopIndex 4
 #define RouteRoutedNetIndex 6
@@ -991,7 +1195,7 @@ IpTransportStruct GetBaseIPString() {
 				if (RouteRegexGroups[RouteIsDefaultIndex].rm_eo - RouteRegexGroups[RouteIsDefaultIndex].rm_so != 0) {
 					isDefault = true;
 				}
-				else {
+				else if (CONFIG_PROMPT_NET_LINKSPEED) {
 					linkspeed = GetIfaceSpeed(device);
 				}
 				len = RouteRegexGroups[RouteIpIndex].rm_eo - RouteRegexGroups[RouteIpIndex].rm_so;
@@ -1060,13 +1264,14 @@ IpTransportStruct GetBaseIPString() {
 		//fprintf(stderr, "%s:%s/%i@%i %i for %s\n", current->dev.device, current->dev.ip, current->dev.cidr, current->dev.metric, current->dev.isDefault, current->dev.routedNet);
 		current = current->next;
 	}
-	int basicIPStringLen = 2 + (100 * numDefaultRoutes);
+
+	int basicIPStringLen = (CONFIG_PROMPT_NET_IFACE ? (2 + (100 * numDefaultRoutes)) : 1);
 	ret.BasicIPInfo = malloc(sizeof(char) * basicIPStringLen);
 	if (ret.BasicIPInfo == NULL) ABORT_NO_MEMORY;
-	int nondefaultIpStringLen = 2 + (numNonDefaultRoutes * 80);
+	int nondefaultIpStringLen = (CONFIG_PROMPT_NET_ADDITIONAL ? (2 + (numNonDefaultRoutes * 80)) : 1);
 	ret.AdditionalIPInfo = malloc(sizeof(char) * nondefaultIpStringLen);
 	if (ret.AdditionalIPInfo == NULL) ABORT_NO_MEMORY;
-	int rounteinfoLen = (48 + (12 * numDefaultRoutes));
+	int rounteinfoLen = (CONFIG_PROMPT_NET_ROUTE ? (48 + (12 * numDefaultRoutes)) : 1);
 	ret.RouteInfo = malloc(sizeof(char) * rounteinfoLen);
 	if (ret.RouteInfo == NULL) ABORT_NO_MEMORY;
 
@@ -1077,20 +1282,23 @@ IpTransportStruct GetBaseIPString() {
 
 	current = head;
 	for (int i = 0;i < numDefaultRoutes;i++) {
-		baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), " %s%s\e[0m:%s", (current->dev.metric == lowestMetric && numDefaultRoutes > 1 ? "\e[4m" : ""), current->dev.device, current->dev.ip);
-		if (current->dev.cidr > 0) {
-			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;244m/%i\e[0m", current->dev.cidr);
-		}
-		if (numDefaultRoutes > 1) {
-			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;240m\e[2m\e[3m~%u\e[0m", current->dev.metric);
-		}
-		if (current->dev.linkspeed != NULL) {
-			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;238m\e[2m@%s\e[0m", current->dev.linkspeed);
+		if (CONFIG_PROMPT_NET_IFACE) {
+			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), " %s%s\e[0m:%s", (current->dev.metric == lowestMetric && numDefaultRoutes > 1 ? "\e[4m" : ""), current->dev.device, current->dev.ip);
+			if (current->dev.cidr > 0) {
+				baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;244m/%i\e[0m", current->dev.cidr);
+			}
+			if (numDefaultRoutes > 1) {
+				baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;240m\e[2m\e[3m~%u\e[0m", current->dev.metric);
+			}
+			if (current->dev.linkspeed != NULL) {
+				baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;238m\e[2m@%s\e[0m", current->dev.linkspeed);
+			}
 		}
 		current = current->next;
 	}
-	if (numNonDefaultRoutes > 0) {
-		//I intentionally didn't reset current
+
+	//I intentionally didn't reset current
+	if (numNonDefaultRoutes > 0 && CONFIG_PROMPT_NET_ADDITIONAL) {
 		for (int i = 0;i < numNonDefaultRoutes;i++) {
 			nondefaultLenUsed += snprintf(ret.AdditionalIPInfo + nondefaultLenUsed, nondefaultIpStringLen - (nondefaultLenUsed + 1), " \e[38;5;244m\e[3m%s:%s\e[0m", current->dev.device, current->dev.ip);
 			if (current->dev.cidr > 0) {
@@ -1098,7 +1306,9 @@ IpTransportStruct GetBaseIPString() {
 			}
 			current = current->next;
 		}
+	}
 
+	if (numNonDefaultRoutes > 0 && CONFIG_PROMPT_NET_ROUTE) {
 		current = head;
 		routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), " \e[38;5;244m\e[2m*->");
 		if (numDefaultRoutes > 1) {
@@ -1175,28 +1385,17 @@ int main(int argc, char** argv)
 	TerminateStrOn(Host, DEFAULT_TERMINATORS);
 	int Host_len = strlen_visible(Host);
 
-	const char* Arg_TerminalDevice = NULL;
+	char* Arg_TerminalDevice = NULL;
 	int Arg_TerminalDevice_len = 0;
 
-	char* Time = malloc(sizeof(char) * 16);
-	if (Time == NULL) ABORT_NO_MEMORY;
-	int Time_len = strftime(Time, 16, "%T", localtm);
-
-	char* TimeZone = malloc(sizeof(char) * 17);
-	if (TimeZone == NULL) ABORT_NO_MEMORY;
-	int TimeZone_len = strftime(TimeZone, 17, " UTC%z (%Z)", localtm);
-
-	char* DateInfo = malloc(sizeof(char) * 16);
-	if (DateInfo == NULL) ABORT_NO_MEMORY;
-	int DateInfo_len = strftime(DateInfo, 16, " %a %d.%m.%Y", localtm);
-
-	char* CalenderWeek = malloc(sizeof(char) * 8);
-	if (CalenderWeek == NULL) ABORT_NO_MEMORY;
-	int CalenderWeek_len = strftime(CalenderWeek, 8, " KW%V", localtm);
-
-	if (Time_len == 0 || TimeZone_len == 0 || DateInfo_len == 0 || CalenderWeek_len == 0) {
-		fprintf(stderr, "WARNING: strftime returned 0 -> check format string and allocated buffer size\n");
-	}
+	char* Time = NULL;
+	char* TimeZone = NULL;
+	char* DateInfo = NULL;
+	char* CalenderWeek = NULL;
+	int Time_len = 0;
+	int TimeZone_len = 0;
+	int DateInfo_len = 0;
+	int CalenderWeek_len = 0;
 
 	char* Arg_LocalIPs = NULL;
 	int Arg_LocalIPs_len = 0;
@@ -1207,20 +1406,22 @@ int main(int argc, char** argv)
 	char* Arg_LocalIPsRoutes = NULL;
 	int Arg_LocalIPsRoutes_len = 0;
 
-	const char* Arg_ProxyInfo = NULL;
+	char* Arg_ProxyInfo = NULL;
 	int Arg_ProxyInfo_len = 0;
 
-	const char* Arg_PowerState = NULL;
+	char* Arg_PowerState = NULL;
 	int Arg_PowerState_len = 0;
 
-	const char* Arg_BackgroundJobs = NULL;
+	char* Arg_BackgroundJobs = NULL;
 	int Arg_BackgroundJobs_len = 0;
 
 	char* Arg_SHLVL = NULL;
 	int Arg_SHLVL_len = 0;
 
-	const char* Arg_SSHInfo = NULL;
+	char* Arg_SSHInfo = NULL;
 	int Arg_SSHInfo_len = 0;
+
+	IP_MODE ipMode = IP_MODE_NONE;
 
 	int getopt_currentChar;//the char for getop switch
 
@@ -1340,22 +1541,19 @@ int main(int argc, char** argv)
 			}
 		case 'h':
 			{
-				printf("%s MODE [OPTIONS] PATH\n\
-\n\tMODE:\n\
-\t\tprompt\n\
-\t\t\tAll options EXCEPT -n are valid\n\
-\t\tshow\n\
-\t\t\tThe only valid Option is -b --branchlimit\n\
-\t\tset\n\
-", argv[0]);
+				printf("TODO: create a help utility\n");
 				break;
 			}
 		case 'i':
 			{
-				if (Arg_LocalIPs != NULL || Arg_LocalIPs_len != 0) {
-					abortMessage("-i and -I are incompatible and should never be used together, but if they both are used -i MUST be BEFORE -I, -I will then be discarded, else the program will fail with this message\n");
-					//unlike the case in -I, if I'm on a system where the basic lookup doesn't work it'll REALLY mess up.
-					//it's not even guaranteed I'll be able to reach this point, the program may error out before this, but if it hasn't just forcibly error out
+				if (ipMode != IP_MODE_NONE) {
+					fprintf(stderr, "WARNING: multiple -I/-i found, only the last -i will be used, everything else will be discarded");
+				}
+				ipMode = IP_MODE_LEGACY;
+				if (Arg_LocalIPs != NULL) {
+					Arg_LocalIPs_len = 0;
+					free(Arg_LocalIPs);
+					Arg_LocalIPs = NULL;
 				}
 				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				if (asprintf(&Arg_LocalIPs, "%s", optarg) == -1) ABORT_NO_MEMORY;
@@ -1372,17 +1570,11 @@ int main(int argc, char** argv)
 			}
 		case 'I':
 			{
-				if (Arg_LocalIPs == NULL && Arg_LocalIPs_len == 0) {
-					//only do the own lookup if IP hasn't been passed in in the old format.
-					//if this happens the user is just stuck on the old system but it's functional
-					IpTransportStruct temp = GetBaseIPString();
-					Arg_LocalIPs = temp.BasicIPInfo;
-					Arg_LocalIPs_len = strlen_visible(Arg_LocalIPs);
-					Arg_LocalIPsAdditional = temp.AdditionalIPInfo;
-					Arg_LocalIPsAdditional_len = strlen_visible(Arg_LocalIPsAdditional);
-					Arg_LocalIPsRoutes = temp.RouteInfo;
-					Arg_LocalIPsRoutes_len = strlen_visible(Arg_LocalIPsRoutes);
+				if (ipMode == IP_MODE_LEGACY) {
+					fprintf(stderr, "ONLY -i OR -I are supported, they are mutually exclusive\nutilizing Legacy mode (-i)\n");
+					break;
 				}
+				ipMode = IP_MODE_STANDALONE;
 				break;
 			}
 		case 'j':
@@ -1453,6 +1645,88 @@ int main(int argc, char** argv)
 		}
 	}
 
+	if (!(IsPrompt || IsShow || IsSet || IsList || IsLowPrompt)) {
+		printf("you must specify EITHER --prompt --set --show --list or --lowprompt\n");
+		exit(1);
+	}
+
+	if (!IsList && !(optind < argc)) {
+		printf("You must supply one non-option parameter (if not in --list mode)");
+	}
+	const char* path = argv[optind];
+
+
+	if (IsSet || IsShow || IsPrompt || IsLowPrompt) {
+		DoSetup();//this reads the config file -> as of hereI can expect to have current options
+	}
+
+	if (ipMode == IP_MODE_STANDALONE) {
+		if (Arg_LocalIPs == NULL && Arg_LocalIPs_len == 0) {
+			//at this point ArgLocalIPs should ALWAYS be NULL, but for sanity's sake I'll check again anyway
+			//only do the own lookup if IP hasn't been passed in in the old format.
+			//if this happens the user is just stuck on the old system but it's functional
+			IpTransportStruct temp = GetBaseIPString();
+			Arg_LocalIPs = temp.BasicIPInfo;
+			Arg_LocalIPs_len = strlen_visible(Arg_LocalIPs);
+			Arg_LocalIPsAdditional = temp.AdditionalIPInfo;
+			Arg_LocalIPsAdditional_len = strlen_visible(Arg_LocalIPsAdditional);
+			Arg_LocalIPsRoutes = temp.RouteInfo;
+			Arg_LocalIPsRoutes_len = strlen_visible(Arg_LocalIPsRoutes);
+		}
+	}
+	else if (ipMode == IP_MODE_LEGACY && !CONFIG_PROMPT_NETWORK) {
+		//if IP is disabled in config but legagy IP has been provided, remove the info
+		if (Arg_LocalIPs != NULL) free(Arg_LocalIPs);
+		Arg_LocalIPs = (char*)malloc(sizeof(char) * 1);
+		if (Arg_LocalIPs == NULL) ABORT_NO_MEMORY;
+		Arg_LocalIPs[0] = 0x00;
+		Arg_LocalIPs_len = 0;
+	}
+	if (!CONFIG_PROMPT_POWER) { Arg_PowerState[0] = 0x00; Arg_PowerState_len = 0; }
+	if (!CONFIG_PROMPT_PROXY) { Arg_ProxyInfo[0] = 0x00; Arg_ProxyInfo_len = 0; }
+	if (!CONFIG_PROMPT_SSH) { Arg_SSHInfo[0] = 0x00; Arg_SSHInfo_len = 0; }
+	if (!CONFIG_PROMPT_DEVICE) { Arg_TerminalDevice[0] = 0x00; Arg_TerminalDevice_len = 0; }
+	if (!CONFIG_PROMPT_JOBS) { Arg_BackgroundJobs[0] = 0x00; Arg_BackgroundJobs_len = 0; }
+	Time = malloc(sizeof(char) * 16);
+	if (Time == NULL) ABORT_NO_MEMORY;
+	if (CONFIG_PROMPT_TIME) {
+		Time_len = strftime(Time, 16, "%T", localtm);
+	}
+	else {
+		Time_len = 0;
+		Time[0] = 0x00;
+	}
+
+	TimeZone = malloc(sizeof(char) * 17);
+	if (TimeZone == NULL) ABORT_NO_MEMORY;
+	if (CONFIG_PROMPT_TIMEZONE) {
+		TimeZone_len = strftime(TimeZone, 17, " UTC%z (%Z)", localtm);
+	}
+	else {
+		TimeZone_len = 0;
+		TimeZone[0] = 0x00;
+	}
+
+	DateInfo = malloc(sizeof(char) * 16);
+	if (DateInfo == NULL) ABORT_NO_MEMORY;
+	if (CONFIG_PROMPT_DATE) {
+		DateInfo_len = strftime(DateInfo, 16, " %a %d.%m.%Y", localtm);
+	}
+	else {
+		DateInfo_len = 0;
+		DateInfo[0] = 0x00;
+	}
+
+	CalenderWeek = malloc(sizeof(char) * 8);
+	if (CalenderWeek == NULL) ABORT_NO_MEMORY;
+	if (CONFIG_PROMPT_CALENDERWEEK) {
+		CalenderWeek_len = strftime(CalenderWeek, 8, " KW%V", localtm);
+	}
+	else {
+		CalenderWeek_len = 0;
+		CalenderWeek[0] = 0x00;
+	}
+
 
 #ifdef DEBUG
 	printf("Arg_NewRemote: >%s< (n/a)\n", Arg_NewRemote);fflush(stdout);
@@ -1475,23 +1749,6 @@ int main(int argc, char** argv)
 		printf("%soption-arg %i:\t>%s<\n", (i >= optind ? "non-" : "\t"), i, argv[i]);
 	}
 #endif
-
-
-
-	if (!(IsPrompt || IsShow || IsSet || IsList || IsLowPrompt)) {
-		printf("you must specify EITHER --prompt --set --show --list or --lowprompt\n");
-		exit(1);
-	}
-
-	if (!IsList && !(optind < argc)) {
-		printf("You must supply one non-option parameter (if not in --list mode)");
-	}
-	const char* path = argv[optind];
-
-
-	if (IsSet || IsShow || IsPrompt) {
-		DoSetup();
-	}
 
 	if (LIMIT_BRANCHES == -2) {
 		//if IsPrompt, default 25; if IsSet, default 50; else default -1
@@ -1766,131 +2023,182 @@ int main(int argc, char** argv)
 		return 0;
 	}
 	else if (IsLowPrompt) {
-		int chars = Arg_TotalPromptWidth / 4; //allow a quarter of the screen width to be current working directory
-		int segments = chars / 16; //impose a limit on how many segments make sense. if the terminal is 256 wide, chars would be 64 and I would allow 4 segements
-		char* temp;
-		AbbreviatePathAuto(&temp, path, chars, segments);
-		//fprintf(stderr, "(%i %i)%s | %s\n", chars, segments, temp, path);
-		printf("└%%F{cyan}%%B %s %s[%s:%i", temp, (PromptRetCode == 0 ? "%F{green}" : "%F{red}"), Arg_CmdTime, PromptRetCode);
-		switch (PromptRetCode) {
-		case 0:
-			printf(" (OK)");
-			break;
-		case 2:
-			printf(" (arg-error/incorrect usage)");
-			break;
-		case 126:
-			printf(" (no permission/not executable)");
-			break;
-		case 127:
-			printf(" (cmd not found)");
-			break;
-		case 128 + SIGHUP:
-			printf(" (SIGHUP)");
-			break;
-		case 128 + SIGINT:
-			printf(" (SIGINT)");
-			break;
-		case 128 + SIGQUIT:
-			printf(" (SIGQUIT)");
-			break;
-		case 128 + SIGILL:
-			printf(" (SIGILL)");
-			break;
-		case 128 + SIGTRAP:
-			printf(" (SIGTRAP)");
-			break;
-		case 128 + SIGABRT:
-			printf(" (SIGABRT)");
-			break;
-		case 128 + SIGFPE:
-			printf(" (SIGFPE)");
-			break;
-		case 128 + SIGKILL:
-			printf(" (SIGKILL)");
-			break;
-		case 128 + SIGSEGV:
-			printf(" (SIGSEGV)");
-			break;
-		case 128 + SIGPIPE:
-			printf(" (SIGPIPE)");
-			break;
-		case 128 + SIGALRM:
-			printf(" (SIGALRM)");
-			break;
-		case 128 + SIGTERM:
-			printf(" (SIGTERM)");
-			break;
-		case 128 + SIGSTKFLT:
-			printf(" (SIGSTKFLT)");
-			break;
-		case 128 + SIGPWR:
-			printf(" (SIGPWR)");
-			break;
-		case 128 + SIGBUS:
-			printf(" (SIGBUS)");
-			break;
-		case 128 + SIGSYS:
-			printf(" (SIGSYS)");
-			break;
-		case 128 + SIGURG:
-			printf(" (SIGURG)");
-			break;
-		case 128 + SIGSTOP:
-			printf(" (SIGSTOP)");
-			break;
-		case 128 + SIGTSTP:
-			printf(" (SIGTSTP)");
-			break;
-		case 128 + SIGCONT:
-			printf(" (SIGCONT)");
-			break;
-		case 128 + SIGCHLD:
-			printf(" (SIGCHLD)");
-			break;
-		case 128 + SIGTTIN:
-			printf(" (SIGTTIN)");
-			break;
-		case 128 + SIGTTOU:
-			printf(" (SIGTTOU)");
-			break;
-		case 128 + SIGPOLL:
-			printf(" (SIGPOLL)");
-			break;
-		case 128 + SIGXFSZ:
-			printf(" (SIGXFSZ)");
-			break;
-		case 128 + SIGXCPU:
-			printf(" (SIGXCPU)");
-			break;
-		case 128 + SIGVTALRM:
-			printf(" (SIGVTALRM)");
-			break;
-		case 128 + SIGPROF:
-			printf(" (SIGPROF)");
-			break;
-		case 128 + SIGUSR1:
-			printf(" (SIGUSR1)");
-			break;
-		case 128 + SIGUSR2:
-			printf(" (SIGUSR2)");
-			break;
-		case 128 + SIGWINCH:
-			printf(" (SIGWINCH)");
-			break;
-		default:
-			break;
+		printf("└%%F{cyan}%%B ");
+		if (CONFIG_LOWPROMPT_PATH_LIMIT) {
+			int chars = 0;
+			switch (CONFIG_LOWPROMPT_PATH_MAXLEN) {
+			case -1:
+				{
+					chars = Arg_TotalPromptWidth / 2;
+					//allow a half of the screen width to be current working directory
+					break;
+				}
+			case -2:
+				{
+					chars = Arg_TotalPromptWidth / 3;
+					//allow a third of the screen width to be current working directory
+					break;
+				}
+			case -3:
+				{
+					chars = Arg_TotalPromptWidth / 4;
+					//allow a quarter of the screen width to be current working directory
+					break;
+				}
+			case -4:
+				{
+					chars = Arg_TotalPromptWidth / 6;
+					//allow a sixth of the screen width to be current working directory
+					break;
+				}
+			default: {
+					chars = CONFIG_LOWPROMPT_PATH_MAXLEN;
+				}
+			}
+			int segments = chars / 16; //impose a limit on how many segments make sense. if the terminal is 256 wide, chars would be 64 (with my default 1/4 setup) and I would allow 4 segements
+			char* temp;
+			AbbreviatePathAuto(&temp, path, chars, segments);
+			printf("%s", temp);
+			free(temp);
+			temp = NULL;
 		}
-		printf("]➜%%f%%b  ");
-		free(temp);
-		temp = NULL;
+		else {
+			printf("%s", path);
+		}
+		//fprintf(stderr, "(%i %i)%s | %s\n", chars, segments, temp, path);
+		printf("%s ", (PromptRetCode == 0 ? "%F{green}" : "%F{red}"));
+		if (CONFIG_LOWPROMPT_RETCODE || CONFIG_LOWPROMPT_TIMER) {
+			printf("[");
+			if (CONFIG_LOWPROMPT_TIMER) {
+				printf("%s", Arg_CmdTime);
+				if (CONFIG_LOWPROMPT_RETCODE) {
+					printf(":");
+				}
+			}
+			if (CONFIG_LOWPROMPT_RETCODE) {
+				printf("%i", PromptRetCode);
+				if (CONFIG_LOWPROMPT_RETCODE_DECODE) {
+					switch (PromptRetCode) {
+					case 0:
+						printf(" (OK)");
+						break;
+					case 2:
+						printf(" (arg-error/incorrect usage)");
+						break;
+					case 126:
+						printf(" (no permission/not executable)");
+						break;
+					case 127:
+						printf(" (cmd not found)");
+						break;
+					case 128 + SIGHUP:
+						printf(" (SIGHUP)");
+						break;
+					case 128 + SIGINT:
+						printf(" (SIGINT)");
+						break;
+					case 128 + SIGQUIT:
+						printf(" (SIGQUIT)");
+						break;
+					case 128 + SIGILL:
+						printf(" (SIGILL)");
+						break;
+					case 128 + SIGTRAP:
+						printf(" (SIGTRAP)");
+						break;
+					case 128 + SIGABRT:
+						printf(" (SIGABRT)");
+						break;
+					case 128 + SIGFPE:
+						printf(" (SIGFPE)");
+						break;
+					case 128 + SIGKILL:
+						printf(" (SIGKILL)");
+						break;
+					case 128 + SIGSEGV:
+						printf(" (SIGSEGV)");
+						break;
+					case 128 + SIGPIPE:
+						printf(" (SIGPIPE)");
+						break;
+					case 128 + SIGALRM:
+						printf(" (SIGALRM)");
+						break;
+					case 128 + SIGTERM:
+						printf(" (SIGTERM)");
+						break;
+					case 128 + SIGSTKFLT:
+						printf(" (SIGSTKFLT)");
+						break;
+					case 128 + SIGPWR:
+						printf(" (SIGPWR)");
+						break;
+					case 128 + SIGBUS:
+						printf(" (SIGBUS)");
+						break;
+					case 128 + SIGSYS:
+						printf(" (SIGSYS)");
+						break;
+					case 128 + SIGURG:
+						printf(" (SIGURG)");
+						break;
+					case 128 + SIGSTOP:
+						printf(" (SIGSTOP)");
+						break;
+					case 128 + SIGTSTP:
+						printf(" (SIGTSTP)");
+						break;
+					case 128 + SIGCONT:
+						printf(" (SIGCONT)");
+						break;
+					case 128 + SIGCHLD:
+						printf(" (SIGCHLD)");
+						break;
+					case 128 + SIGTTIN:
+						printf(" (SIGTTIN)");
+						break;
+					case 128 + SIGTTOU:
+						printf(" (SIGTTOU)");
+						break;
+					case 128 + SIGPOLL:
+						printf(" (SIGPOLL)");
+						break;
+					case 128 + SIGXFSZ:
+						printf(" (SIGXFSZ)");
+						break;
+					case 128 + SIGXCPU:
+						printf(" (SIGXCPU)");
+						break;
+					case 128 + SIGVTALRM:
+						printf(" (SIGVTALRM)");
+						break;
+					case 128 + SIGPROF:
+						printf(" (SIGPROF)");
+						break;
+					case 128 + SIGUSR1:
+						printf(" (SIGUSR1)");
+						break;
+					case 128 + SIGUSR2:
+						printf(" (SIGUSR2)");
+						break;
+					case 128 + SIGWINCH:
+						printf(" (SIGWINCH)");
+						break;
+					default:
+						break;
+					}
+				}
+			}
+			printf("]");
+		}
+		printf("➜%%f%%b  ");
 	}
 	else {
 		printf("unknown command %s\n", argv[1]);
 		return -1;
 	}
 
-	if (IsSet || IsShow || IsPrompt) {
+	if (IsSet || IsShow || IsPrompt || IsLowPrompt) {
 		Cleanup();
 	}
 	regfree(&branchParsingRegex);
