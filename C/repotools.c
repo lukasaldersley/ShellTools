@@ -2067,9 +2067,9 @@ int main(int argc, char** argv)
 					if (gitBranchInfo == NULL) ABORT_NO_MEMORY;
 					gitBranchInfo[0] = 0x00;
 				}
-				char* temp1_reponame;
-				char* temp2_branchname;
-				char* temp3_branchoverview;
+				char* temp1_reponame = NULL;
+				char* temp2_branchname = NULL;
+				char* temp3_branchoverview = NULL;
 				if (asprintf(&temp1_reponame, " "COLOUR_GIT_NAME"%s", ri->RepositoryName) == -1) ABORT_NO_MEMORY;
 				if (asprintf(&temp2_branchname, COLOUR_CLEAR " on "COLOUR_GIT_BRANCH "%s", ri->branch) == -1) ABORT_NO_MEMORY;
 				if (asprintf(&temp3_branchoverview, "/%i+%i", ri->CountActiveBranches, ri->CountFullyMergedBranches) == -1) ABORT_NO_MEMORY;
@@ -2099,24 +2099,45 @@ int main(int argc, char** argv)
 						gitSegment6_gitStatus = ConstructGitStatusString(ri);
 					}
 				}
-				if (gitSegment5_commitStatus == NULL) {
-					gitSegment5_commitStatus = malloc(sizeof(char));
-					if (gitSegment5_commitStatus == NULL) ABORT_NO_MEMORY;
-					gitSegment5_commitStatus[0] = 0x00;
-				}
-				if (gitSegment6_gitStatus == NULL) {
-					gitSegment6_gitStatus = malloc(sizeof(char));
-					if (gitSegment6_gitStatus == NULL) ABORT_NO_MEMORY;
-					gitSegment6_gitStatus[0] = 0x00;
-				}
 
-				gitSegment1_BaseMarkerStart_len = strlen_visible(gitSegment1_BaseMarkerStart);
-				gitSegment2_parentRepoLoc_len = strlen_visible(gitSegment2_parentRepoLoc);
-				gitSegment3_BaseMarkerEnd_len = strlen_visible(gitSegment3_BaseMarkerEnd);
-				gitSegment4_remoteinfo_len = strlen_visible(gitSegment4_remoteinfo);
-				gitSegment5_commitStatus_len = strlen_visible(gitSegment5_commitStatus);
-				gitSegment6_gitStatus_len = strlen_visible(gitSegment6_gitStatus);
 			}
+			if (gitSegment1_BaseMarkerStart == NULL) {
+				gitSegment1_BaseMarkerStart = malloc(sizeof(char) * 1);
+				if (gitSegment1_BaseMarkerStart == NULL)ABORT_NO_MEMORY;
+				gitSegment1_BaseMarkerStart[0] = 0x00;
+			}
+			if (gitSegment2_parentRepoLoc == NULL) {
+				gitSegment2_parentRepoLoc = malloc(sizeof(char) * 1);
+				if (gitSegment2_parentRepoLoc == NULL)ABORT_NO_MEMORY;
+				gitSegment2_parentRepoLoc[0] = 0x00;
+			}
+			if (gitSegment3_BaseMarkerEnd == NULL) {
+				gitSegment3_BaseMarkerEnd = malloc(sizeof(char) * 1);
+				if (gitSegment3_BaseMarkerEnd == NULL)ABORT_NO_MEMORY;
+				gitSegment3_BaseMarkerEnd[0] = 0x00;
+			}
+			if (gitSegment4_remoteinfo == NULL) {
+				gitSegment4_remoteinfo = malloc(sizeof(char) * 1);
+				if (gitSegment4_remoteinfo == NULL)ABORT_NO_MEMORY;
+				gitSegment4_remoteinfo[0] = 0x00;
+			}
+			if (gitSegment5_commitStatus == NULL) {
+				gitSegment5_commitStatus = malloc(sizeof(char) * 1);
+				if (gitSegment5_commitStatus == NULL)ABORT_NO_MEMORY;
+				gitSegment5_commitStatus[0] = 0x00;
+			}
+			if (gitSegment6_gitStatus == NULL) {
+				gitSegment6_gitStatus = malloc(sizeof(char) * 1);
+				if (gitSegment6_gitStatus == NULL)ABORT_NO_MEMORY;
+				gitSegment6_gitStatus[0] = 0x00;
+			}
+
+			gitSegment1_BaseMarkerStart_len = strlen_visible(gitSegment1_BaseMarkerStart);
+			gitSegment2_parentRepoLoc_len = strlen_visible(gitSegment2_parentRepoLoc);
+			gitSegment3_BaseMarkerEnd_len = strlen_visible(gitSegment3_BaseMarkerEnd);
+			gitSegment4_remoteinfo_len = strlen_visible(gitSegment4_remoteinfo);
+			gitSegment5_commitStatus_len = strlen_visible(gitSegment5_commitStatus);
+			gitSegment6_gitStatus_len = strlen_visible(gitSegment6_gitStatus);
 
 
 			int RemainingPromptWidth = Arg_TotalPromptWidth - (
