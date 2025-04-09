@@ -39,13 +39,7 @@ char* NAMES[MaxLocations];
 char* LOCS[MaxLocations];
 char* GitHubs[MaxLocations];
 uint8_t numGitHubs = 0;
-int LIMIT_BRANCHES = -2;
 uint8_t numLOCS = 0;
-bool WarnBranchlimit = true;
-
-int CONFIG_LSGIT_QUICK_BRANCHLIMIT = 10;
-int CONFIG_LSGIT_THOROUGH_BRANCHLIMIT = -1;
-bool CONFIG_LSGIT_WARN_BRANCHLIMIT = true;
 
 bool CONFIG_LOWPROMPT_PATH_LIMIT = true;
 int CONFIG_LOWPROMPT_PATH_MAXLEN = -3;
@@ -53,12 +47,14 @@ bool CONFIG_LOWPROMPT_RETCODE = true;
 bool CONFIG_LOWPROMPT_RETCODE_DECODE = true;
 bool CONFIG_LOWPROMPT_TIMER = true;
 
+bool CONFIG_PROMPT = true;
+
 bool CONFIG_PROMPT_SSH = true;
 bool CONFIG_PROMPT_DEVICE = true;
 bool CONFIG_PROMPT_TIME = true;
 bool CONFIG_PROMPT_TIMEZONE = true;
 bool CONFIG_PROMPT_DATE = true;
-bool CONFIG_PROMPT_CALENDERWEEK = true;
+bool CONFIG_PROMPT_CALENDARWEEK = true;
 bool CONFIG_PROMPT_PROXY = true;
 bool CONFIG_PROMPT_NETWORK = true;
 bool CONFIG_PROMPT_JOBS = true;
@@ -70,23 +66,64 @@ bool CONFIG_PROMPT_NET_ADDITIONAL = true;
 bool CONFIG_PROMPT_NET_ROUTE = true;
 bool CONFIG_PROMPT_NET_LINKSPEED = true;
 
-bool CONFIG_PROMPT_GIT_REMOTE = true;
-bool CONFIG_PROMPT_GIT_BRANCHINFO = true;
-bool CONFIG_PROMPT_GIT_BRANCHNAME = true;
+
+int CONFIG_GIT_MAXBRANCHES = -2;
+bool CONFIG_GIT_WARN_BRANCH_LIMIT = true;
+bool CONFIG_GIT_REPOTYPE = true;
+bool CONFIG_GIT_REPOTYPE_PARENT = true;
+bool CONFIG_GIT_REPONAME = true;
+bool CONFIG_GIT_BRANCHNAME;
+bool CONFIG_GIT_BRANCH_OVERVIEW;
+bool CONFIG_GIT_BRANCHSTATUS;
+bool CONFIG_GIT_REMOTE;
+bool CONFIG_GIT_COMMIT_OVERVIEW;
+bool CONFIG_GIT_LOCALCHANGES;
+
+int CONFIG_PROMPT_GIT_BRANCHLIMIT = 25;
+bool CONFIG_PROMPT_GIT_WARN_BRANCHLIMIT = true;
+bool CONFIG_PROMPT_GIT_REPOTYPE = true;
+bool CONFIG_PROMPT_GIT_REPOTYPE_PARENT = true;
 bool CONFIG_PROMPT_GIT_REPONAME = true;
+bool CONFIG_PROMPT_GIT_BRANCHNAME = true;
+bool CONFIG_PROMPT_GIT_BRANCHINFO = true;
+bool CONFIG_PROMPT_GIT_BRANCHSTATUS = true;
+bool CONFIG_PROMPT_GIT_REMOTE = true;
+bool CONFIG_PROMPT_GIT_COMMITS = true;
 bool CONFIG_PROMPT_GIT_GITSTATUS = true;
-int CONFIG_PROMPT_BRANCHLIMIT = 25;
-bool CONFIG_PROMPT_WARN_BRANCHLIMIT = true;
+
+bool CONFIG_LSGIT_WARN_BRANCHLIMIT = true;
+int  CONFIG_LSGIT_QUICK_BRANCHLIMIT = 10;
+bool CONFIG_LSGIT_QUICK_WARN_BRANCHLIMIT = true;
+bool CONFIG_LSGIT_QUICK_REPOTYPE = true;
+bool CONFIG_LSGIT_QUICK_REPOTYPE_PARENT = true;
+bool CONFIG_LSGIT_QUICK_REPONAME = true;
+bool CONFIG_LSGIT_QUICK_BRANCHNAME = true;
+bool CONFIG_LSGIT_QUICK_BRANCHINFO = true;
+bool CONFIG_LSGIT_QUICK_BRANCHSTATUS = true;
+bool CONFIG_LSGIT_QUICK_REMOTE = true;
+bool CONFIG_LSGIT_QUICK_COMMITS = true;
+bool CONFIG_LSGIT_QUICK_GITSTATUS = true;
+int  CONFIG_LSGIT_THOROUGH_BRANCHLIMIT = -1;
+bool CONFIG_LSGIT_THOROUGH_WARN_BRANCHLIMIT = true;
+bool CONFIG_LSGIT_THOROUGH_REPOTYPE = true;
+bool CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT = true;
+bool CONFIG_LSGIT_THOROUGH_REPONAME = true;
+bool CONFIG_LSGIT_THOROUGH_BRANCHNAME = true;
+bool CONFIG_LSGIT_THOROUGH_BRANCHINFO = true;
+bool CONFIG_LSGIT_THOROUGH_BRANCHSTATUS = true;
+bool CONFIG_LSGIT_THOROUGH_REMOTE = true;
+bool CONFIG_LSGIT_THOROUGH_COMMITS = true;
+bool CONFIG_LSGIT_THOROUGH_GITSTATUS = true;
 
 bool CheckBranching(RepoInfo* ri) {
 	//this method checks the status of all branches on a given repo
 	//and then computes how many differ, howm many up to date, how many branches local-only, how many branches remote-only
 	BranchListSorted* ListBase = NULL;
 
-	char* command;
 	int size = 1024;
 	char* result = (char*)malloc(sizeof(char) * size);
 	if (result == NULL) ABORT_NO_MEMORY;
+	char* command;
 	if (asprintf(&command, "git -C \"%s\" branch -vva", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
 	FILE* fp = popen(command, "r");
 	if (fp == NULL)
@@ -97,14 +134,15 @@ bool CheckBranching(RepoInfo* ri) {
 		int branchcount = 0;
 		while (fgets(result, size - 1, fp) != NULL)
 		{
+			//iterating over list of branches (remote and local seperatly)
 			TerminateStrOn(result, DEFAULT_TERMINATORS);
 			branchcount++;
-			if (LIMIT_BRANCHES != -1 && branchcount > LIMIT_BRANCHES) {
+			if (CONFIG_GIT_MAXBRANCHES != -1 && branchcount > CONFIG_GIT_MAXBRANCHES) {
 				free(result);
 				pclose(fp);
 				free(command);
-				if (WarnBranchlimit) {
-					fprintf(stderr, "more than %i branches for repo %s -> aborting branchhandling\n", LIMIT_BRANCHES, ri->DirectoryPath);
+				if (CONFIG_GIT_WARN_BRANCH_LIMIT) {
+					fprintf(stderr, "more than %i branches for repo %s -> aborting branchhandling\n", CONFIG_GIT_MAXBRANCHES, ri->DirectoryPath);
 				}
 				while (ListBase != NULL) {
 					BranchListSorted* temp = ListBase;
@@ -311,190 +349,196 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	ri->isSubModule = !((ri->parentRepo)[0] == 0x00);
 	free(cmd);
 
+	if ((CONFIG_GIT_BRANCHSTATUS || CONFIG_GIT_BRANCH_OVERVIEW) && CONFIG_GIT_MAXBRANCHES > 0) {
+		CheckBranching(ri);
+	}
 
-	CheckBranching(ri);
-
-	if (!ri->isBare) {
+	if (!ri->isBare && (CONFIG_GIT_LOCALCHANGES || CONFIG_GIT_COMMIT_OVERVIEW)) {
+		//if I need neither the overview over commits nor local changes, I can skip this thereby significantly speeding up the whole process
 		CheckExtendedGitStatus(ri);
 		ri->DirtyWorktree = !(ri->ActiveMergeFiles == 0 && ri->ModifiedFiles == 0 && ri->StagedChanges == 0);
 	}
 
-
-	if (asprintf(&cmd, "git -C \"%s\" ls-remote --get-url origin", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-	ri->RepositoryUnprocessedOrigin = ExecuteProcess_alloc(cmd);
-	free(cmd);
-	if (ri->RepositoryUnprocessedOrigin == NULL) {
-		DeallocRepoInfoStrings(ri);
-		free(ri);
-		return false;
-	}
-	cmd = NULL;
-	TerminateStrOn(ri->RepositoryUnprocessedOrigin, DEFAULT_TERMINATORS);
-	if (Compare(ri->RepositoryUnprocessedOrigin, "origin")) {
-		//if git ls-remote --get-url origin returns 'origin' it means either the folder is not a git repository OR it's a repository without remote (local only)
-		//in this case since I already checked this IS a repo, it MUST be a repo without remote
-		ri->HasRemote = false;
-		if (asprintf(&ri->RepositoryDisplayedOrigin, "NO_REMOTE") == -1) ABORT_NO_MEMORY;
-		int i = 0;
-		const char* tempPtr = ri->DirectoryPath;
-		while (ri->DirectoryPath[i] != 0x00) {
-			if (ri->DirectoryPath[i] == '/') {
-				tempPtr = ri->DirectoryPath + i + 1;
-			}
-			i++;
+	if (desiredorigin != -1 || CONFIG_GIT_REMOTE || CONFIG_GIT_REPONAME) {
+		//I only need to concern myself with the remote and reponame If they are either directly requested or implicity needed for setGitBase
+		if (asprintf(&cmd, "git -C \"%s\" ls-remote --get-url origin", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
+		ri->RepositoryUnprocessedOrigin = ExecuteProcess_alloc(cmd);
+		free(cmd);
+		if (ri->RepositoryUnprocessedOrigin == NULL) {
+			DeallocRepoInfoStrings(ri);
+			free(ri);
+			return false;
 		}
-		if (asprintf(&ri->RepositoryName, "%s", tempPtr) == -1) ABORT_NO_MEMORY;
-		return true;
-	}
-	else {
-		//has some form of remote
-		ri->HasRemote = true;
-		char* FixedProtoOrigin = FixImplicitProtocol(ri->RepositoryUnprocessedOrigin);
-
-		// input: repoToTest, the path of a repo. if it is one of the defined repos, return that, if it's not, produce the short notation
-		// basically this should produce the displayed name for the repo in the output buffer and additionally indicate if it's a known one
-		ri->RepositoryOriginID = -1;
-		for (int i = 0; i < numLOCS; i++)
-		{
-			//fprintf(stderr, "%s > %s testing against %s(%s)\n", ri->RepositoryUnprocessedOrigin, FixedProtoOrigin, LOCS[i], NAMES[i]);
-			if (StartsWith(FixedProtoOrigin, LOCS[i]))
-			{
-				//fprintf(stderr, "\tSUCCESS\n");
-				ri->RepositoryOriginID = i;
-				if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", NAMES[i]) == -1) ABORT_NO_MEMORY;
-				break;
-			}
-		}
-
-		char* sedCmd;
-		//this regex is basically:
-		//^(?<proto>[-\w+])://(?:(?<user>[-\w]+)@)?(?<host>[-\.\w]+)(?::(?<port>\d+))?(?:[:/](?<remotePath_GitHubUser>[-\w]+))?.*/(?<reponame>[-\w]+)(?:\.git/?)?$ //this is the debuggin version for regex101.com (PCRE<7.3, delimiter ~)
-		//sed does not have non-capturing groups, so all non-capturing groups are included in the group count
-		//the mapping of sed-groups to the regex101 groups is as follows:
-		//1->protoc
-		//2->Non-capturing
-		//3->user
-		//4->host
-		//5->Non-capturing(:port)
-		//6->port
-		//7->Non-capturing (:remotepath or /gitHubUser)
-		//8->remotePath_GitHubUser (if not GitHub, it's the path on remote)
-		//9->reponame
-		//10->Non-Capturing(.git)
-		//DO NOT CHANGE THIS REGEX WITHOUT UPDATING THE Regex101 VARIANT, THE GROUP DEFINITIONS AND THE DESCRIPTION
-		if (asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin) == -1) ABORT_NO_MEMORY;
-		//I take the capturing groups and paste them into a | seperated sting. There's 6 words (5 |), so I'll need 6 pointers into this memory area to resolve the six words
-		const int REPO_ORIGIN_WORDS_IN_STRING = 6;
-		const int REPO_ORIGIN_GROUP_PROTOCOL = 0;
-		const int REPO_ORIGIN_GROUP_USER = 1;
-		const int REPO_ORIGIN_GROUP_Host = 2;
-		const int REPO_ORIGIN_GROUP_PORT = 3;
-		const int REPO_ORIGIN_GROUP_GitHubUser = 4; /*(if not GitHub, it's the path on remote)*/
-		const int REPO_ORIGIN_GROUP_RepoName = 5;
-		char* sedRes = ExecuteProcess_alloc(sedCmd);
-		TerminateStrOn(sedRes, DEFAULT_TERMINATORS);
-		if (sedRes[0] == 0x00) {//sed output was empty -> it must be a local repo, just parse the last folder as repo name and the rest as parentrepopath
-			// local repo
-			if (ri->RepositoryOriginID == -1)
-			{
-				AbbreviatePath(&(ri->RepositoryDisplayedOrigin), FixedProtoOrigin, 15, 2, 2);
-				//if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", FixedProtoOrigin) == -1)ABORT_NO_MEMORY;
-			}
-			const char* tempptr = FixedProtoOrigin;
-			char* walker = FixedProtoOrigin;
-			while (*walker != 0x00) {
-				if (*walker == '/') {
-					tempptr = walker + 1;
+		cmd = NULL;
+		TerminateStrOn(ri->RepositoryUnprocessedOrigin, DEFAULT_TERMINATORS);
+		if (Compare(ri->RepositoryUnprocessedOrigin, "origin")) {
+			//if git ls-remote --get-url origin returns 'origin' it means either the folder is not a git repository OR it's a repository without remote (local only)
+			//in this case since I already checked this IS a repo, it MUST be a repo without remote
+			ri->HasRemote = false;
+			if (asprintf(&ri->RepositoryDisplayedOrigin, "NO_REMOTE") == -1) ABORT_NO_MEMORY;
+			int i = 0;
+			const char* tempPtr = ri->DirectoryPath;
+			while (ri->DirectoryPath[i] != 0x00) {
+				if (ri->DirectoryPath[i] == '/') {
+					tempPtr = ri->DirectoryPath + i + 1;
 				}
-				walker++;
+				i++;
 			}
-			if (asprintf(&ri->RepositoryName, "%s", tempptr) == -1) ABORT_NO_MEMORY;
-
-			// in the .sh implementation I had used realpath relative to pwd to "shorten" the path, but I think it'd be better if I properly regex this up or something.
-			// like /folder/folder/[...]/folder/NAME or /folder/[...]/NAME, though if the path is short enough, I'd like the full path
-			// local repos $(realpath -q -s --relative-to="argv[2]" "$( echo "$fulltextremote" | grep -v ".\+://")" "")
-			//this has the issue of always producing a relative path, though if the path is defined as absolute that should be reflected. Therefore see the implementation of AbbreviatePath in commons.c
-
-			// for locals: realpath -q -s --relative-to="argv[2]" "Input"
-			//local repo
+			if (asprintf(&ri->RepositoryName, "%s", tempPtr) == -1) ABORT_NO_MEMORY;
+			return true;
 		}
 		else {
-			//the sed command was not empty therefore it matched as a remote thing and needs to be parsed
-			char* ptrs[REPO_ORIGIN_WORDS_IN_STRING];
-			ptrs[0] = sedRes;
-			char* workingPointer = sedRes;
-			int NextWordPointer = 0;
-			while (*workingPointer != 0x00 && NextWordPointer < (REPO_ORIGIN_WORDS_IN_STRING - 1)) {//since I set NextWordPointer+1^I need to stop at WORDS-2=== 'x < (Words-1)'
-				if (*workingPointer == '|') {
-					//I found a seperator -> set string terminator for current string
-					*workingPointer = 0x00;
-					//if there's anything after the seperator, set the start point for the next string
-					if (*(workingPointer + 1) != 0x00) {
-						NextWordPointer++;
-						ptrs[NextWordPointer] = (workingPointer + 1);
-					}
-				}
-				workingPointer++;
-			}
+			//has some form of remote
+			ri->HasRemote = true;
+			char* FixedProtoOrigin = FixImplicitProtocol(ri->RepositoryUnprocessedOrigin);
 
-			//I take the base name of the remote rep from this parsed string regardless of the fact if it is a LOCLANET/GLOBAL or a known GitHub derivative something unknown
-			if (*ptrs[REPO_ORIGIN_GROUP_RepoName] != 0x00) {//repo name
-				if (asprintf(&ri->RepositoryName, "%s", ptrs[REPO_ORIGIN_GROUP_RepoName]) == -1) ABORT_NO_MEMORY;
-			}
-
-			//the rest of this only makes sense for stuff that's NOT LOCALNET/GLOBAL etc.
-			if (ri->RepositoryOriginID == -1)//not a known repo origin (ie not from LOCALNET, NONE etc)
+			// input: repoToTest, the path of a repo. if it is one of the defined repos, return that, if it's not, produce the short notation
+			// basically this should produce the displayed name for the repo in the output buffer and additionally indicate if it's a known one
+			ri->RepositoryOriginID = -1;
+			for (int i = 0; i < numLOCS; i++)
 			{
-				const int OriginLen = 255;
-				ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char) * OriginLen + 1);
-				if (ri->RepositoryDisplayedOrigin == NULL) ABORT_NO_MEMORY;
-				int currlen = 0;
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PROTOCOL], OriginLen - currlen);//proto
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen);//:
-				if (!Compare(ptrs[REPO_ORIGIN_GROUP_USER], "git") && Compare(ptrs[REPO_ORIGIN_GROUP_PROTOCOL], "ssh")) {//if name is NOT git then print it but only print if it was ssh
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_USER], OriginLen - currlen);//username
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, "@", OriginLen - currlen);//@
+				//fprintf(stderr, "%s > %s testing against %s(%s)\n", ri->RepositoryUnprocessedOrigin, FixedProtoOrigin, LOCS[i], NAMES[i]);
+				if (StartsWith(FixedProtoOrigin, LOCS[i]))
+				{
+					//fprintf(stderr, "\tSUCCESS\n");
+					ri->RepositoryOriginID = i;
+					if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", NAMES[i]) == -1) ABORT_NO_MEMORY;
+					break;
 				}
-				currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_Host], OriginLen - currlen);//host
-				if (*ptrs[3] != 0x00) {//if port is given print it
+			}
+
+			char* sedCmd;
+			//this regex is basically:
+			//^(?<proto>[-\w+])://(?:(?<user>[-\w]+)@)?(?<host>[-\.\w]+)(?::(?<port>\d+))?(?:[:/](?<remotePath_GitHubUser>[-\w]+))?.*/(?<reponame>[-\w]+)(?:\.git/?)?$ //this is the debuggin version for regex101.com (PCRE<7.3, delimiter ~)
+			//sed does not have non-capturing groups, so all non-capturing groups are included in the group count
+			//the mapping of sed-groups to the regex101 groups is as follows:
+			//1->protoc
+			//2->Non-capturing
+			//3->user
+			//4->host
+			//5->Non-capturing(:port)
+			//6->port
+			//7->Non-capturing (:remotepath or /gitHubUser)
+			//8->remotePath_GitHubUser (if not GitHub, it's the path on remote)
+			//9->reponame
+			//10->Non-Capturing(.git)
+			//DO NOT CHANGE THIS REGEX WITHOUT UPDATING THE Regex101 VARIANT, THE GROUP DEFINITIONS AND THE DESCRIPTION
+			if (asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin) == -1) ABORT_NO_MEMORY;
+			//I take the capturing groups and paste them into a | seperated sting. There's 6 words (5 |), so I'll need 6 pointers into this memory area to resolve the six words
+			const int REPO_ORIGIN_WORDS_IN_STRING = 6;
+			const int REPO_ORIGIN_GROUP_PROTOCOL = 0;
+			const int REPO_ORIGIN_GROUP_USER = 1;
+			const int REPO_ORIGIN_GROUP_Host = 2;
+			const int REPO_ORIGIN_GROUP_PORT = 3;
+			const int REPO_ORIGIN_GROUP_GitHubUser = 4; /*(if not GitHub, it's the path on remote)*/
+			const int REPO_ORIGIN_GROUP_RepoName = 5;
+			char* sedRes = ExecuteProcess_alloc(sedCmd);
+			TerminateStrOn(sedRes, DEFAULT_TERMINATORS);
+			if (sedRes[0] == 0x00) {//sed output was empty -> it must be a local repo, just parse the last folder as repo name and the rest as parentrepopath
+				// local repo
+				if (ri->RepositoryOriginID == -1)
+				{
+					AbbreviatePath(&(ri->RepositoryDisplayedOrigin), FixedProtoOrigin, 15, 2, 2);
+					//if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", FixedProtoOrigin) == -1)ABORT_NO_MEMORY;
+				}
+				const char* tempptr = FixedProtoOrigin;
+				char* walker = FixedProtoOrigin;
+				while (*walker != 0x00) {
+					if (*walker == '/') {
+						tempptr = walker + 1;
+					}
+					walker++;
+				}
+				if (asprintf(&ri->RepositoryName, "%s", tempptr) == -1) ABORT_NO_MEMORY;
+
+				// in the .sh implementation I had used realpath relative to pwd to "shorten" the path, but I think it'd be better if I properly regex this up or something.
+				// like /folder/folder/[...]/folder/NAME or /folder/[...]/NAME, though if the path is short enough, I'd like the full path
+				// local repos $(realpath -q -s --relative-to="argv[2]" "$( echo "$fulltextremote" | grep -v ".\+://")" "")
+				//this has the issue of always producing a relative path, though if the path is defined as absolute that should be reflected. Therefore see the implementation of AbbreviatePath in commons.c
+
+				// for locals: realpath -q -s --relative-to="argv[2]" "Input"
+				//local repo
+			}
+			else {
+				//the sed command was not empty therefore it matched as a remote thing and needs to be parsed
+				char* ptrs[REPO_ORIGIN_WORDS_IN_STRING];
+				ptrs[0] = sedRes;
+				char* workingPointer = sedRes;
+				int NextWordPointer = 0;
+				while (*workingPointer != 0x00 && NextWordPointer < (REPO_ORIGIN_WORDS_IN_STRING - 1)) {//since I set NextWordPointer+1^I need to stop at WORDS-2=== 'x < (Words-1)'
+					if (*workingPointer == '|') {
+						//I found a seperator -> set string terminator for current string
+						*workingPointer = 0x00;
+						//if there's anything after the seperator, set the start point for the next string
+						if (*(workingPointer + 1) != 0x00) {
+							NextWordPointer++;
+							ptrs[NextWordPointer] = (workingPointer + 1);
+						}
+					}
+					workingPointer++;
+				}
+
+				//I take the base name of the remote rep from this parsed string regardless of the fact if it is a LOCLANET/GLOBAL or a known GitHub derivative something unknown
+				if (*ptrs[REPO_ORIGIN_GROUP_RepoName] != 0x00) {//repo name
+					if (asprintf(&ri->RepositoryName, "%s", ptrs[REPO_ORIGIN_GROUP_RepoName]) == -1) ABORT_NO_MEMORY;
+				}
+
+				//the rest of this only makes sense for stuff that's NOT LOCALNET/GLOBAL etc.
+				if (ri->RepositoryOriginID == -1)//not a known repo origin (ie not from LOCALNET, NONE etc)
+				{
+					const int OriginLen = 255;
+					ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char) * OriginLen + 1);
+					if (ri->RepositoryDisplayedOrigin == NULL) ABORT_NO_MEMORY;
+					int currlen = 0;
+					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PROTOCOL], OriginLen - currlen);//proto
 					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen);//:
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PORT], OriginLen - currlen);//username
-				}
-				if (*ptrs[4] != 0x00) {//host is github or gitlab and I can parse a github username also add it
-					bool knownServer = false;
-					int i = 0;
-					while (i < numGitHubs && knownServer == false) {
-						knownServer = Compare(ptrs[REPO_ORIGIN_GROUP_Host], GitHubs[i]);
-						i++;
+					if (!Compare(ptrs[REPO_ORIGIN_GROUP_USER], "git") && Compare(ptrs[REPO_ORIGIN_GROUP_PROTOCOL], "ssh")) {//if name is NOT git then print it but only print if it was ssh
+						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_USER], OriginLen - currlen);//username
+						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, "@", OriginLen - currlen);//@
 					}
-					if (knownServer) {
+					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_Host], OriginLen - currlen);//host
+					if (*ptrs[3] != 0x00) {//if port is given print it
 						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen);//:
-						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], OriginLen - currlen);//service username
+						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PORT], OriginLen - currlen);//username
 					}
+					if (*ptrs[4] != 0x00) {//host is github or gitlab and I can parse a github username also add it
+						bool knownServer = false;
+						int i = 0;
+						while (i < numGitHubs && knownServer == false) {
+							knownServer = Compare(ptrs[REPO_ORIGIN_GROUP_Host], GitHubs[i]);
+							i++;
+						}
+						if (knownServer) {
+							currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen);//:
+							currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], OriginLen - currlen);//service username
+						}
+					}
+					*(ri->RepositoryDisplayedOrigin + (currlen < OriginLen ? currlen : OriginLen)) = 0x00; //ensure nullbyte
 				}
-				*(ri->RepositoryDisplayedOrigin + (currlen < OriginLen ? currlen : OriginLen)) = 0x00; //ensure nullbyte
+				for (int i = 0;i < REPO_ORIGIN_WORDS_IN_STRING;i++) {
+					ptrs[i] = NULL;//to prevent UseAfterFree vulns
+				}
 			}
-			for (int i = 0;i < REPO_ORIGIN_WORDS_IN_STRING;i++) {
-				ptrs[i] = NULL;//to prevent UseAfterFree vulns
+			free(sedRes);
+			sedRes = NULL;
+
+			//once I have the current and new repo origin IDs perform the change
+			if (desiredorigin != -1 && ri->RepositoryOriginID != -1 && ri->RepositoryOriginID != desiredorigin) {
+
+				//change
+				ri->RepositoryOriginID_PREVIOUS = ri->RepositoryOriginID;
+				if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { free(ri->RepositoryUnprocessedOrigin_PREVIOUS); }
+				ri->RepositoryUnprocessedOrigin_PREVIOUS = ri->RepositoryUnprocessedOrigin;
+				ri->RepositoryOriginID = desiredorigin;
+				if (asprintf(&ri->RepositoryUnprocessedOrigin, "%s/%s", LOCS[ri->RepositoryOriginID], ri->RepositoryName) == -1) ABORT_NO_MEMORY;
+				char* changeCmd;
+				if (asprintf(&changeCmd, "git -C \"%s\" remote set-url origin %s", ri->DirectoryPath, ri->RepositoryUnprocessedOrigin) == -1) ABORT_NO_MEMORY;
+				printf("%s\n", changeCmd);
+				char* deleteme = ExecuteProcess_alloc(changeCmd);
+				if (deleteme != NULL)free(deleteme);//just to prevent mem leak
+				deleteme = NULL;//prevent UseAfterFree
+				free(changeCmd);
 			}
-		}
-		free(sedRes);
-		sedRes = NULL;
-
-		//once I have the current and new repo origin IDs perform the change
-		if (desiredorigin != -1 && ri->RepositoryOriginID != -1 && ri->RepositoryOriginID != desiredorigin) {
-
-			//change
-			ri->RepositoryOriginID_PREVIOUS = ri->RepositoryOriginID;
-			if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { free(ri->RepositoryUnprocessedOrigin_PREVIOUS); }
-			ri->RepositoryUnprocessedOrigin_PREVIOUS = ri->RepositoryUnprocessedOrigin;
-			ri->RepositoryOriginID = desiredorigin;
-			if (asprintf(&ri->RepositoryUnprocessedOrigin, "%s/%s", LOCS[ri->RepositoryOriginID], ri->RepositoryName) == -1) ABORT_NO_MEMORY;
-			char* changeCmd;
-			if (asprintf(&changeCmd, "git -C \"%s\" remote set-url origin %s", ri->DirectoryPath, ri->RepositoryUnprocessedOrigin) == -1) ABORT_NO_MEMORY;
-			printf("%s\n", changeCmd);
-			ExecuteProcess_alloc(changeCmd);
-			free(changeCmd);
 		}
 	}
 
@@ -552,28 +596,54 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 		printf("%s%s\u2500\u2500 ", parentPrefix, (anotherSameLevelEntryFollows ? "\u251c" : "\u2514"));
 	}
 	if (ri->isGit) {
-		printf("%s [" COLOUR_GIT_BARE "%s" COLOUR_GIT_INDICATOR "GIT", ri->DirectoryName, ri->isBare ? "BARE " : "");
-		if (ri->isSubModule) {
-			printf("-SM" COLOUR_CLEAR "@" COLOUR_GIT_PARENT "%s", ri->parentRepo);
+		printf("%s", ri->DirectoryName);
+		if (CONFIG_GIT_REPOTYPE) {
+			printf(" [" COLOUR_GIT_BARE "%s" COLOUR_GIT_INDICATOR "GIT", ri->isBare ? "BARE " : "");
+			if (ri->isSubModule) {
+				printf("-SM" COLOUR_CLEAR);
+				if (CONFIG_GIT_REPOTYPE_PARENT) {
+					printf("@" COLOUR_GIT_PARENT "%s", ri->parentRepo);
+				}
+			}
+			printf(COLOUR_CLEAR "]");
 		}
-		char* gitBranchInfo = ConstructGitBranchInfoString(ri);
-		printf(COLOUR_CLEAR "] " COLOUR_GIT_NAME "%s" COLOUR_CLEAR " on " COLOUR_GIT_BRANCH "%s" COLOUR_GREYOUT "/%i+%i",
-			ri->RepositoryName,
-			ri->branch,
-			ri->CountActiveBranches,
-			ri->CountFullyMergedBranches);
-		if (!ri->isBare) {
-			printf("%s", gitBranchInfo);
+		if (CONFIG_GIT_REPONAME) {
+			printf(" " COLOUR_GIT_NAME "%s" COLOUR_CLEAR, ri->RepositoryName);
 		}
-		printf(" " COLOUR_CLEAR "from ");
-		if (gitBranchInfo != NULL)free(gitBranchInfo);
+		if (CONFIG_GIT_BRANCHNAME) {
+			printf(" on " COLOUR_GIT_BRANCH "%s", ri->branch);
+			if (CONFIG_GIT_BRANCH_OVERVIEW) {
+				printf(COLOUR_GREYOUT "/%i+%i",
+					ri->CountActiveBranches,
+					ri->CountFullyMergedBranches);
+			}
+		}
+		if (!ri->isBare && CONFIG_GIT_BRANCHSTATUS) {
+			char* gitBranchInfo = ConstructGitBranchInfoString(ri);
+			printf("%s%s%s",
+				(CONFIG_GIT_BRANCHNAME || CONFIG_GIT_REPONAME) ? ":" : "",
+				(CONFIG_GIT_BRANCH_OVERVIEW) ? "" : COLOUR_GREYOUT,
+				gitBranchInfo);
+			free(gitBranchInfo);
+			gitBranchInfo = NULL;
+		}
 
+		if (CONFIG_GIT_REMOTE || ri->RepositoryOriginID_PREVIOUS != -1) {
+			printf(" " COLOUR_CLEAR "from ");
+		}
+
+		char* GitComStrTemp = ConstructCommitStatusString(ri);
 		char* GitStatStrTemp = ConstructGitStatusString(ri);
 		//differentiate between display only and display after change
 		if (ri->RepositoryOriginID_PREVIOUS != -1) {
 			printf(COLOUR_GIT_ORIGIN "[%s(%i) -> %s(%i)]" COLOUR_CLEAR, NAMES[ri->RepositoryOriginID_PREVIOUS], ri->RepositoryOriginID_PREVIOUS, NAMES[ri->RepositoryOriginID], ri->RepositoryOriginID);
 			if (!ri->isBare) {
-				printf("%s", GitStatStrTemp);
+				if (CONFIG_GIT_COMMIT_OVERVIEW) {
+					printf("%s", GitComStrTemp);
+				}
+				if (CONFIG_GIT_LOCALCHANGES) {
+					printf("%s", GitStatStrTemp);
+				}
 			}
 			if (fullOut) {
 				printf(COLOUR_GREYOUT " (%s -> %s)" COLOUR_CLEAR, ri->RepositoryUnprocessedOrigin_PREVIOUS, ri->RepositoryUnprocessedOrigin);
@@ -581,16 +651,26 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 			putc('\n', stdout);
 		}
 		else {
-			printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin);
-			if (!ri->isBare) {
-				printf("%s", GitStatStrTemp);
+			if (CONFIG_GIT_REMOTE) {
+				printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin);
 			}
-			if (fullOut) {
+			if (!ri->isBare) {
+				if (CONFIG_GIT_COMMIT_OVERVIEW) {
+					printf("%s", GitComStrTemp);
+				}
+				if (CONFIG_GIT_LOCALCHANGES) {
+					printf("%s", GitStatStrTemp);
+				}
+			}
+			if (fullOut && CONFIG_GIT_REMOTE) {
 				printf(COLOUR_GREYOUT " (%s)" COLOUR_CLEAR, ri->RepositoryUnprocessedOrigin);
 			}
 			putc('\n', stdout);
 		}
 		free(GitStatStrTemp);
+		free(GitComStrTemp);
+		GitStatStrTemp = NULL;
+		GitComStrTemp = NULL;
 
 	}
 	else {
@@ -803,21 +883,21 @@ void DoSetup() {
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.TIMEZONE.ENABLE:	")) {
-				CONFIG_PROMPT_TIMEZONE = Compare("true", buf + 39);
+				CONFIG_PROMPT_TIMEZONE = Compare("true", buf + 34);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_PROMPT_TIMEZONE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_PROMPT_TIMEZONE);
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.DATE.ENABLE:	")) {
-				CONFIG_PROMPT_DATE = Compare("true", buf + 35);
+				CONFIG_PROMPT_DATE = Compare("true", buf + 30);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 35, CONFIG_PROMPT_DATE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_DATE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.CALENDERWEEK.ENABLE:	")) {
-				CONFIG_PROMPT_CALENDERWEEK = Compare("true", buf + 48);
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.CALENDARWEEK.ENABLE:	")) {
+				CONFIG_PROMPT_CALENDARWEEK = Compare("true", buf + 38);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 48, CONFIG_PROMPT_CALENDERWEEK);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_PROMPT_CALENDARWEEK);
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.PROXYSTATUS.ENABLE:	")) {
@@ -842,6 +922,12 @@ void DoSetup() {
 				CONFIG_PROMPT_POWER = Compare("true", buf + 31);
 #ifdef DEBUG
 				printf("CONFIG:%s : %s -> %i\n", buf, buf + 31, CONFIG_PROMPT_POWER);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.ENABLE:	")) {
+				CONFIG_PROMPT = Compare("true", buf + 25);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 25, CONFIG_PROMPT);
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.ENABLE:	")) {
@@ -874,40 +960,173 @@ void DoSetup() {
 				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_PROMPT_NET_LINKSPEED);
 #endif
 			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.REPOTYPE.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_REPOTYPE = Compare("true", buf + 38);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_PROMPT_GIT_REPOTYPE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.REPOTYPE.PARENT_REPO.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_REPOTYPE_PARENT = Compare("true", buf + 50);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 50, CONFIG_PROMPT_GIT_REPOTYPE_PARENT);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.COMMIT_OVERVIEW.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_COMMITS = Compare("true", buf + 45);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 45, CONFIG_PROMPT_GIT_COMMITS);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.REPOTYPE.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_REPOTYPE = Compare("true", buf + 39);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_LSGIT_QUICK_REPOTYPE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.REPOTYPE.PARENT_REPO.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_REPOTYPE_PARENT = Compare("true", buf + 51);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 51, CONFIG_LSGIT_QUICK_REPOTYPE_PARENT);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.REPONAME.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_REPONAME = Compare("true", buf + 39);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_LSGIT_QUICK_REPONAME);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.BRANCH.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_BRANCHNAME = Compare("true", buf + 37);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_LSGIT_QUICK_BRANCHNAME);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.BRANCH.OVERVIEW.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_BRANCHINFO = Compare("true", buf + 46);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_LSGIT_QUICK_BRANCHINFO);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.REMOTE.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_REMOTE = Compare("true", buf + 37);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_LSGIT_QUICK_REMOTE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.COMMIT_OVERVIEW.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_COMMITS = Compare("true", buf + 46);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_LSGIT_QUICK_COMMITS);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.LOCALCHANGES.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_GITSTATUS = Compare("true", buf + 43);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_LSGIT_QUICK_GITSTATUS);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.REPOTYPE.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_REPOTYPE = Compare("true", buf + 42);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 42, CONFIG_LSGIT_THOROUGH_REPOTYPE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.REPOTYPE.PARENT_REPO.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT = Compare("true", buf + 54);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 54, CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.REPONAME.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_REPONAME = Compare("true", buf + 42);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 42, CONFIG_LSGIT_THOROUGH_REPONAME);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.BRANCH.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_BRANCHNAME = Compare("true", buf + 40);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LSGIT_THOROUGH_BRANCHNAME);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.BRANCH.OVERVIEW.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_BRANCHINFO = Compare("true", buf + 49);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 49, CONFIG_LSGIT_THOROUGH_BRANCHINFO);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.REMOTE.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_REMOTE = Compare("true", buf + 40);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LSGIT_THOROUGH_REMOTE);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.COMMIT_OVERVIEW.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_COMMITS = Compare("true", buf + 49);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 49, CONFIG_LSGIT_THOROUGH_COMMITS);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.LOCALCHANGES.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_GITSTATUS = Compare("true", buf + 46);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_LSGIT_THOROUGH_GITSTATUS);
+#endif
+			}
+
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.REMOTE.ENABLE:	")) {
 				CONFIG_PROMPT_GIT_REMOTE = Compare("true", buf + 36);
 #ifdef DEBUG
 				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_REMOTE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.BRANCH_OVERVIEW.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_BRANCHINFO = Compare("true", buf + 36);
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.BRANCH.OVERVIEW.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_BRANCHINFO = Compare("true", buf + 45);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_BRANCHINFO);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 45, CONFIG_PROMPT_GIT_BRANCHINFO);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.BRANCHNAME.ENABLE:	")) {
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.BRANCHSTATUS.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_BRANCHSTATUS = Compare("true", buf + 42);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 42, CONFIG_PROMPT_GIT_BRANCHSTATUS);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.BRANCHSTATUS.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_BRANCHSTATUS = Compare("true", buf + 43);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_LSGIT_QUICK_BRANCHSTATUS);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.BRANCHSTATUS.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_BRANCHSTATUS = Compare("true", buf + 46);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_LSGIT_THOROUGH_BRANCHSTATUS);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.BRANCH.ENABLE:	")) {
 				CONFIG_PROMPT_GIT_BRANCHNAME = Compare("true", buf + 36);
 #ifdef DEBUG
 				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_BRANCHNAME);
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.REPONAME.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_REPONAME = Compare("true", buf + 36);
+				CONFIG_PROMPT_GIT_REPONAME = Compare("true", buf + 38);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_REPONAME);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_PROMPT_GIT_REPONAME);
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.LOCALCHANGES.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_GITSTATUS = Compare("true", buf + 36);
+				CONFIG_PROMPT_GIT_GITSTATUS = Compare("true", buf + 42);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_GITSTATUS);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 42, CONFIG_PROMPT_GIT_GITSTATUS);
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.MAXBRANCHES:	")) {
-				CONFIG_PROMPT_BRANCHLIMIT = atoi(buf + 34);
+				CONFIG_PROMPT_GIT_BRANCHLIMIT = atoi(buf + 34);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_PROMPT_BRANCHLIMIT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_PROMPT_GIT_BRANCHLIMIT);
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.WARN_BRANCH_LIMIT:	")) {
@@ -1264,14 +1483,15 @@ IpTransportStruct GetBaseIPString() {
 		//fprintf(stderr, "%s:%s/%i@%i %i for %s\n", current->dev.device, current->dev.ip, current->dev.cidr, current->dev.metric, current->dev.isDefault, current->dev.routedNet);
 		current = current->next;
 	}
+	//this works under the assumption the interface names aren't longer than 10-ish characters (true for enpXsY or eth1 or wlpXsY) however at some point my system decided to use wlx18d6c713d4ed as default device and completely ignore the actually fast wifi chip
 
-	int basicIPStringLen = (CONFIG_PROMPT_NET_IFACE ? (2 + (100 * numDefaultRoutes)) : 1);
+	int basicIPStringLen = (CONFIG_PROMPT_NET_IFACE ? (2 + (112 * numDefaultRoutes)) : 1);
 	ret.BasicIPInfo = malloc(sizeof(char) * basicIPStringLen);
 	if (ret.BasicIPInfo == NULL) ABORT_NO_MEMORY;
-	int nondefaultIpStringLen = (CONFIG_PROMPT_NET_ADDITIONAL ? (2 + (numNonDefaultRoutes * 80)) : 1);
+	int nondefaultIpStringLen = (CONFIG_PROMPT_NET_ADDITIONAL ? (2 + (numNonDefaultRoutes * 96)) : 1);
 	ret.AdditionalIPInfo = malloc(sizeof(char) * nondefaultIpStringLen);
 	if (ret.AdditionalIPInfo == NULL) ABORT_NO_MEMORY;
-	int rounteinfoLen = (CONFIG_PROMPT_NET_ROUTE ? (48 + (12 * numDefaultRoutes)) : 1);
+	int rounteinfoLen = (CONFIG_PROMPT_NET_ROUTE ? (48 + (16 * numDefaultRoutes)) : 1);
 	ret.RouteInfo = malloc(sizeof(char) * rounteinfoLen);
 	if (ret.RouteInfo == NULL) ABORT_NO_MEMORY;
 
@@ -1330,7 +1550,9 @@ IpTransportStruct GetBaseIPString() {
 			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), " %s/%i->%s\e[0m", current->dev.routedNet, current->dev.cidr, current->dev.device);
 		}
 	}
-	assert(baseIPlenUsed < basicIPStringLen && nondefaultLenUsed < nondefaultIpStringLen && routeinfoLenUsed < rounteinfoLen);
+	assert(baseIPlenUsed < basicIPStringLen);
+	assert(nondefaultLenUsed < nondefaultIpStringLen);
+	assert(routeinfoLenUsed < rounteinfoLen);
 	ret.BasicIPInfo[baseIPlenUsed] = 0x00;
 	ret.AdditionalIPInfo[nondefaultLenUsed] = 0x00;
 	ret.RouteInfo[routeinfoLenUsed] = 0x00;
@@ -1391,11 +1613,11 @@ int main(int argc, char** argv)
 	char* Time = NULL;
 	char* TimeZone = NULL;
 	char* DateInfo = NULL;
-	char* CalenderWeek = NULL;
+	char* CalendarWeek = NULL;
 	int Time_len = 0;
 	int TimeZone_len = 0;
 	int DateInfo_len = 0;
-	int CalenderWeek_len = 0;
+	int CalendarWeek_len = 0;
 
 	char* Arg_LocalIPs = NULL;
 	int Arg_LocalIPs_len = 0;
@@ -1502,7 +1724,7 @@ int main(int argc, char** argv)
 		case 'b':
 			{
 				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
-				LIMIT_BRANCHES = atoi(optarg);
+				CONFIG_GIT_MAXBRANCHES = atoi(optarg);
 				break;
 			}
 		case 'c':
@@ -1717,14 +1939,14 @@ int main(int argc, char** argv)
 		DateInfo[0] = 0x00;
 	}
 
-	CalenderWeek = malloc(sizeof(char) * 8);
-	if (CalenderWeek == NULL) ABORT_NO_MEMORY;
-	if (CONFIG_PROMPT_CALENDERWEEK) {
-		CalenderWeek_len = strftime(CalenderWeek, 8, " KW%V", localtm);
+	CalendarWeek = malloc(sizeof(char) * 8);
+	if (CalendarWeek == NULL) ABORT_NO_MEMORY;
+	if (CONFIG_PROMPT_CALENDARWEEK) {
+		CalendarWeek_len = strftime(CalendarWeek, 8, " KW%V", localtm);
 	}
 	else {
-		CalenderWeek_len = 0;
-		CalenderWeek[0] = 0x00;
+		CalendarWeek_len = 0;
+		CalendarWeek[0] = 0x00;
 	}
 
 
@@ -1736,7 +1958,7 @@ int main(int argc, char** argv)
 	printf("Time: >%s< (%i)\n", Time, Time_len);fflush(stdout);
 	printf("TimeZone: >%s< (%i)\n", TimeZone, TimeZone_len);fflush(stdout);
 	printf("DateInfo: >%s< (%i)\n", DateInfo, DateInfo_len);fflush(stdout);
-	printf("CalenderWeek: >%s< (%i)\n", CalenderWeek, CalenderWeek_len);fflush(stdout);
+	printf("CalendarWeek: >%s< (%i)\n", CalendarWeek, CalendarWeek_len);fflush(stdout);
 	printf("Arg_LocalIPs: >%s< (%i)\n", Arg_LocalIPs, Arg_LocalIPs_len);fflush(stdout);
 	printf("Arg_LocalIPsAdditional: >%s< (%i)\n", Arg_LocalIPsAdditional, Arg_LocalIPsAdditional_len);fflush(stdout);
 	printf("Arg_LocalIPsRoutes: >%s< (%i)\n", Arg_LocalIPsRoutes, Arg_LocalIPsRoutes_len);fflush(stdout);
@@ -1750,127 +1972,182 @@ int main(int argc, char** argv)
 	}
 #endif
 
-	if (LIMIT_BRANCHES == -2) {
+	if (CONFIG_GIT_MAXBRANCHES == -2) {
 		//if IsPrompt, default 25; if IsSet, default 50; else default -1
-		LIMIT_BRANCHES = (IsPrompt ? CONFIG_PROMPT_BRANCHLIMIT : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_BRANCHLIMIT : CONFIG_LSGIT_QUICK_BRANCHLIMIT));
+		CONFIG_GIT_MAXBRANCHES = (IsPrompt ? CONFIG_PROMPT_GIT_BRANCHLIMIT : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_BRANCHLIMIT : CONFIG_LSGIT_QUICK_BRANCHLIMIT));
 	}
 
-	WarnBranchlimit = IsPrompt ? CONFIG_PROMPT_WARN_BRANCHLIMIT : CONFIG_LSGIT_WARN_BRANCHLIMIT;
+	CONFIG_GIT_WARN_BRANCH_LIMIT = IsPrompt ? CONFIG_PROMPT_GIT_WARN_BRANCHLIMIT : CONFIG_LSGIT_WARN_BRANCHLIMIT;
 
+	CONFIG_GIT_REPOTYPE = IsPrompt ? CONFIG_PROMPT_GIT_REPOTYPE : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_REPOTYPE : CONFIG_LSGIT_QUICK_REPOTYPE);
+	CONFIG_GIT_REPOTYPE_PARENT = IsPrompt ? CONFIG_PROMPT_GIT_REPOTYPE_PARENT : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT : CONFIG_LSGIT_QUICK_REPOTYPE_PARENT);
+	CONFIG_GIT_REPONAME = IsPrompt ? CONFIG_PROMPT_GIT_REPONAME : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_REPONAME : CONFIG_LSGIT_QUICK_REPONAME);
+	CONFIG_GIT_BRANCHNAME = IsPrompt ? CONFIG_PROMPT_GIT_BRANCHNAME : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_BRANCHNAME : CONFIG_LSGIT_QUICK_BRANCHNAME);
+	CONFIG_GIT_BRANCH_OVERVIEW = IsPrompt ? CONFIG_PROMPT_GIT_BRANCHINFO : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_BRANCHINFO : CONFIG_LSGIT_QUICK_BRANCHINFO);
+	CONFIG_GIT_BRANCHSTATUS = IsPrompt ? CONFIG_PROMPT_GIT_BRANCHSTATUS : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_BRANCHSTATUS : CONFIG_LSGIT_QUICK_BRANCHSTATUS);
+	CONFIG_GIT_REMOTE = IsPrompt ? CONFIG_PROMPT_GIT_REMOTE : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_REMOTE : CONFIG_LSGIT_QUICK_REMOTE);
+	CONFIG_GIT_COMMIT_OVERVIEW = IsPrompt ? CONFIG_PROMPT_GIT_COMMITS : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_COMMITS : CONFIG_LSGIT_QUICK_COMMITS);
+	CONFIG_GIT_LOCALCHANGES = IsPrompt ? CONFIG_PROMPT_GIT_GITSTATUS : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_GITSTATUS : CONFIG_LSGIT_QUICK_GITSTATUS);
 
 	if (IsPrompt) //show origin info for command prompt
 	{
-		RepoInfo* ri = AllocRepoInfo("", path);
-		if (!TestPathForRepoAndParseIfExists(ri, -1, true, true)) {
-			//if TestPathForRepoAndParseIfExists fails it'll do it's own cleanup (= deallocation etc)
-			fprintf(stderr, "error at main: TestPathForRepoAndParseIfExists returned null\n");
-			return 1;
-		}
-		AllocUnsetStringsToEmpty(ri);
+		if (CONFIG_PROMPT) {
+			//this is intentionally not OR-ed with IsPrompt as IsPrompt is in an exhaustive if/else where if this would evaluate to false I would get an error to the effect of "unknown option PROMPT"
 
-		//if top line too short -> omission order: git submodule location (git_4)(...@/path/to/parent/repo); device (/dev/pts/0); time Zone (UTC+0200 (CEST)); IP info ; git remote info(git_2) (... from displayedorigin)
 
-		//taking the list of jobs as input, this counts the number of spaces (and because of the trailing space also the number of entries)
-		int numBgJobs = 0;
-		if (Arg_BackgroundJobs_len > 0) {
-			int i = 0;
-			while (Arg_BackgroundJobs[i] != 0x00) {
-				if (Arg_BackgroundJobs[i] == ' ') {
-					numBgJobs++;
+			//taking the list of jobs as input, this counts the number of spaces (and because of the trailing space also the number of entries)
+			int numBgJobs = 0;
+			if (Arg_BackgroundJobs_len > 0) {
+				int i = 0;
+				while (Arg_BackgroundJobs[i] != 0x00) {
+					if (Arg_BackgroundJobs[i] == ' ') {
+						numBgJobs++;
+					}
+					i++;
 				}
-				i++;
-			}
-		}
-
-		char* numBgJobsStr;
-		if (numBgJobs != 0) {
-			if (asprintf(&numBgJobsStr, "  %i Jobs", numBgJobs) == -1) ABORT_NO_MEMORY;
-		}
-		else {
-			numBgJobsStr = (char*)malloc(sizeof(char));
-			if (numBgJobsStr == NULL) ABORT_NO_MEMORY;
-			numBgJobsStr[0] = 0x00;
-		}
-
-		char* gitSegment1_BaseMarkerStart = "";
-		char* gitSegment2_parentRepoLoc = gitSegment1_BaseMarkerStart;//just an empty default
-		char* gitSegment3_BaseMarkerEnd = gitSegment1_BaseMarkerStart;
-		char* gitSegment4_remoteinfo = gitSegment1_BaseMarkerStart;
-		char* gitSegment5_gitStatus = gitSegment1_BaseMarkerStart;
-		int gitSegment1_BaseMarkerStart_len = 0;
-		int gitSegment2_parentRepoLoc_len = 0;
-		int gitSegment3_BaseMarkerEnd_len = 0;
-		int gitSegment4_remoteinfo_len = 0;
-		int gitSegment5_gitStatus_len = 0;
-
-		if (ri->isGit) {
-			if (asprintf(&gitSegment1_BaseMarkerStart, " [" COLOUR_GIT_BARE "%s" COLOUR_GIT_INDICATOR "GIT%s", ri->isBare ? "BARE " : "", ri->isSubModule ? "-SM" : "") == -1) ABORT_NO_MEMORY;//[%F{006}BARE %F{002}GIT-SM
-			if (ri->isSubModule) {
-				if (asprintf(&gitSegment2_parentRepoLoc, COLOUR_CLEAR "@" COLOUR_GIT_PARENT "%s" COLOUR_CLEAR, ri->parentRepo) == -1) ABORT_NO_MEMORY;
 			}
 
-			char* gitBranchInfo = NULL;
-			if (!ri->isBare) {
-				gitBranchInfo = ConstructGitBranchInfoString(ri);
+			char* numBgJobsStr;
+			if (numBgJobs != 0) {
+				if (asprintf(&numBgJobsStr, "  %i Jobs", numBgJobs) == -1) ABORT_NO_MEMORY;
 			}
 			else {
-				gitBranchInfo = malloc(sizeof(char));
-				if (gitBranchInfo == NULL) ABORT_NO_MEMORY;
-				gitBranchInfo[0] = 0x00;
-			}
-			if (asprintf(&gitSegment3_BaseMarkerEnd, COLOUR_CLEAR "] " COLOUR_GIT_NAME "%s" COLOUR_CLEAR " on "COLOUR_GIT_BRANCH "%s" COLOUR_GREYOUT "/%i+%i%s" COLOUR_CLEAR,
-				ri->RepositoryName,
-				ri->branch,
-				ri->CountActiveBranches,
-				ri->CountFullyMergedBranches,
-				gitBranchInfo) == -1) ABORT_NO_MEMORY;
-			/*if (gitBranchInfo != NULL)*/free(gitBranchInfo);
-			if (asprintf(&gitSegment4_remoteinfo, " from " COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin) == -1) ABORT_NO_MEMORY;
-			if (!ri->isBare) {
-				gitSegment5_gitStatus = ConstructGitStatusString(ri);
-			}
-			else {
-				gitSegment5_gitStatus = malloc(sizeof(char));
-				if (gitSegment5_gitStatus == NULL) ABORT_NO_MEMORY;
-				gitSegment5_gitStatus[0] = 0x00;
+				numBgJobsStr = (char*)malloc(sizeof(char));
+				if (numBgJobsStr == NULL) ABORT_NO_MEMORY;
+				numBgJobsStr[0] = 0x00;
 			}
 
-			gitSegment1_BaseMarkerStart_len = strlen_visible(gitSegment1_BaseMarkerStart);
-			gitSegment2_parentRepoLoc_len = strlen_visible(gitSegment2_parentRepoLoc);
-			gitSegment3_BaseMarkerEnd_len = strlen_visible(gitSegment3_BaseMarkerEnd);
-			gitSegment4_remoteinfo_len = strlen_visible(gitSegment4_remoteinfo);
-			gitSegment5_gitStatus_len = strlen_visible(gitSegment5_gitStatus);
-		}
+
+			RepoInfo* ri = AllocRepoInfo("", path);
+			//only test git if git is enabled at all
+			if (CONFIG_PROMPT_GIT && !TestPathForRepoAndParseIfExists(ri, -1, true, true)) {
+				//if TestPathForRepoAndParseIfExists fails it'll do it's own cleanup (= deallocation etc)
+				fprintf(stderr, "error at main: TestPathForRepoAndParseIfExists returned null\n");
+				return 1;
+			}
+			AllocUnsetStringsToEmpty(ri);
+
+			char* gitSegment1_BaseMarkerStart = NULL;
+			char* gitSegment2_parentRepoLoc = gitSegment1_BaseMarkerStart;//just an empty default
+			char* gitSegment3_BaseMarkerEnd = gitSegment1_BaseMarkerStart;
+			char* gitSegment4_remoteinfo = gitSegment1_BaseMarkerStart;
+			char* gitSegment5_commitStatus = gitSegment1_BaseMarkerStart;
+			char* gitSegment6_gitStatus = gitSegment1_BaseMarkerStart;
+			int gitSegment1_BaseMarkerStart_len = 0;
+			int gitSegment2_parentRepoLoc_len = 0;
+			int gitSegment3_BaseMarkerEnd_len = 0;
+			int gitSegment4_remoteinfo_len = 0;
+			int gitSegment5_commitStatus_len = 0;
+			int gitSegment6_gitStatus_len = 0;
+
+			if (CONFIG_PROMPT_GIT && ri->isGit) {
+				if (CONFIG_GIT_REPOTYPE) {
+					if (asprintf(&gitSegment1_BaseMarkerStart, " [" COLOUR_GIT_BARE "%s" COLOUR_GIT_INDICATOR "GIT%s", ri->isBare ? "BARE " : "", ri->isSubModule ? "-SM" : "") == -1) ABORT_NO_MEMORY;//[%F{006}BARE %F{002}GIT-SM
+					if (ri->isSubModule && CONFIG_GIT_REPOTYPE_PARENT) {
+						if (asprintf(&gitSegment2_parentRepoLoc, COLOUR_CLEAR "@" COLOUR_GIT_PARENT "%s" COLOUR_CLEAR, ri->parentRepo) == -1) ABORT_NO_MEMORY;
+					}
+				}
+				if (gitSegment1_BaseMarkerStart == NULL) {
+					gitSegment1_BaseMarkerStart = malloc(sizeof(char) * 1);
+					if (gitSegment1_BaseMarkerStart == NULL) ABORT_NO_MEMORY;
+					gitSegment1_BaseMarkerStart[0] = 0x00;
+				}
+				if (gitSegment2_parentRepoLoc == NULL) {
+					gitSegment2_parentRepoLoc = malloc(sizeof(char) * 1);
+					if (gitSegment2_parentRepoLoc == NULL) ABORT_NO_MEMORY;
+					gitSegment2_parentRepoLoc[0] = 0x00;
+				}
+
+				char* gitBranchInfo = NULL;
+				if (!ri->isBare && CONFIG_GIT_BRANCHSTATUS) {
+					gitBranchInfo = ConstructGitBranchInfoString(ri);
+				}
+				else {
+					gitBranchInfo = malloc(sizeof(char));
+					if (gitBranchInfo == NULL) ABORT_NO_MEMORY;
+					gitBranchInfo[0] = 0x00;
+				}
+				char* temp1_reponame;
+				char* temp2_branchname;
+				char* temp3_branchoverview;
+				if (asprintf(&temp1_reponame, " "COLOUR_GIT_NAME"%s", ri->RepositoryName) == -1) ABORT_NO_MEMORY;
+				if (asprintf(&temp2_branchname, COLOUR_CLEAR " on "COLOUR_GIT_BRANCH "%s", ri->branch) == -1) ABORT_NO_MEMORY;
+				if (asprintf(&temp3_branchoverview, "/%i+%i", ri->CountActiveBranches, ri->CountFullyMergedBranches) == -1) ABORT_NO_MEMORY;
+				if (asprintf(&gitSegment3_BaseMarkerEnd, COLOUR_CLEAR "%s" "%s%s" COLOUR_GREYOUT "%s%s%s" COLOUR_CLEAR,
+					CONFIG_GIT_REPOTYPE ? "]" : "",
+					CONFIG_GIT_REPONAME ? temp1_reponame : "",
+					CONFIG_GIT_BRANCHNAME ? temp2_branchname : "",
+					CONFIG_GIT_BRANCH_OVERVIEW && CONFIG_GIT_BRANCHNAME ? temp3_branchoverview : "",
+					(CONFIG_GIT_BRANCHSTATUS && (CONFIG_GIT_BRANCHNAME || CONFIG_GIT_REPONAME)) ? ":" : "",
+					gitBranchInfo) == -1) ABORT_NO_MEMORY;
+
+				if (gitBranchInfo != NULL)free(gitBranchInfo);
+				if (CONFIG_GIT_REMOTE) {
+					if (asprintf(&gitSegment4_remoteinfo, " from " COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin) == -1) ABORT_NO_MEMORY;
+				}
+				if (gitSegment4_remoteinfo == NULL) {
+					gitSegment4_remoteinfo = malloc(sizeof(char) * 1);
+					if (gitSegment4_remoteinfo == NULL) ABORT_NO_MEMORY;
+					gitSegment4_remoteinfo[0] = 0x00;
+				}
+
+				if (!ri->isBare) {
+					if (CONFIG_GIT_COMMIT_OVERVIEW) {
+						gitSegment5_commitStatus = ConstructCommitStatusString(ri);
+					}
+					if (CONFIG_GIT_LOCALCHANGES) {
+						gitSegment6_gitStatus = ConstructGitStatusString(ri);
+					}
+				}
+				if (gitSegment5_commitStatus == NULL) {
+					gitSegment5_commitStatus = malloc(sizeof(char));
+					if (gitSegment5_commitStatus == NULL) ABORT_NO_MEMORY;
+					gitSegment5_commitStatus[0] = 0x00;
+				}
+				if (gitSegment6_gitStatus == NULL) {
+					gitSegment6_gitStatus = malloc(sizeof(char));
+					if (gitSegment6_gitStatus == NULL) ABORT_NO_MEMORY;
+					gitSegment6_gitStatus[0] = 0x00;
+				}
+
+				gitSegment1_BaseMarkerStart_len = strlen_visible(gitSegment1_BaseMarkerStart);
+				gitSegment2_parentRepoLoc_len = strlen_visible(gitSegment2_parentRepoLoc);
+				gitSegment3_BaseMarkerEnd_len = strlen_visible(gitSegment3_BaseMarkerEnd);
+				gitSegment4_remoteinfo_len = strlen_visible(gitSegment4_remoteinfo);
+				gitSegment5_commitStatus_len = strlen_visible(gitSegment5_commitStatus);
+				gitSegment6_gitStatus_len = strlen_visible(gitSegment6_gitStatus);
+			}
 
 
-		int RemainingPromptWidth = Arg_TotalPromptWidth - (
-			User_len + 1 + Host_len +
-			Arg_SHLVL_len +
-			gitSegment1_BaseMarkerStart_len +
-			gitSegment3_BaseMarkerEnd_len +
-			gitSegment5_gitStatus_len +
-			Time_len +
-			Arg_ProxyInfo_len +
-			strlen_visible(numBgJobsStr) +
-			Arg_PowerState_len + 2);
+			int RemainingPromptWidth = Arg_TotalPromptWidth - (
+				User_len + 1 + Host_len +
+				Arg_SHLVL_len +
+				gitSegment1_BaseMarkerStart_len +
+				gitSegment3_BaseMarkerEnd_len +
+				gitSegment5_commitStatus_len +
+				gitSegment6_gitStatus_len +
+				Time_len +
+				Arg_ProxyInfo_len +
+				strlen_visible(numBgJobsStr) +
+				Arg_PowerState_len + 2);
 
 #define AdditionalElementCount 11
-		uint32_t AdditionalElementAvailabilityPackedBool = determinePossibleCombinations(&RemainingPromptWidth, AdditionalElementCount,
-			gitSegment4_remoteinfo_len,
-			Arg_LocalIPs_len,
-			CalenderWeek_len,
-			TimeZone_len,
-			DateInfo_len,
-			Arg_TerminalDevice_len,
-			gitSegment2_parentRepoLoc_len,
-			Arg_BackgroundJobs_len,
-			Arg_LocalIPsAdditional_len,
-			Arg_LocalIPsRoutes_len,
-			Arg_SSHInfo_len);
+			uint32_t AdditionalElementAvailabilityPackedBool = determinePossibleCombinations(&RemainingPromptWidth, AdditionalElementCount,
+				gitSegment4_remoteinfo_len,
+				Arg_LocalIPs_len,
+				CalendarWeek_len,
+				TimeZone_len,
+				DateInfo_len,
+				Arg_TerminalDevice_len,
+				gitSegment2_parentRepoLoc_len,
+				Arg_BackgroundJobs_len,
+				Arg_LocalIPsAdditional_len,
+				Arg_LocalIPsRoutes_len,
+				Arg_SSHInfo_len);
 
 #define AdditionalElementPriorityGitRemoteInfo 0
 #define AdditionalElementPriorityLocalIP 1
-#define AdditionalElementPriorityCalenderWeek 2
+#define AdditionalElementPriorityCalendarWeek 2
 #define AdditionalElementPriorityTimeZone 3
 #define AdditionalElementPriorityDate 4
 #define AdditionalElementPriorityTerminalDevice 5
@@ -1880,112 +2157,115 @@ int main(int argc, char** argv)
 #define AdditionalElementPriorityRoutingInfo 9
 #define AdditionalElementPrioritySSHInfo 10
 
-		//if the seventh-prioritized element (ssh connection info) has space, print it "<SSH: 123.123.13.123:54321 -> 321.312.321.321:22> "
-		if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPrioritySSHInfo)) {
-			printf("%s", Arg_SSHInfo);
-		}
-
-		//print username and machine "user@hostname"
-		printf(COLOUR_USER "%s" COLOUR_USER_AT_HOST "@" COLOUR_HOST "%s" COLOUR_CLEAR, User, Host);
-
-		//if the fourth-prioritized element (the line/terminal device has space, append it to the user@machine) ":/dev/pts/0"
-		if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTerminalDevice)) {
-			printf(COLOUR_TERMINAL_DEVICE "%s", Arg_TerminalDevice);
-		}
-
-		//append the SHLVL (how many shells are nested, ie how many Ctrl+D are needed to properly exit), only shown if >=2 " [2]"
-		//also print the first bit of the git indication (is submodule or not) " [GIT-SM"
-		printf(COLOUR_SHLVL "%s" COLOUR_CLEAR "%s", Arg_SHLVL, gitSegment1_BaseMarkerStart);
-
-		//if the fifth-prioritized element (the the location of the parent repo, if it exists, ie if this is submodule) "@/some/parentrepo"
-		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityParentRepoLocation))) {
-			printf("%s", gitSegment2_parentRepoLoc);
-		}
-
-		//print the repo name and branch including the closing bracket arount the git indication "] ShellTools on master"
-		printf("%s", gitSegment3_BaseMarkerEnd);
-
-		//if the first-prioritized element (the git remote origin information) has space, print it " from ssh:git@someserver.de:someport"
-		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityGitRemoteInfo))) {
-			printf("%s", gitSegment4_remoteinfo);
-		}
-
-		//print the last bit of the git indicator (commits to pull, push, stashes, merge-conflict-files, staged changes, non-staged changes, untracked files) " {77⇣ 0⇡} <5M 10+ 3* 4?>"
-		printf("%s", gitSegment5_gitStatus);
-
-		//fill the empty space between left and right side
-		for (int i = 0;i < RemainingPromptWidth;i++) {
-			printf("-");
-		}
-
-		//print the time in HH:mm:ss "21:24:31"
-		printf("%s", Time);
-
-		//if the third-prioritized element (timezone info) has space, print it " UTC+0200 (CEST)"
-		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTimeZone))) {
-			printf("%s", TimeZone);
-		}
-
-		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityDate))) {
-			printf("%s", DateInfo);
-		}
-
-		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityCalenderWeek))) {
-			printf("%s", CalenderWeek);
-		}
-
-		//if a proxy is configured, show it (A=Apt, H=http(s), F=FTP, N=NoProxy) " [AHNF]"
-		printf("%s", Arg_ProxyInfo);
-
-		//if the second prioritized element (local IP addresses) has space, print it " eth0:192.168.0.2 wifi0:192.168.0.3"
-		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityLocalIP))) {
-			printf("%s", Arg_LocalIPs);
-		}
-
-		//Arg_LocalIPsRoutes and Arg_LocalIPsAdditional can AND WILL be NULL if the old IP-system is used (for example on WSL)
-		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditinoalElementPriorityNonDefaultNetworks))) {
-			printf("%s", Arg_LocalIPsAdditional);
-		}
-
-		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityRoutingInfo))) {
-			printf("%s", Arg_LocalIPsRoutes);
-		}
-
-		printf("%s", numBgJobsStr);
-		//if the sixth-prioritized element (background tasks) has space, print it " {1S-  2S+}"
-		if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityBackgroundJobDetail))) {
-			printf("%s", Arg_BackgroundJobs);
-		}
-
-		//print the battery state (the first unicode char can be any of ▲,≻,▽ or ◊[for not charging,but not discharging]), while the second unicode char indicates the presence of AC power "≻ 100% ↯"
-		printf("%s", Arg_PowerState);
-
-		//the last two chars on screen were intentionally empty, I am now printing  ' !' there if ANY additional element had to be omitted
-		printf("%s", ~AdditionalElementAvailabilityPackedBool & ~(~0 << AdditionalElementCount) ? " !" : "");
-
-
-		if (ri->isGit) {
-			free(gitSegment1_BaseMarkerStart);
-			if (ri->isSubModule) {
-				free(gitSegment2_parentRepoLoc);
+			//if the seventh-prioritized element (ssh connection info) has space, print it "<SSH: 123.123.13.123:54321 -> 321.312.321.321:22> "
+			if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPrioritySSHInfo)) {
+				printf("%s", Arg_SSHInfo);
 			}
-			free(gitSegment3_BaseMarkerEnd);
-			free(gitSegment4_remoteinfo);
-			free(gitSegment5_gitStatus);
-		}
-		DeallocRepoInfoStrings(ri);
-		free(ri);
-		if (Arg_LocalIPs != NULL) {
-			free(Arg_LocalIPs);
-			Arg_LocalIPs = NULL;
-		}
-		if (Arg_LocalIPsAdditional != NULL) {
-			free(Arg_LocalIPsAdditional);
-			Arg_LocalIPsAdditional = NULL;
-		}
-		if (Arg_LocalIPsRoutes != NULL) {
-			free(Arg_LocalIPsRoutes);
-			Arg_LocalIPsRoutes = NULL;
+
+			//print username and machine "user@hostname"
+			printf(COLOUR_USER "%s" COLOUR_USER_AT_HOST "@" COLOUR_HOST "%s" COLOUR_CLEAR, User, Host);
+
+			//if the fourth-prioritized element (the line/terminal device has space, append it to the user@machine) ":/dev/pts/0"
+			if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTerminalDevice)) {
+				printf(COLOUR_TERMINAL_DEVICE "%s", Arg_TerminalDevice);
+			}
+
+			//append the SHLVL (how many shells are nested, ie how many Ctrl+D are needed to properly exit), only shown if >=2 " [2]"
+			//also print the first bit of the git indication (is submodule or not) " [GIT-SM"
+			printf(COLOUR_SHLVL "%s" COLOUR_CLEAR "%s", Arg_SHLVL, gitSegment1_BaseMarkerStart);
+
+			//if the fifth-prioritized element (the the location of the parent repo, if it exists, ie if this is submodule) "@/some/parentrepo"
+			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityParentRepoLocation))) {
+				printf("%s", gitSegment2_parentRepoLoc);
+			}
+
+			//print the repo name and branch including the closing bracket arount the git indication "] ShellTools on master"
+			printf("%s", gitSegment3_BaseMarkerEnd);
+
+			//if the first-prioritized element (the git remote origin information) has space, print it " from ssh:git@someserver.de:someport"
+			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityGitRemoteInfo))) {
+				printf("%s", gitSegment4_remoteinfo);
+			}
+
+			//print the last bit of the git indicator (commits to pull, push, stashes, merge-conflict-files, staged changes, non-staged changes, untracked files) " {77⇣ 0⇡} <5M 10+ 3* 4?>"
+			printf("%s", gitSegment5_commitStatus);
+			printf("%s", gitSegment6_gitStatus);
+
+			//fill the empty space between left and right side
+			for (int i = 0;i < RemainingPromptWidth;i++) {
+				printf("-");
+			}
+
+			//print the time in HH:mm:ss "21:24:31"
+			printf("%s", Time);
+
+			//if the third-prioritized element (timezone info) has space, print it " UTC+0200 (CEST)"
+			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTimeZone))) {
+				printf("%s", TimeZone);
+			}
+
+			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityDate))) {
+				printf("%s", DateInfo);
+			}
+
+			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityCalendarWeek))) {
+				printf("%s", CalendarWeek);
+			}
+
+			//if a proxy is configured, show it (A=Apt, H=http(s), F=FTP, N=NoProxy) " [AHNF]"
+			printf("%s", Arg_ProxyInfo);
+
+			//if the second prioritized element (local IP addresses) has space, print it " eth0:192.168.0.2 wifi0:192.168.0.3"
+			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityLocalIP))) {
+				printf("%s", Arg_LocalIPs);
+			}
+
+			//Arg_LocalIPsRoutes and Arg_LocalIPsAdditional can AND WILL be NULL if the old IP-system is used (for example on WSL)
+			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditinoalElementPriorityNonDefaultNetworks))) {
+				printf("%s", Arg_LocalIPsAdditional);
+			}
+
+			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityRoutingInfo))) {
+				printf("%s", Arg_LocalIPsRoutes);
+			}
+
+			printf("%s", numBgJobsStr);
+			//if the sixth-prioritized element (background tasks) has space, print it " {1S-  2S+}"
+			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityBackgroundJobDetail))) {
+				printf("%s", Arg_BackgroundJobs);
+			}
+
+			//print the battery state (the first unicode char can be any of ▲,≻,▽ or ◊[for not charging,but not discharging]), while the second unicode char indicates the presence of AC power "≻ 100% ↯"
+			printf("%s", Arg_PowerState);
+
+			//the last two chars on screen were intentionally empty, I am now printing  ' !' there if ANY additional element had to be omitted
+			printf("%s", ~AdditionalElementAvailabilityPackedBool & ~(~0 << AdditionalElementCount) ? " !" : "");
+
+
+			if (ri->isGit) {
+				free(gitSegment1_BaseMarkerStart);
+				if (ri->isSubModule) {
+					free(gitSegment2_parentRepoLoc);
+				}
+				free(gitSegment3_BaseMarkerEnd);
+				free(gitSegment4_remoteinfo);
+				free(gitSegment5_commitStatus);
+				free(gitSegment6_gitStatus);
+			}
+			DeallocRepoInfoStrings(ri);
+			free(ri);
+			if (Arg_LocalIPs != NULL) {
+				free(Arg_LocalIPs);
+				Arg_LocalIPs = NULL;
+			}
+			if (Arg_LocalIPsAdditional != NULL) {
+				free(Arg_LocalIPsAdditional);
+				Arg_LocalIPsAdditional = NULL;
+			}
+			if (Arg_LocalIPsRoutes != NULL) {
+				free(Arg_LocalIPsRoutes);
+				Arg_LocalIPsRoutes = NULL;
+			}
 		}
 	}
 	else if (IsSet || IsShow)

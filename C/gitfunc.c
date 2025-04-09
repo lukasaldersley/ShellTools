@@ -325,7 +325,7 @@ char* ConstructGitBranchInfoString(const RepoInfo* ri) {
 	rb[0] = 0x00;
 	if (ri->HasRemote) { //if the repo doesn't have a remote, it doesn't make sense to count the branch differences betwen remote and local since ther is no remote
 		if (ri->CountRemoteOnlyBranches > 0 || ri->CountLocalOnlyBranches > 0 || ri->CountUnequalBranches > 0) {
-			int temp = snprintf(rb + rbLen, MALEN - rbLen, ": ⟨");
+			int temp = snprintf(rb + rbLen, MALEN - rbLen, " ⟨");
 			if (temp < MALEN && temp>0) {
 				rbLen += temp;
 			}
@@ -363,8 +363,8 @@ char* ConstructGitBranchInfoString(const RepoInfo* ri) {
 	return rb;
 }
 
-char* ConstructGitStatusString(const RepoInfo* ri) {
-#define GIT_SEG_5_MAX_LEN 128
+char* ConstructCommitStatusString(const RepoInfo* ri) {
+#define GIT_SEG_5_MAX_LEN 64
 	int rbLen = 0;
 	char* rb = (char*)malloc(sizeof(char) * GIT_SEG_5_MAX_LEN);
 	if (rb == NULL) ABORT_NO_MEMORY;
@@ -440,49 +440,62 @@ char* ConstructGitStatusString(const RepoInfo* ri) {
 			rbLen += temp;
 		}
 	}
+	rb[rbLen < GIT_SEG_5_MAX_LEN ? rbLen : GIT_SEG_5_MAX_LEN - 1] = 0x00; //just as 'belt and bracers' absolutely ensure there is a nullbyte in there
+#undef GIT_SEG_5_MAX_LEN
+	return rb;
+}
+
+char* ConstructGitStatusString(const RepoInfo* ri) {
+#define GIT_SEG_6_MAX_LEN 64
+	int rbLen = 0;
+	char* rb = (char*)malloc(sizeof(char) * GIT_SEG_6_MAX_LEN);
+	if (rb == NULL) ABORT_NO_MEMORY;
+	rb[0] = 0x00;
 
 	if (ri->StagedChanges > 0 || ri->ModifiedFiles > 0 || ri->UntrackedFiles > 0 || ri->ActiveMergeFiles > 0) {
-		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " <");
-		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
+		int temp;
+		temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, " <");
+		if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
 			rbLen += temp;
 		}
 
 		if (ri->ActiveMergeFiles > 0) {
-			temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, COLOUR_GIT_MERGES "%d!" COLOUR_CLEAR " ", ri->ActiveMergeFiles);
-			if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
+			temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, COLOUR_GIT_MERGES "%d!" COLOUR_CLEAR " ", ri->ActiveMergeFiles);
+			if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
 				rbLen += temp;
 			}
 		}
 
 		if (ri->StagedChanges > 0) {
-			temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, COLOUR_GIT_STAGED "%d+" COLOUR_CLEAR " ", ri->StagedChanges);
-			if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
+			temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, COLOUR_GIT_STAGED "%d+" COLOUR_CLEAR " ", ri->StagedChanges);
+			if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
 				rbLen += temp;
 			}
 		}
 
 		if (ri->ModifiedFiles > 0) {
-			temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, COLOUR_GIT_MODIFIED "%d*" COLOUR_CLEAR " ", ri->ModifiedFiles);
-			if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
+			temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, COLOUR_GIT_MODIFIED "%d*" COLOUR_CLEAR " ", ri->ModifiedFiles);
+			if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
 				rbLen += temp;
 			}
 		}
 
 		if (ri->UntrackedFiles > 0) {
-			temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, "%d? ", ri->UntrackedFiles);
-			if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
+			temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, "%d? ", ri->UntrackedFiles);
+			if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
 				rbLen += temp;
 			}
 		}
 
 		rb[--rbLen] = 0x00;//bin a space (after the file listings)
 
-		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, ">");
-		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
+		temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, ">");
+		if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
 			rbLen += temp;
 		}
 	}
-	rb[rbLen < GIT_SEG_5_MAX_LEN ? rbLen : GIT_SEG_5_MAX_LEN - 1] = 0x00; //just as 'belt and bracers' absolutely ensure there is a nullbyte in there
+	rb[rbLen < GIT_SEG_6_MAX_LEN ? rbLen : GIT_SEG_6_MAX_LEN - 1] = 0x00; //just as 'belt and bracers' absolutely ensure there is a nullbyte in there
+#undef GIT_SEG_6_MAX_LEN
 	return rb;
 }
 

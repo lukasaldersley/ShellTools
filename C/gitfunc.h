@@ -84,6 +84,7 @@ RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName);
 void AllocUnsetStringsToEmpty(RepoInfo* ri);
 char* ConstructGitBranchInfoString(const RepoInfo* ri);
 char* ConstructGitStatusString(const RepoInfo* ri);
+char* ConstructCommitStatusString(const RepoInfo* ri);
 char* FixImplicitProtocol(const char* input);
 void AddChild(RepoInfo* parent, RepoInfo* child);
 bool CheckExtendedGitStatus(RepoInfo* ri);
