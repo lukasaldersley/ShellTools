@@ -48,12 +48,14 @@ ST_CoreUpdate (){
 	#compile all .c or .cpp files in the folders ZSH and C using the self-compile trick
 	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
 	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
-	if [ -w ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme ]; then #if file exists and write permission is granted
-		rm ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme
+	if [ -w "$ZSH/custom/themes/" ]; then #if file exists and write permission is granted
+		if [ -e "$ZSH/custon/themes/lukasaldersley.zsh-theme" ]; then
+			rm "$ZSH/custom/themes/lukasaldersley.zsh-theme"
+		fi
 		echo "copying $ST_SRC/ZSH/lukasaldersley.zsh-theme to  $ZSH/custom/themes/lukasaldersley.zsh-theme"
 		cp "$ST_SRC/ZSH/lukasaldersley.zsh-theme" "$ZSH/custom/themes/lukasaldersley.zsh-theme"
 	else
-		echo "WARNING: cannot update ~/.oh-my-zsh/custom/themes/lukasaldersley.zsh-theme: not writeable"
+		echo "WARNING: cannot update $ZSH/custom/themes/lukasaldersley.zsh-theme: not writeable"
 	fi
 	if [ "$BranchAdvance" -eq 1 ] || [ "${1:-"--pull"}" = "--nopull" ]; then
 		#if I didn't manage to advance the branch, I don't really need to reload since there were no new files, but if I passed nopull I probably want to debug local changes -> do reload
@@ -69,7 +71,7 @@ UpdateShellTools(){
 
 if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | sed -nE 's~# branch.ab.*-([0-9]+)~\1~p')" -gt 0 ]; then
 #if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | grep  branch.ab)" != "# branch.ab +0 -0" ]; then
-	printf "There are ShellTools Updates available on the current branch (%s).\nDo you wish to update now [Y/n] " "$(git symbolic-ref --short HEAD)"
+	printf "There are ShellTools Updates available on the current branch (%s).\nDo you wish to update now [Y/n] " "$(git -C "$ST_SRC" symbolic-ref --short HEAD)"
 	read -r -k 1 versionconfirm
 	printf '\n'
 	case $versionconfirm in
@@ -235,6 +237,7 @@ TestProxyExtension(){
 }
 
 enableProxy(){
+	#if any of the PROXY* variables I would be setting are already there, abort this. (unless configured)
 	if [ -n "$PROXY_HOST" ] ; then
 		SetUpAptProxyConfigFile
 
@@ -405,7 +408,19 @@ fi
 # shellcheck disable=SC2046 #reason: I DO want wordsplitting to happen on the date
 printf "System up since %s (%s)\n" "$(uptime --since)" "$("$ST_CFG/st_timer.elf" STOPHUMAN $(uptime --since |tr ':-' ' '))"
 
-SystemStatus
+if [ "${ST_DO_SYSTEM_UPDATE_CHECK_ON_STARTUP:-1}" -ne 0 ];then
+	SystemStatus
+else
+	if [ -f /var/run/reboot-required ]; then
+		cat /var/run/reboot-required
+	fi
+	if [ -f /var/run/reboot-required.pkgs ]; then
+		echo "Reboot is required to apply updates for following packages:"
+		sort < /var/run/reboot-required.pkgs | uniq
+	fi
+fi
+
+
 
 #this is just to force the initial return code to be 0/OK when opening a new shell
 true

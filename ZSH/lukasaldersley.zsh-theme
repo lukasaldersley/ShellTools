@@ -59,7 +59,7 @@ add-zsh-hook precmd CalcTimeDiff
 
 function GetSSHInfo(){
 	#this attempts to parse the SSH_CONNECTION env-variable to get '<SSH: clientIP:clientPort -> serverIP:serverPort>'
-	echo "$SSH_CONNECTION" | sed -nE 's~^([-0-9a-zA-Z_\.]+) ([0-9]+) ([-0-9a-zA-Z_\.]+) ([0-9]+)$~<SSH: \1:\2 -> \3:\4> ~p'
+	echo "$SSH_CONNECTION" | sed -nE 's~^([-0-9a-zA-Z_\.:]+) ([0-9]+) ([-0-9a-zA-Z_\.:]+) ([0-9]+)$~<SSH: \1:\2 -> \3:\4> ~p'
 }
 
 function GetBackgroundTaskInfo (){

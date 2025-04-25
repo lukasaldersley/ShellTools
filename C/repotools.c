@@ -47,10 +47,10 @@ bool CONFIG_LOWPROMPT_RETCODE = true;
 bool CONFIG_LOWPROMPT_RETCODE_DECODE = true;
 bool CONFIG_LOWPROMPT_TIMER = true;
 
-bool CONFIG_PROMPT = true;
+bool CONFIG_PROMPT_OVERALL_ENABLE = true;
 
 bool CONFIG_PROMPT_SSH = true;
-bool CONFIG_PROMPT_DEVICE = true;
+bool CONFIG_PROMPT_TERMINAL_DEVICE = true;
 bool CONFIG_PROMPT_TIME = true;
 bool CONFIG_PROMPT_TIMEZONE = true;
 bool CONFIG_PROMPT_DATE = true;
@@ -60,6 +60,9 @@ bool CONFIG_PROMPT_NETWORK = true;
 bool CONFIG_PROMPT_JOBS = true;
 bool CONFIG_PROMPT_POWER = true;
 bool CONFIG_PROMPT_GIT = true;
+bool CONFIG_PROMPT_USER = true;
+bool CONFIG_PROMPT_HOST = true;
+char CONFIG_PROMPT_FILLER_CHAR = '-';
 
 bool CONFIG_PROMPT_NET_IFACE = true;
 bool CONFIG_PROMPT_NET_ADDITIONAL = true;
@@ -871,9 +874,9 @@ void DoSetup() {
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.TERMINALDEVICE.ENABLE:	")) {
-				CONFIG_PROMPT_DEVICE = Compare("true", buf + 40);
+				CONFIG_PROMPT_TERMINAL_DEVICE = Compare("true", buf + 40);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_PROMPT_DEVICE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_PROMPT_TERMINAL_DEVICE);
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.TIME.ENABLE:	")) {
@@ -925,9 +928,9 @@ void DoSetup() {
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.ENABLE:	")) {
-				CONFIG_PROMPT = Compare("true", buf + 25);
+				CONFIG_PROMPT_OVERALL_ENABLE = Compare("true", buf + 25);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 25, CONFIG_PROMPT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 25, CONFIG_PROMPT_OVERALL_ENABLE);
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.ENABLE:	")) {
@@ -1135,6 +1138,24 @@ void DoSetup() {
 				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LSGIT_WARN_BRANCHLIMIT);
 #endif
 			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.USER.ENABLE:	")) {
+				CONFIG_PROMPT_USER = Compare("true", buf + 30);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_USER);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.HOST.ENABLE:	")) {
+				CONFIG_PROMPT_HOST = Compare("true", buf + 30);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_HOST);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.PROMPT.FILLER_CHAR:	")) {
+				CONFIG_PROMPT_FILLER_CHAR = buf[31];
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> '%c'\n", buf, buf + 30, CONFIG_PROMPT_FILLER_CHAR);
+#endif
+			}
 			else {
 				fprintf(stderr, "Warning: unknown entry in config file: >%s<\n", buf);
 				UnknownConfig = true;
@@ -1155,10 +1176,10 @@ void ListAvailableRemotes() {
 }
 
 typedef struct {
-	char* ip;
+	char* ipv4;
 	uint32_t metric;
 	bool isDefault;
-	uint8_t cidr;
+	uint8_t IPV4cidr;
 	char* device;
 	char* linkspeed;
 	char* routedNet; //not used if isDefault is true
@@ -1175,17 +1196,17 @@ NetList* InitNetListElement() {
 	NetList* a = (NetList*)malloc(sizeof(NetList));
 	if (a == NULL) ABORT_NO_MEMORY;
 	NetDevice* e = &(a->dev);
-	e->ip = NULL;
+	e->ipv4 = NULL;
 	e->metric = UINT32_MAX;
 	e->isDefault = false;
-	e->cidr = 0;
+	e->IPV4cidr = 0;
 	e->device = NULL;
 	e->linkspeed = NULL;
 	e->routedNet = NULL;
 	return a;
 }
 
-NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* ip, int metric, bool isDefault, int cidr, const char* linkspeed, const char* routedNet) {
+NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* ipv4, int metric, bool isDefault, int IPV4cidr, const char* linkspeed, const char* routedNet) {
 	if (head != NULL && head->dev.isDefault == false && isDefault == true) {
 		abortMessage("assumption on the order of routes incorrect (assume default routes are listed first)");
 	}
@@ -1194,12 +1215,12 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 		NetList* n = InitNetListElement();
 		n->next = NULL;
 		n->prev = NULL;
-		assert(ip != NULL && device != NULL);//IP and device are the minimum set necessary
+		assert(ipv4 != NULL && device != NULL);//IP and device are the minimum set necessary
 		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
-		if (asprintf(&(n->dev.ip), "%s", ip) == -1) ABORT_NO_MEMORY;
+		if (asprintf(&(n->dev.ipv4), "%s", ipv4) == -1) ABORT_NO_MEMORY;
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
-		if (cidr != 0) n->dev.cidr = cidr;
+		if (IPV4cidr != 0) n->dev.IPV4cidr = IPV4cidr;
 		if (linkspeed != NULL) {
 			if (head->dev.linkspeed != NULL) { free(head->dev.linkspeed); }
 			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
@@ -1214,7 +1235,7 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 	else if (Compare(head->dev.device, device)) {
 		//device name matches, this is just additional info
 		head->dev.metric = metric;
-		if (cidr != 0) head->dev.cidr = cidr;
+		if (IPV4cidr != 0) head->dev.IPV4cidr = IPV4cidr;
 		head->dev.isDefault = head->dev.isDefault || isDefault;
 		if (linkspeed != NULL) {
 			if (head->dev.linkspeed != NULL) { free(head->dev.linkspeed); }
@@ -1233,12 +1254,12 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 		n->prev = head->prev;
 		if (head->prev != NULL) head->prev->next = n;
 		head->prev = n;
-		assert(ip != NULL && device != NULL);//IP and device are the minimum set necessary
+		assert(ipv4 != NULL && device != NULL);//IP and device are the minimum set necessary
 		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
-		if (asprintf(&(n->dev.ip), "%s", ip) == -1) ABORT_NO_MEMORY;
+		if (asprintf(&(n->dev.ipv4), "%s", ipv4) == -1) ABORT_NO_MEMORY;
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
-		if (cidr != 0) n->dev.cidr = cidr;
+		if (IPV4cidr != 0) n->dev.IPV4cidr = IPV4cidr;
 		if (linkspeed != NULL) {
 			if (n->dev.linkspeed != NULL) { free(n->dev.linkspeed); }
 			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
@@ -1257,12 +1278,12 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 		n->prev = head;
 
 		head->next = n;
-		assert(ip != NULL && device != NULL);//IP and device are the minimum set necessary
+		assert(ipv4 != NULL && device != NULL);//IP and device are the minimum set necessary
 		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
-		if (asprintf(&(n->dev.ip), "%s", ip) == -1) ABORT_NO_MEMORY;
+		if (asprintf(&(n->dev.ipv4), "%s", ipv4) == -1) ABORT_NO_MEMORY;
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
-		if (cidr != 0) n->dev.cidr = cidr;
+		if (IPV4cidr != 0) n->dev.IPV4cidr = IPV4cidr;
 		if (linkspeed != NULL) {
 			if (n->dev.linkspeed != NULL) { free(n->dev.linkspeed); }
 			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
@@ -1277,7 +1298,7 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 	else {
 		//The New Element is NOT Equal to myslef and is NOT alphabetically before myself (as per the earlier checks)
 		//This time there IS another element after myself -> defer to it.
-		head->next = InsertIntoNetListSorted(head->next, device, ip, metric, isDefault, cidr, linkspeed, routedNet);
+		head->next = InsertIntoNetListSorted(head->next, device, ipv4, metric, isDefault, IPV4cidr, linkspeed, routedNet);
 		return head;
 	}
 }
@@ -1397,10 +1418,10 @@ IpTransportStruct GetBaseIPString() {
 					continue; //linkdown matched, therefore ignore this interface
 				}
 				char* device = NULL;
-				char* ip = NULL;
+				char* ipv4 = NULL;
 				uint32_t metric = UINT32_MAX;
 				bool isDefault = false;
-				int cidr = 0;
+				int IPV4cidr = 0;
 				char* linkspeed = NULL;
 				char* routednet = NULL;
 				int len;
@@ -1419,10 +1440,10 @@ IpTransportStruct GetBaseIPString() {
 				}
 				len = RouteRegexGroups[RouteIpIndex].rm_eo - RouteRegexGroups[RouteIpIndex].rm_so;
 				if (len > 0) {
-					ip = malloc(sizeof(char) * (len + 1));
-					if (ip == NULL) ABORT_NO_MEMORY;
-					strncpy(ip, result + RouteRegexGroups[RouteIpIndex].rm_so, len);
-					ip[len] = 0x00;
+					ipv4 = malloc(sizeof(char) * (len + 1));
+					if (ipv4 == NULL) ABORT_NO_MEMORY;
+					strncpy(ipv4, result + RouteRegexGroups[RouteIpIndex].rm_so, len);
+					ipv4[len] = 0x00;
 				}
 				len = RouteRegexGroups[RouteMetricIndex].rm_eo - RouteRegexGroups[RouteMetricIndex].rm_so;
 				if (len > 0) {
@@ -1440,7 +1461,7 @@ IpTransportStruct GetBaseIPString() {
 					if (temp == NULL) ABORT_NO_MEMORY;
 					strncpy(temp, result + RouteRegexGroups[RouteCidrIndex].rm_so, len);
 					temp[len] = 0x00;
-					cidr = atoi(temp);
+					IPV4cidr = atoi(temp);
 					free(temp);
 					temp = NULL;
 				}
@@ -1451,9 +1472,9 @@ IpTransportStruct GetBaseIPString() {
 					strncpy(routednet, result + RouteRegexGroups[RouteRoutedNetIndex].rm_so, len);
 					routednet[len] = 0x00;
 				}
-				head = InsertIntoNetListSorted(head, device, ip, metric, isDefault, cidr, linkspeed, routednet);
+				head = InsertIntoNetListSorted(head, device, ipv4, metric, isDefault, IPV4cidr, linkspeed, routednet);
 				if (device != NULL)free(device);
-				if (ip != NULL)free(ip);
+				if (ipv4 != NULL)free(ipv4);
 				if (linkspeed != NULL)free(linkspeed);
 				if (routednet != NULL)free(routednet);
 			}
@@ -1480,7 +1501,7 @@ IpTransportStruct GetBaseIPString() {
 		if (current->dev.metric < lowestMetric) {
 			lowestMetric = current->dev.metric;
 		}
-		//fprintf(stderr, "%s:%s/%i@%i %i for %s\n", current->dev.device, current->dev.ip, current->dev.cidr, current->dev.metric, current->dev.isDefault, current->dev.routedNet);
+		//fprintf(stderr, "%s:%s/%i@%i %i for %s\n", current->dev.device, current->dev.ipv4, current->dev.IPV4cidr, current->dev.metric, current->dev.isDefault, current->dev.routedNet);
 		current = current->next;
 	}
 	//this works under the assumption the interface names aren't longer than 10-ish characters (true for enpXsY or eth1 or wlpXsY) however at some point my system decided to use wlx18d6c713d4ed as default device and completely ignore the actually fast wifi chip
@@ -1503,9 +1524,9 @@ IpTransportStruct GetBaseIPString() {
 	current = head;
 	for (int i = 0;i < numDefaultRoutes;i++) {
 		if (CONFIG_PROMPT_NET_IFACE) {
-			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), " %s%s\e[0m:%s", (current->dev.metric == lowestMetric && numDefaultRoutes > 1 ? "\e[4m" : ""), current->dev.device, current->dev.ip);
-			if (current->dev.cidr > 0) {
-				baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;244m/%i\e[0m", current->dev.cidr);
+			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), " %s%s\e[0m:%s", (current->dev.metric == lowestMetric && numDefaultRoutes > 1 ? "\e[4m" : ""), current->dev.device, current->dev.ipv4);
+			if (current->dev.IPV4cidr > 0) {
+				baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;244m/%i\e[0m", current->dev.IPV4cidr);
 			}
 			if (numDefaultRoutes > 1) {
 				baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;240m\e[2m\e[3m~%u\e[0m", current->dev.metric);
@@ -1520,9 +1541,9 @@ IpTransportStruct GetBaseIPString() {
 	//I intentionally didn't reset current
 	if (numNonDefaultRoutes > 0 && CONFIG_PROMPT_NET_ADDITIONAL) {
 		for (int i = 0;i < numNonDefaultRoutes;i++) {
-			nondefaultLenUsed += snprintf(ret.AdditionalIPInfo + nondefaultLenUsed, nondefaultIpStringLen - (nondefaultLenUsed + 1), " \e[38;5;244m\e[3m%s:%s\e[0m", current->dev.device, current->dev.ip);
-			if (current->dev.cidr > 0) {
-				nondefaultLenUsed += snprintf(ret.AdditionalIPInfo + nondefaultLenUsed, nondefaultIpStringLen - (nondefaultLenUsed + 1), "\e[38;5;240m\e[2m\e[3m/%i\e[0m", current->dev.cidr);
+			nondefaultLenUsed += snprintf(ret.AdditionalIPInfo + nondefaultLenUsed, nondefaultIpStringLen - (nondefaultLenUsed + 1), " \e[38;5;244m\e[3m%s:%s\e[0m", current->dev.device, current->dev.ipv4);
+			if (current->dev.IPV4cidr > 0) {
+				nondefaultLenUsed += snprintf(ret.AdditionalIPInfo + nondefaultLenUsed, nondefaultIpStringLen - (nondefaultLenUsed + 1), "\e[38;5;240m\e[2m\e[3m/%i\e[0m", current->dev.IPV4cidr);
 			}
 			current = current->next;
 		}
@@ -1547,7 +1568,7 @@ IpTransportStruct GetBaseIPString() {
 			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), "  %i additional routes\e[0m", numNonDefaultRoutes);
 		}
 		else {
-			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), " %s/%i->%s\e[0m", current->dev.routedNet, current->dev.cidr, current->dev.device);
+			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), " %s/%i->%s\e[0m", current->dev.routedNet, current->dev.IPV4cidr, current->dev.device);
 		}
 	}
 	assert(baseIPlenUsed < basicIPStringLen);
@@ -1904,11 +1925,11 @@ int main(int argc, char** argv)
 		Arg_LocalIPs[0] = 0x00;
 		Arg_LocalIPs_len = 0;
 	}
-	if (!CONFIG_PROMPT_POWER) { Arg_PowerState[0] = 0x00; Arg_PowerState_len = 0; }
-	if (!CONFIG_PROMPT_PROXY) { Arg_ProxyInfo[0] = 0x00; Arg_ProxyInfo_len = 0; }
-	if (!CONFIG_PROMPT_SSH) { Arg_SSHInfo[0] = 0x00; Arg_SSHInfo_len = 0; }
-	if (!CONFIG_PROMPT_DEVICE) { Arg_TerminalDevice[0] = 0x00; Arg_TerminalDevice_len = 0; }
-	if (!CONFIG_PROMPT_JOBS) { Arg_BackgroundJobs[0] = 0x00; Arg_BackgroundJobs_len = 0; }
+	if (!CONFIG_PROMPT_POWER && Arg_PowerState != NULL) { Arg_PowerState[0] = 0x00; Arg_PowerState_len = 0; }
+	if (!CONFIG_PROMPT_PROXY && Arg_ProxyInfo != NULL) { Arg_ProxyInfo[0] = 0x00; Arg_ProxyInfo_len = 0; }
+	if (!CONFIG_PROMPT_SSH && Arg_SSHInfo != NULL) { Arg_SSHInfo[0] = 0x00; Arg_SSHInfo_len = 0; }
+	if (!CONFIG_PROMPT_TERMINAL_DEVICE && Arg_TerminalDevice != NULL) { Arg_TerminalDevice[0] = 0x00; Arg_TerminalDevice_len = 0; }
+	if (!CONFIG_PROMPT_JOBS && Arg_BackgroundJobs != NULL) { Arg_BackgroundJobs[0] = 0x00; Arg_BackgroundJobs_len = 0; }
 	Time = malloc(sizeof(char) * 16);
 	if (Time == NULL) ABORT_NO_MEMORY;
 	if (CONFIG_PROMPT_TIME) {
@@ -1991,7 +2012,7 @@ int main(int argc, char** argv)
 
 	if (IsPrompt) //show origin info for command prompt
 	{
-		if (CONFIG_PROMPT) {
+		if (CONFIG_PROMPT_OVERALL_ENABLE) {
 			//this is intentionally not OR-ed with IsPrompt as IsPrompt is in an exhaustive if/else where if this would evaluate to false I would get an error to the effect of "unknown option PROMPT"
 
 
@@ -2141,7 +2162,7 @@ int main(int argc, char** argv)
 
 
 			int RemainingPromptWidth = Arg_TotalPromptWidth - (
-				User_len + 1 + Host_len +
+				(CONFIG_PROMPT_USER ? User_len : 0) + ((CONFIG_PROMPT_USER && CONFIG_PROMPT_HOST) ? 1 : 0) + (CONFIG_PROMPT_HOST ? Host_len : 0) +
 				Arg_SHLVL_len +
 				gitSegment1_BaseMarkerStart_len +
 				gitSegment3_BaseMarkerEnd_len +
@@ -2184,7 +2205,16 @@ int main(int argc, char** argv)
 			}
 
 			//print username and machine "user@hostname"
-			printf(COLOUR_USER "%s" COLOUR_USER_AT_HOST "@" COLOUR_HOST "%s" COLOUR_CLEAR, User, Host);
+			if (CONFIG_PROMPT_USER) {
+				printf(COLOUR_USER "%s", User);
+				if (CONFIG_PROMPT_HOST) {
+					printf(COLOUR_USER_AT_HOST "@");
+				}
+			}
+			if (CONFIG_PROMPT_HOST) {
+				printf(COLOUR_HOST "%s", Host);
+			}
+			printf(COLOUR_CLEAR);
 
 			//if the fourth-prioritized element (the line/terminal device has space, append it to the user@machine) ":/dev/pts/0"
 			if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTerminalDevice)) {
@@ -2214,7 +2244,36 @@ int main(int argc, char** argv)
 
 			//fill the empty space between left and right side
 			for (int i = 0;i < RemainingPromptWidth;i++) {
-				printf("-");
+				switch (CONFIG_PROMPT_FILLER_CHAR) {
+				case '\\': {
+						putc(CONFIG_PROMPT_FILLER_CHAR, stdout);
+						putc(CONFIG_PROMPT_FILLER_CHAR, stdout);
+						//intentionally missing break; as \ needs more escaping to work
+					}
+				case '%':
+					{
+						//since % is an escape char for the prompt string, escape it as %%
+						putc(CONFIG_PROMPT_FILLER_CHAR, stdout);
+						break;
+					}
+				case '$':
+					{
+						/*this is MADNESS
+						ZSH needs at least FOUR \ to reliably escape a sequence of two or more $ to prevent them from expanding to the PID, when using print -p "\\\\$\\\\$\\\\$"
+						to make things WORSE, when trying this in the shell directly only every other $ needs FOUR \ to be properly escaped, the others are fine with three, but if I go down to three for every $ it will expand to the pid.
+						I need to use over EIGHT \ to make a single \ appear when trying this directly in the shell
+						And here is where it goes completly nuts:
+						when using this from this here progam if I put eight \ in the printf that will be escaped down to four in the actual string since C escapes them as well. IF I use eight \ in this file, therefore four \ in the text a literal \ will appear in the fully escaped output.
+						With only \\ or no escapes at all it will be expanded to PID, with \\\\ (or \\\\\\), therefore only two (or three) in the string it works as expected, with eight \ in here, therefore four in the string, a literal \ will appear in the output. The output will remain unchanged up to \\\\\\\\\\\\\\ in here (14 \ therefore 7 in the string) as soon as I go up to \\\\\\\\\\\\\\\\ (16 in here, 8 in the string) a second literal \ appears in the output. I have given up trying to understand this I will just go with four in here and call it a day.*/
+						printf("\\\\");
+						break;
+					}
+				default:
+					{
+						;
+					}
+				}
+				putc(CONFIG_PROMPT_FILLER_CHAR, stdout);
 			}
 
 			//print the time in HH:mm:ss "21:24:31"

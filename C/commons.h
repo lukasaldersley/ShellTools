@@ -9,11 +9,22 @@
 #include <string.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <stdbool.h>
+#include <bits/wordsize.h>
 #define COLOUR_GREYOUT "\e[38;5;240m"
 #define COLOUR_CLEAR "\e[0m"
 #define MODIFIER_BOLD "\e[1m"
+#ifndef true
 #define true 1
+#endif
+#ifndef false
 #define false 0
+#endif
+#if __WORDSIZE == 64
+#define ST_64BIT
+#else
+#define ST_32BIT
+#endif
 
 #define DEFAULT_TERMINATORS "\r\n\a"
 

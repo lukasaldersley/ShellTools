@@ -415,7 +415,11 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 				}
 			}
 		}
+#ifdef ST_64BIT
 		if ((uint64_t)FromBack - (uint64_t)FromFront <= 6) {
+#else
+		if ((uint32_t)FromBack - (uint32_t)FromFront <= 6) {
+#endif
 			//the text would become longer by inserting the ..., so just keep the original text
 			//this would happen with something like AbbreviatePath(/mnt/c/WS/CODE/BAT_VBS,20,3) where WS would be abbreiviated, but the abreviation ... is longer than the original name -> it doesn't make sense
 			if (asprintf(ret, "%s", Workpath) == -1) ABORT_NO_MEMORY;
