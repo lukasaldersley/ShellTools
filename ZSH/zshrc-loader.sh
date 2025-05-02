@@ -382,8 +382,8 @@ if [ $IsWSL -eq 1 ]; then
 else
 	unset WinUser
 	#check if this is debian-esque, if it's not, it's not supported, exit immediatley
-	#shellcheck source=BARE.sh
-	. "$ST_SRC/ZSH/BARE.sh"
+	#shellcheck source=NATIVE.sh
+	. "$ST_SRC/ZSH/NATIVE.sh"
 fi
 
 if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ]; then
@@ -419,8 +419,6 @@ else
 		sort < /var/run/reboot-required.pkgs | uniq
 	fi
 fi
-
-
 
 #this is just to force the initial return code to be 0/OK when opening a new shell
 true

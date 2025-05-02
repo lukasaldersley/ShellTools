@@ -118,6 +118,8 @@ bool CONFIG_LSGIT_THOROUGH_REMOTE = true;
 bool CONFIG_LSGIT_THOROUGH_COMMITS = true;
 bool CONFIG_LSGIT_THOROUGH_GITSTATUS = true;
 
+bool DIPFALSCHEISSER_WARNINGS = false;
+
 bool CheckBranching(RepoInfo* ri) {
 	//this method checks the status of all branches on a given repo
 	//and then computes how many differ, howm many up to date, how many branches local-only, how many branches remote-only
@@ -1215,19 +1217,24 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 		NetList* n = InitNetListElement();
 		n->next = NULL;
 		n->prev = NULL;
-		assert(ipv4 != NULL && device != NULL);//IP and device are the minimum set necessary
+		//IP and device are the minimum set necessary (this was the original assumption, sincee reduced to just device)
+		//originally I asserted device AND IP must be present, but on my linode VM in the entry denoting the default route there is no IP -> that assertion does not hold
+		assert(device != NULL);
 		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
-		if (asprintf(&(n->dev.ipv4), "%s", ipv4) == -1) ABORT_NO_MEMORY;
+		if (ipv4 != NULL) {
+			if (n->dev.ipv4 != NULL) { free(n->dev.ipv4); }
+			if (asprintf(&(n->dev.ipv4), "%s", ipv4) == -1) ABORT_NO_MEMORY;
+		}
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
 		if (IPV4cidr != 0) n->dev.IPV4cidr = IPV4cidr;
 		if (linkspeed != NULL) {
-			if (head->dev.linkspeed != NULL) { free(head->dev.linkspeed); }
-			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
+			if (n->dev.linkspeed != NULL) { free(n->dev.linkspeed); }
+			if (asprintf(&(n->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
 		}
 		if (routedNet != NULL) {
-			if (head->dev.routedNet != NULL) { free(head->dev.routedNet); }
-			if (asprintf(&(head->dev.routedNet), "%s", routedNet) == -1) ABORT_NO_MEMORY;
+			if (n->dev.routedNet != NULL) { free(n->dev.routedNet); }
+			if (asprintf(&(n->dev.routedNet), "%s", routedNet) == -1) ABORT_NO_MEMORY;
 		}
 
 		return n;
@@ -1245,6 +1252,10 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 			if (head->dev.routedNet != NULL) { free(head->dev.routedNet); }
 			if (asprintf(&(head->dev.routedNet), "%s", routedNet) == -1) ABORT_NO_MEMORY;
 		}
+		if (ipv4 != NULL) {
+			if (head->dev.ipv4 != NULL) { free(head->dev.ipv4); }
+			if (asprintf(&(head->dev.ipv4), "%s", ipv4) == -1) ABORT_NO_MEMORY;
+		}
 		return head;
 	}
 	else if (metric < head->dev.metric) {
@@ -1254,9 +1265,14 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 		n->prev = head->prev;
 		if (head->prev != NULL) head->prev->next = n;
 		head->prev = n;
-		assert(ipv4 != NULL && device != NULL);//IP and device are the minimum set necessary
+		//IP and device are the minimum set necessary (this was the original assumption, sincee reduced to just device)
+		//originally I asserted device AND IP must be present, but on my linode VM in the entry denoting the default route there is no IP -> that assertion does not hold
+		assert(device != NULL);
 		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
-		if (asprintf(&(n->dev.ipv4), "%s", ipv4) == -1) ABORT_NO_MEMORY;
+		if (ipv4 != NULL) {
+			if (n->dev.ipv4 != NULL) { free(n->dev.ipv4); }
+			if (asprintf(&(n->dev.ipv4), "%s", ipv4) == -1) ABORT_NO_MEMORY;
+		}
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
 		if (IPV4cidr != 0) n->dev.IPV4cidr = IPV4cidr;
@@ -1278,9 +1294,14 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 		n->prev = head;
 
 		head->next = n;
-		assert(ipv4 != NULL && device != NULL);//IP and device are the minimum set necessary
+		//IP and device are the minimum set necessary (this was the original assumption, sincee reduced to just device)
+		//originally I asserted device AND IP must be present, but on my linode VM in the entry denoting the default route there is no IP -> that assertion does not hold
+		assert(device != NULL);
 		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
-		if (asprintf(&(n->dev.ipv4), "%s", ipv4) == -1) ABORT_NO_MEMORY;
+		if (ipv4 != NULL) {
+			if (n->dev.ipv4 != NULL) { free(n->dev.ipv4); }
+			if (asprintf(&(n->dev.ipv4), "%s", ipv4) == -1) ABORT_NO_MEMORY;
+		}
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
 		if (IPV4cidr != 0) n->dev.IPV4cidr = IPV4cidr;
@@ -1368,19 +1389,24 @@ IpTransportStruct GetBaseIPString() {
 		ret.RouteInfo[0] = 0x00;
 		return ret;
 	}
-
-	uint8_t RouteRegexGroupCount = 13;
+	uint8_t RouteRegexGroupCount = 16;
 	regmatch_t RouteRegexGroups[RouteRegexGroupCount];
 	regex_t RouteRegex;
-	const char* RouteRegexString = "^(((default) via ([0-9.]+))|(([0-9.]+)/([0-9]+))).*?dev ([^ ]+).*?src ([0-9.]+)( metric ([0-9]+))?( linkdown)?.*$";
+	const char* RouteRegexString = "^(((default) via ([0-9.]+))|(([0-9.]+)/([0-9]+))) dev ([^ ]+)( proto [^ ]+)?( scope link)?( src ([0-9.]+))?( metric ([0-9]+))?( linkdown)? *$";
+	//the following was the originally used regex. it doesn't work for some network configurations (such as linode/akamai VPS).
+	//const char* RouteRegexString="^(((default) via ([0-9.]+))|(([0-9.]+)/([0-9]+))).*?dev ([^ ]+).*?src ([0-9.]+)( metric ([0-9]+))?( linkdown)?.*$";
+	//root cause is problems with lazy matching, which C's regex engine can't do.
+	//I haed copilot help in creating a "fixed" regex. the output was this:
+	//^((default[[:space:]]+via[[:space:]]+([0-9.]+))|(([0-9.]+)/([0-9]+)))[[:space:]]+dev[[:space:]]+([^[:space:]]+)(?:[[:space:]]+proto[[:space:]]+[^[:space:]]+)?(?:[[:space:]]+scope[[:space:]]+link)?(?:[[:space:]]+src[[:space:]]+([0-9.]+))?(?:[[:space:]]+metric[[:space:]]+([0-9]+))?(?:[[:space:]]+linkdown)?[[:space:]]*$
+	//I have then refined it into a much smaller and more easily readable version which is in use currently
 #define RouteIsDefaultIndex 3
 #define RouteNextHopIndex 4
 #define RouteRoutedNetIndex 6
 #define RouteCidrIndex 7
 #define RouteDeviceIndex 8
-#define RouteIpIndex 9
-#define RouteMetricIndex 11
-#define RouteLinkDownIndex 12
+#define RouteIpIndex 12
+#define RouteMetricIndex 14
+#define RouteLinkDownIndex 15
 	int IpRegexReturnCode;
 	IpRegexReturnCode = regcomp(&RouteRegex, RouteRegexString, REG_EXTENDED | REG_NEWLINE);
 	if (IpRegexReturnCode)
@@ -1389,6 +1415,7 @@ IpTransportStruct GetBaseIPString() {
 		if (regErrorBuf == NULL) ABORT_NO_MEMORY;
 		regerror(IpRegexReturnCode, &RouteRegex, regErrorBuf, 1024);
 		printf("Could not compile regular expression '%s'. [%i(%s)]\n", RouteRegexString, IpRegexReturnCode, regErrorBuf);
+		fflush(stdout);
 		free(regErrorBuf);
 		exit(1);
 	};
@@ -1404,6 +1431,7 @@ IpTransportStruct GetBaseIPString() {
 	if (fp == NULL)
 	{
 		fprintf(stderr, "failed running process %s\n", command);
+		fflush(stderr);
 	}
 	else {
 		while (fgets(result, size - 1, fp) != NULL)
@@ -1477,6 +1505,9 @@ IpTransportStruct GetBaseIPString() {
 				if (ipv4 != NULL)free(ipv4);
 				if (linkspeed != NULL)free(linkspeed);
 				if (routednet != NULL)free(routednet);
+			}
+			else if (DIPFALSCHEISSER_WARNINGS) {
+				printf("ERROR: IP regex match returned %i -> IP info is likely incomplete\n", IpRegexReturnCode);fflush(stdout);
 			}
 		}
 		pclose(fp);
@@ -1991,6 +2022,7 @@ int main(int argc, char** argv)
 	for (int i = 0;i < argc;i++) {
 		printf("%soption-arg %i:\t>%s<\n", (i >= optind ? "non-" : "\t"), i, argv[i]);
 	}
+	fflush(stdout);
 #endif
 
 	if (CONFIG_GIT_MAXBRANCHES == -2) {
