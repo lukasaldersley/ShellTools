@@ -93,7 +93,7 @@ function GetLocalIP (){
 		if [ ! "$IpAddrList" ]; then
 			IpAddrList=" NC"
 		fi
-		printf "-i%s\a" "$IpAddrList"
+		printf " -i%s\a" "$IpAddrList"
 	fi
 }
 
@@ -172,6 +172,10 @@ function PowerState (){
 		AC_PWR=1
 	elif [ -r /sys/class/power_supply/AC/online ] && [ "$(cat /sys/class/power_supply/AC/online)" = "1" ]; then
 		AC_PWR=1
+	elif [ -r /sys/class/power_supply/ACAD/online ] && [ "$(cat /sys/class/power_supply/ACAD/online)" = "1" ]; then
+		AC_PWR=1
+	elif [ -r /sys/class/power_supply/ADB1/online ] && [ "$(cat /sys/class/power_supply/ADB1/online)" = "1" ]; then
+		AC_PWR=1
 	fi
 	__PWR_EXT_STATUS=""
 
@@ -233,7 +237,7 @@ function PowerState (){
 
 #the print -P wrappers are to replace ZSH escape sequences with what they actually mean such as replacing %y with the terminal device and also to transform the sequence \a from effectively \\a (0x5c 0x61) into the real \a (0x07)
 function MainPrompt(){
-	print -P "\n$("$ST_CFG/repotools.elf" --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" "$(GetLocalIP)" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" "$(pwd)")"
+	print -P "\n$("$ST_CFG/repotools.elf" --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")""$(GetLocalIP)" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" "$(pwd)")"
 }
 
 add-zsh-hook precmd MainPrompt

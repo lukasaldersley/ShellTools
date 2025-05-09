@@ -2263,6 +2263,7 @@ int main(int argc, char** argv)
 			printf("Arg_BackgroundJobs: >%s< (%i)\n", Arg_BackgroundJobs, Arg_BackgroundJobs_len);fflush(stdout);
 			printf("Arg_SHLVL: >%s< (%i)\n", Arg_SHLVL, Arg_SHLVL_len);fflush(stdout);
 			printf("Arg_SSHInfo: >%s< (%i)\n", Arg_SSHInfo, Arg_SSHInfo_len);fflush(stdout);
+			printf("Workpath: >%s<", path);fflush(stdout);
 #endif
 			//taking the list of jobs as input, this counts the number of spaces (and because of the trailing space also the number of entries)
 			int numBgJobs = 0;
