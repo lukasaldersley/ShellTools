@@ -22,9 +22,10 @@
 
 #shellcheck disable=SC2120 # reason: The parameter is optional, therefore it needn't be used. it's only use is in an alias for quicker development
 ST_CoreUpdate (){
-	echo "Updating/Installing ShellTools"
+	printf "Updating/Installing ShellTools on branch %s" "$(git -C "$ST_SRC" symbolic-ref --short HEAD)"
 	BranchAdvance=0
 	if [ "${1:-"--pull"}" != "--nopull" ]; then
+		echo ""
 		if [ "${ST_EXTENSION_DOES_UPDATE:-0}" -ne 1 ] && [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ] && [ "$(git -C "$(realpath "$ST_SRC/../")" rev-parse --show-toplevel 2>/dev/null)" != "$(git -C "$ST_SRC" rev-parse --show-toplevel 2>/dev/null)" ]; then
 			#don't just randomly go around updating foreign git repositories without explicit user input
 			#However if ST_EXTENSION_DOES_UPDATE is set, the currently loaded extension has an update routine which is run in a modified UpdateShellTools. In that case, suppress this warning
@@ -44,6 +45,8 @@ ST_CoreUpdate (){
 		else
 			printf "\e[38;5;9mAutomatic git pull --ff-only failed, please check manually\e[0m\n"
 		fi
+	else
+		echo " without pulling git"
 	fi
 	#compile all .c or .cpp files in the folders ZSH and C using the self-compile trick
 	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
@@ -69,9 +72,10 @@ UpdateShellTools(){
 	ST_CoreUpdate "$@"
 }
 
-if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | sed -nE 's~# branch.ab.*-([0-9]+)~\1~p')" -gt 0 ]; then
+ST_NUM_UPDATE_COMMITS="$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | sed -nE 's~# branch.ab.*-([0-9]+)~\1~p')"
+if [ "$ST_NUM_UPDATE_COMMITS" -gt 0 ]; then
 #if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | grep  branch.ab)" != "# branch.ab +0 -0" ]; then
-	printf "There are ShellTools Updates available on the current branch (%s).\nDo you wish to update now [Y/n] " "$(git -C "$ST_SRC" symbolic-ref --short HEAD)"
+	printf "There are ShellTools Updates available on the current branch (%s, %s commit(s)).\nDo you wish to update now [Y/n] " "$(git -C "$ST_SRC" symbolic-ref --short HEAD)" "$ST_NUM_UPDATE_COMMITS"
 	read -r -k 1 versionconfirm
 	printf '\n'
 	case $versionconfirm in
@@ -83,6 +87,7 @@ if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 |
 			;;
 	esac
 fi
+unset ST_NUM_UPDATE_COMMITS
 
 if [ ! -e "$ST_CFG" ] || [ ! -e "$ST_CFG/repotools.elf" ]; then
 	echo "$ST_CFG directory or repotools binary didn't exist -> creating now"
@@ -164,6 +169,7 @@ alias hist='cat "$HOME/.zsh_history" "$HOME/.bash_history" | less'
 alias qlac="qalc"
 alias qcla="qalc"
 alias calc="qalc"
+alias qacl="qalc"
 
 searchapt(){
 	printf "Apt packages:\n"

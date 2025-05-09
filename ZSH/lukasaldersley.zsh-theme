@@ -57,11 +57,6 @@ add-zsh-hook preexec GetTimeStart
 add-zsh-hook precmd CalcTimeDiff
 #### End Time Taken for Command Helper Functions
 
-function GetSSHInfo(){
-	#this attempts to parse the SSH_CONNECTION env-variable to get '<SSH: clientIP:clientPort -> serverIP:serverPort>'
-	echo "$SSH_CONNECTION" | sed -nE 's~^([-0-9a-zA-Z_\.:]+) ([0-9]+) ([-0-9a-zA-Z_\.:]+) ([0-9]+)$~<SSH: \1:\2 -> \3:\4> ~p'
-}
-
 function GetBackgroundTaskInfo (){
 	#this calls `jobs` and uses `sed` to un following regex: ^\[(\d+)\]\s+([+|-]?)\s*(\w).+$
 	#(basically takes the number in square brackets, an optional + or - and the first letter of the status as capture groups and prints them in the order 1 3 2)
@@ -83,6 +78,7 @@ function GetLocalIP (){
 	if [ "${WSL_VERSION:-0}" -ne 0 ]; then
 		#WSL_VERSION is set and non-zero -> on WSL
 		#since WSL's networking is at best (WSL1) a direct representation of Windows's config or at worst (WSL2) a VM with nonstandard networking I'm just not going to bother with advanced concepts like metrics etc
+		#on bare-metal linux or at least on a non-wsl platform, IP resolution is to be done by repotools.c which is also responsible for gatehring and parsing everything itself in that case Linkspeed and metric are also used
 		IpAddrList=""
 		for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices for any 'default routes'
 		do
@@ -98,12 +94,6 @@ function GetLocalIP (){
 			IpAddrList=" NC"
 		fi
 		printf "-i%s\a" "$IpAddrList"
-		#echo "-i$IpAddrList\a"
-		#echo "$IpAddrList" #|cut -c2- #bin the first space
-	else
-		# we are on a bare-metal linux or at least on a non-wsl platform so IP resolution is to be done by repotools.c which is also responsible for gatehring and parsing everything itself
-		# in that case Linkspeed and metric are also used
-		echo "-I"
 	fi
 }
 
@@ -243,7 +233,7 @@ function PowerState (){
 
 #the print -P wrappers are to replace ZSH escape sequences with what they actually mean such as replacing %y with the terminal device and also to transform the sequence \a from effectively \\a (0x5c 0x61) into the real \a (0x07)
 function MainPrompt(){
-	print -P "\n$("$ST_CFG/repotools.elf" --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" "$(GetLocalIP)" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -l" [$SHLVL]" -s"$(print -P "$(GetSSHInfo)\a")" "$(pwd)")"
+	print -P "\n$("$ST_CFG/repotools.elf" --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")" "$(GetLocalIP)" -p"$(print -P "$(GetProxyInfo)\a")" -e"$(print -P "$(PowerState)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" "$(pwd)")"
 }
 
 add-zsh-hook precmd MainPrompt

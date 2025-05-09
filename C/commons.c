@@ -73,12 +73,12 @@ bool StartsWith(const char* a, const char* b)
 	int idx = 0;
 	while (matching && a[idx] != 0x00 && b[idx] != 0x00)
 	{
-#ifdef DEBUG
+#ifdef DEBUG_txt
 		fprintf(stderr, "a: %1$c <0x%1$x> b: %2$c <0x%2$x>\n", a[idx], b[idx]);
 #endif
 		if (a[idx] != b[idx])
 		{
-#ifdef DEBUG
+#ifdef DEBUG_txt
 			fprintf(stderr, "mismatch between %1$c <0x%1$x> and %2$c <0x%2$x>\n", a[idx], b[idx]);
 #endif
 			matching = false;
@@ -88,7 +88,7 @@ bool StartsWith(const char* a, const char* b)
 	}
 	if (b[idx] != 0x00 && a[idx] == 0x00) {
 		//a ended, but b hasn't -> a cannot contain b
-#ifdef DEBUG
+#ifdef DEBUG_txt
 		fprintf(stderr, "a ended, but b continues with %1$c <0x%1$x>\n", b[idx]);
 #endif
 		return false;
@@ -415,7 +415,7 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 				}
 			}
 		}
-#ifdef ST_64BIT
+#if __WORDSIZE == 64
 		if ((uint64_t)FromBack - (uint64_t)FromFront <= 6) {
 #else
 		if ((uint32_t)FromBack - (uint32_t)FromFront <= 6) {

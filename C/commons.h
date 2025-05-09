@@ -4,6 +4,7 @@
 #define _GNU_SOURCE
 #include <stdbool.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,11 +21,7 @@
 #ifndef false
 #define false 0
 #endif
-#if __WORDSIZE == 64
-#define ST_64BIT
-#else
-#define ST_32BIT
-#endif
+
 
 #define DEFAULT_TERMINATORS "\r\n\a"
 

@@ -53,7 +53,7 @@ bool IsMerged(const char* repopath, const char* commithash) {
 	if (result == NULL) ABORT_NO_MEMORY;
 	char* cmd;
 	bool RES = false;
-	if (asprintf(&cmd, "git -C \"%s\" rev-list --children --all | grep ^%s | cut -c42- | tr ' ' '\n'", repopath, commithash) == -1) ABORT_NO_MEMORY;
+	if (asprintf(&cmd, "git -C \"%1$s\" rev-list --children --all --ancestry-path=%2$s | grep ^%2$s | cut -c42- | tr ' ' '\n'", repopath, commithash) == -1) ABORT_NO_MEMORY;
 	FILE* fp = popen(cmd, "r");
 	if (fp == NULL)
 	{
@@ -70,6 +70,10 @@ bool IsMerged(const char* repopath, const char* commithash) {
 			bool imc = IsMergeCommit(repopath, result);
 			//printf("%s is%s a merge commit\n", result, imc ? "" : " NOT");
 			RES = RES || imc;
+			if (RES) {
+				//if I have aleady found a merge commit why, the fuck would I continue to check everything else?
+				break;
+			}
 		}
 		pclose(fp);
 	}

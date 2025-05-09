@@ -37,6 +37,7 @@ typedef enum { IP_MODE_NONE, IP_MODE_LEGACY, IP_MODE_STANDALONE } IP_MODE;
 #define MaxLocations 32
 char* NAMES[MaxLocations];
 char* LOCS[MaxLocations];
+int8_t GROUPS[MaxLocations];
 char* GitHubs[MaxLocations];
 uint8_t numGitHubs = 0;
 uint8_t numLOCS = 0;
@@ -119,6 +120,62 @@ bool CONFIG_LSGIT_THOROUGH_COMMITS = true;
 bool CONFIG_LSGIT_THOROUGH_GITSTATUS = true;
 
 bool DIPFALSCHEISSER_WARNINGS = false;
+
+#ifdef PROFILING
+bool ALLOW_PROFILING_TESTPATH = false;
+#define PROFILE_MAIN_ENTRY 0
+#define PROFILE_MAIN_ARGS 1
+#define PROFILE_CONFIG_READ 2
+#define PROFILE_MAIN_COMMON_END 3
+#define PROFILE_MAIN_PROMPT_ARGS_IP 4
+//TestpathForRepoAndParseIfExists, requires ALLOW_PROFILING_TESTPATH to be set
+#define PROFILE_MAIN_PROMPT_PATHTEST_BASE PROFILE_MAIN_PROMPT_ARGS_IP
+#define PROFILE_TESTPATH_BASIC_CHECKS 5
+#define PROFILE_TESTPATH_WorktreeChecks 6
+#define PROFILE_BRANCHING_HAVE_BRANCHES 7
+#define PROFILE_TESTPATH_BranchChecked 8
+#define PROFILE_TESTPATH_ExtendedGitStatus 9
+#define PROFILE_TESTPATH_remote_and_reponame 10
+#define PROFILE_MAIN_PROMPT_PathGitTested 11
+#define PROFILE_MAIN_PROMPT_GitBranchObtained 12
+#define PROFILE_MAIN_PROMPT_CommitOverview 13
+#define PROFILE_MAIN_PROMPT_GitStatus 14
+#define PROFILE_MAIN_PROMPT_PREP_COMPLETE 15
+#define PROFILE_MAIN_PROMPT_PRINTING_DONE 16
+#define PROFILE_MAIN_SETSHOW_SETUP 17
+#define PROFILE_MAIN_SETSHOW_COMPLETE 18
+#define PROFILE_MAIN_END 19
+#define PROFILE_COUNT 20
+struct timespec profiling_timestamp[PROFILE_COUNT];
+const char* profiling_label[PROFILE_COUNT] = {
+	"main entry",
+	"main arguments",
+	"configuration load",
+	"main common end",
+	"main_prompt internal IP parsed",
+	"TestPath: basic checks",
+	"TestPath: WorktreeChecks",
+	"CheckBranching: gathered baseinfo for branches",
+	"TestPath: BranchChecks",
+	"TestPath: Extended Git Status parsing",
+	"TestPath: Remote and RemoName parsing",
+	"main:prompt dir checked for git",
+	"main:prompt git branch obtained",
+	"main:prompt git commit overview",
+	"main:prompt git status",
+	"main:prompt prep complete",
+	"main:prompt done",
+	"main:set/show setup",
+	"main:set/show done",
+	"exit"
+};
+
+double calcProfilingTime(uint8_t startIndex, uint8_t stopIndex) {
+	uint64_t tstart = profiling_timestamp[startIndex].tv_sec * 1000000ULL + (profiling_timestamp[startIndex].tv_nsec / 1000ULL);
+	uint64_t tstop = profiling_timestamp[stopIndex].tv_sec * 1000000ULL + (profiling_timestamp[stopIndex].tv_nsec / 1000ULL);
+	return (double)(tstop - tstart) / 1000.0;
+}
+#endif
 
 bool CheckBranching(RepoInfo* ri) {
 	//this method checks the status of all branches on a given repo
@@ -215,6 +272,10 @@ bool CheckBranching(RepoInfo* ri) {
 		}
 	}
 
+#ifdef PROFILING
+	if (ALLOW_PROFILING_TESTPATH)
+		timespec_get(&(profiling_timestamp[PROFILE_BRANCHING_HAVE_BRANCHES]), TIME_UTC);
+#endif
 	BranchListSorted* ptr = ListBase;
 	BranchListSorted* LastKnown = NULL;
 	while (ptr != NULL) {
@@ -330,6 +391,12 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			}
 		}
 	}
+
+#ifdef PROFILING
+	if (ALLOW_PROFILING_TESTPATH)
+		timespec_get(&(profiling_timestamp[PROFILE_TESTPATH_BASIC_CHECKS]), TIME_UTC);
+#endif
+
 	//if ri->isGit isn't set here it's not a repo -> I don't need to continue in this case
 	if (!ri->isGit) {
 		return true;
@@ -354,15 +421,27 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	ri->isSubModule = !((ri->parentRepo)[0] == 0x00);
 	free(cmd);
 
+#ifdef PROFILING
+	if (ALLOW_PROFILING_TESTPATH)
+		timespec_get(&(profiling_timestamp[PROFILE_TESTPATH_WorktreeChecks]), TIME_UTC);
+#endif
 	if ((CONFIG_GIT_BRANCHSTATUS || CONFIG_GIT_BRANCH_OVERVIEW) && CONFIG_GIT_MAXBRANCHES > 0) {
 		CheckBranching(ri);
 	}
+#ifdef PROFILING
+	if (ALLOW_PROFILING_TESTPATH)
+		timespec_get(&(profiling_timestamp[PROFILE_TESTPATH_BranchChecked]), TIME_UTC);
+#endif
 
 	if (!ri->isBare && (CONFIG_GIT_LOCALCHANGES || CONFIG_GIT_COMMIT_OVERVIEW)) {
 		//if I need neither the overview over commits nor local changes, I can skip this thereby significantly speeding up the whole process
 		CheckExtendedGitStatus(ri);
 		ri->DirtyWorktree = !(ri->ActiveMergeFiles == 0 && ri->ModifiedFiles == 0 && ri->StagedChanges == 0);
 	}
+#ifdef PROFILING
+	if (ALLOW_PROFILING_TESTPATH)
+		timespec_get(&(profiling_timestamp[PROFILE_TESTPATH_ExtendedGitStatus]), TIME_UTC);
+#endif
 
 	if (desiredorigin != -1 || CONFIG_GIT_REMOTE || CONFIG_GIT_REPONAME) {
 		//I only need to concern myself with the remote and reponame If they are either directly requested or implicity needed for setGitBase
@@ -527,8 +606,16 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			free(sedRes);
 			sedRes = NULL;
 
+#ifdef PROFILING
+			if (ALLOW_PROFILING_TESTPATH)
+				timespec_get(&(profiling_timestamp[PROFILE_TESTPATH_remote_and_reponame]), TIME_UTC);
+#endif
 			//once I have the current and new repo origin IDs perform the change
-			if (desiredorigin != -1 && ri->RepositoryOriginID != -1 && ri->RepositoryOriginID != desiredorigin) {
+			//printf("INFO: desiredorigin:%i\tri->RepositoryOriginID:%i\tGROUPS[desiredorigin]:%i\tGROUPS[ri->RepositoryOriginID]:%i\n", desiredorigin, ri->RepositoryOriginID, GROUPS[desiredorigin], GROUPS[ri->RepositoryOriginID]);
+			if (desiredorigin != -1 && ri->RepositoryOriginID != -1 && ri->RepositoryOriginID != desiredorigin && ( /*all involved origins are assigned to an ORIGIN_ALIAS and new and old actually differ*/
+				(GROUPS[ri->RepositoryOriginID] == GROUPS[desiredorigin] && GROUPS[desiredorigin != -1]) /*GROUP CONDITION I: New and old are in the SAME group AND that group IS NOT -1*/
+				|| ((GROUPS[ri->RepositoryOriginID] == 0) || GROUPS[desiredorigin] == 0))) /*OR GROUP CONDITION II: if EITHER is in the wildcard group 0, allow anyway*/
+			{
 
 				//change
 				ri->RepositoryOriginID_PREVIOUS = ri->RepositoryOriginID;
@@ -641,7 +728,7 @@ void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSame
 		char* GitStatStrTemp = ConstructGitStatusString(ri);
 		//differentiate between display only and display after change
 		if (ri->RepositoryOriginID_PREVIOUS != -1) {
-			printf(COLOUR_GIT_ORIGIN "[%s(%i) -> %s(%i)]" COLOUR_CLEAR, NAMES[ri->RepositoryOriginID_PREVIOUS], ri->RepositoryOriginID_PREVIOUS, NAMES[ri->RepositoryOriginID], ri->RepositoryOriginID);
+			printf(COLOUR_GIT_ORIGIN "[%s(index %i, group %i) -> %s(index %i, group %i)]" COLOUR_CLEAR, NAMES[ri->RepositoryOriginID_PREVIOUS], ri->RepositoryOriginID_PREVIOUS, GROUPS[ri->RepositoryOriginID_PREVIOUS], NAMES[ri->RepositoryOriginID], ri->RepositoryOriginID, GROUPS[ri->RepositoryOriginID]);
 			if (!ri->isBare) {
 				if (CONFIG_GIT_COMMIT_OVERVIEW) {
 					printf("%s", GitComStrTemp);
@@ -714,6 +801,7 @@ void DoSetup() {
 	for (int i = 0;i < MaxLocations;i++) {
 		LOCS[i] = NULL;
 		NAMES[i] = NULL;
+		GROUPS[i] = -1;
 		GitHubs[i] = NULL;
 	}
 	numLOCS = 0;
@@ -743,7 +831,7 @@ void DoSetup() {
 			return;
 		}
 		else {
-			fprintf(fp, "###\n###THIS FILE IS NOT AUTOMATICALLY UPDATED AFTER INITIAL CREATION\n###CHECK THE TEMPLATE FILE AT $ST_SRC/DEFAULTCONFIG.cfg FOR POSSIBLE NEW OPTIONS\n###\n");
+			fprintf(fp, "###\n###THIS FILE IS *NOT* AUTOMATICALLY UPDATED AFTER INITIAL CREATION\n###CHECK THE TEMPLATE FILE AT $ST_SRC/DEFAULTCONFIG.cfg FOR POSSIBLE NEW OPTIONS\n###\n");
 			//Create (or rather copy) default file
 			const char* defaultConfigFileRelativePath = "/DEFAULTCONFIG.cfg";
 			const char* defaultConfigFileDir = getenv("ST_SRC");
@@ -777,6 +865,26 @@ void DoSetup() {
 	}
 	free(configFilePath);
 
+	uint8_t ConfigRegexGroupCount = 16;
+	regmatch_t ConfigRegexGroups[ConfigRegexGroupCount];
+	regex_t ConfigRegex;
+	const char* ConfigRegexString = "^ORIGIN_ALIAS:\t([^\t]+)\t([^\t]+)(\t([0-9]+))?$";
+#define ConfigRegexNAME 1
+#define ConfigRegexURL 2
+#define ConfigRegexGROUP 4
+	int ConfigRegexReturnCode;
+	ConfigRegexReturnCode = regcomp(&ConfigRegex, ConfigRegexString, REG_EXTENDED | REG_NEWLINE);
+	if (ConfigRegexReturnCode)
+	{
+		char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
+		if (regErrorBuf == NULL) ABORT_NO_MEMORY;
+		regerror(ConfigRegexReturnCode, &ConfigRegex, regErrorBuf, 1024);
+		printf("Could not compile regular expression '%s'. [%i(%s)]\n", ConfigRegexString, ConfigRegexReturnCode, regErrorBuf);
+		fflush(stdout);
+		free(regErrorBuf);
+		exit(1);
+	};
+
 	bool UnknownConfig = false;
 	//at this point I know for certain a config file does exist
 	while (fgets(buf, buf_max_len - 1, fp) != NULL) {
@@ -787,26 +895,38 @@ void DoSetup() {
 			if (TerminateStrOn(buf, DEFAULT_TERMINATORS) == 0) {
 				continue;
 			}
-			if (StartsWith(buf, "ORIGIN_ALIAS:	")) {
+
+			ConfigRegexReturnCode = regexec(&ConfigRegex, buf, ConfigRegexGroupCount, ConfigRegexGroups, 0);
+			//man regex (3): regexec() returns zero for a successful match or REG_NOMATCH for failure.
+			if (ConfigRegexReturnCode == 0)
+			{
 				if (numLOCS >= (MaxLocations - 1)) {
 					fprintf(stderr, "WARNING: YOU HAVE CONFIGURED MORE THAN %1$i ORIGIN_ALIAS ENTRIES. ONLY THE FIRST %1$i WILL BE USED\n", MaxLocations);
 					continue;
 				}
-				//found origin
-				char* actbuf = buf + 14;//the 8 is the offset to just behind "ORIGIN:	"
-				int i = 0;
-				while (i < buf_max_len - 14 && actbuf[i] != '\t') {
-					i++;
+				int len = ConfigRegexGroups[ConfigRegexURL].rm_eo - ConfigRegexGroups[ConfigRegexURL].rm_so;
+				if (len > 0) {
+					LOCS[numLOCS] = malloc(sizeof(char) * (len + 1));
+					if (LOCS[numLOCS] == NULL) ABORT_NO_MEMORY;
+					strncpy(LOCS[numLOCS], buf + ConfigRegexGroups[ConfigRegexURL].rm_so, len);
+					LOCS[numLOCS][len] = 0x00;
 				}
-				if (i < (buf_max_len - 14 - 1) && actbuf[i] == '\t') {
-					if (asprintf(&LOCS[numLOCS], "%s", actbuf + i + 1) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
-					actbuf[i] = 0x00;
-					if (asprintf(&NAMES[numLOCS], "%s", actbuf) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
+				len = ConfigRegexGroups[ConfigRegexNAME].rm_eo - ConfigRegexGroups[ConfigRegexNAME].rm_so;
+				if (len > 0) {
+					NAMES[numLOCS] = malloc(sizeof(char) * (len + 1));
+					if (NAMES[numLOCS] == NULL) ABORT_NO_MEMORY;
+					strncpy(NAMES[numLOCS], buf + ConfigRegexGroups[ConfigRegexNAME].rm_so, len);
+					NAMES[numLOCS][len] = 0x00;
+				}
+				len = ConfigRegexGroups[ConfigRegexGROUP].rm_eo - ConfigRegexGroups[ConfigRegexGROUP].rm_so;
+				if (len > 0) {
+					GROUPS[numLOCS] = strtol(buf + ConfigRegexGroups[ConfigRegexGROUP].rm_so, NULL, 10);
+				}
 #ifdef DEBUG
-					printf("origin>%s|%s<\n", NAMES[numLOCS], LOCS[numLOCS]);
+				printf("origin>%s|%s|%i<\n", NAMES[numLOCS], LOCS[numLOCS], GROUPS[numLOCS]);
 #endif
-					numLOCS++;
-				}
+				numLOCS++;
+
 			}
 			else if (StartsWith(buf, "GITHUB_HOST:	")) {
 				if (numGitHubs >= (MaxLocations - 1)) {
@@ -1169,11 +1289,12 @@ void DoSetup() {
 	if (UnknownConfig) {
 		fprintf(stderr, "WARNING: You have unknown entires in your config file (%s/config.cfg).\n\tPlease check the template at %s/DEFAULTCONFIG.cfg for a list of all understood options and correct your own config file\n", getenv("ST_CFG"), getenv("ST_SRC"));
 	}
+	regfree(&ConfigRegex);
 }
 
 void ListAvailableRemotes() {
 	for (int i = 0;i < numLOCS;i++) {
-		printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR " (-> %s)\n", NAMES[i], LOCS[i]);
+		printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR " (-> %s), Group: %i\n", NAMES[i], LOCS[i], GROUPS[i]);
 	}
 }
 
@@ -1618,9 +1739,14 @@ IpTransportStruct GetBaseIPString() {
 
 int main(int argc, char** argv)
 {
+	printf("...\r");
+	fflush(stdout);
 #ifdef PROFILING
-	struct timespec ts_start;
-	timespec_get(&ts_start, TIME_UTC);
+	for (int i = 0;i < PROFILE_COUNT;i++) {
+		profiling_timestamp[i].tv_nsec = 0;
+		profiling_timestamp[i].tv_sec = 0;
+	}
+	timespec_get(&(profiling_timestamp[PROFILE_MAIN_ENTRY]), TIME_UTC);
 #endif
 	int main_retcode = 0;
 
@@ -1695,7 +1821,7 @@ int main(int argc, char** argv)
 	char* Arg_SSHInfo = NULL;
 	int Arg_SSHInfo_len = 0;
 
-	IP_MODE ipMode = IP_MODE_NONE;
+	IP_MODE ipMode = IP_MODE_STANDALONE;
 
 	int getopt_currentChar;//the char for getop switch
 
@@ -1703,19 +1829,19 @@ int main(int argc, char** argv)
 		int option_index = 0;
 
 		const static struct option long_options[] = {
-			{"prompt", no_argument, 0, '0' },
-			{"show", no_argument, 0, '1' },
-			{"set", no_argument, 0, '2' },
+			{"branchlimit", required_argument, 0, 'b' },
+			{"help", no_argument, 0, 'h' },
 			{"list", no_argument, 0, '3' },
 			{"lowprompt", no_argument, 0, '4' },
-			{"branchlimit", required_argument, 0, 'b' },
-			{"thorough", no_argument, 0, 'f'},
+			{"prompt", no_argument, 0, '0' },
 			{"quick", no_argument, 0, 'q'},
-			{"help", no_argument, 0, 'h' },
+			{"set", no_argument, 0, '2' },
+			{"show", no_argument, 0, '1' },
+			{"thorough", no_argument, 0, 'f'},
 			{0, 0, 0, 0 }
 		};
 
-		getopt_currentChar = getopt_long(argc, argv, "b:c:d:e:fhi:Ij:l:n:p:qr:s:t:", long_options, &option_index);
+		getopt_currentChar = getopt_long(argc, argv, "b:c:d:e:fhi:j:n:p:qr:t:", long_options, &option_index);
 		if (getopt_currentChar == -1)
 			break;
 
@@ -1820,7 +1946,7 @@ int main(int argc, char** argv)
 			}
 		case 'i':
 			{
-				if (ipMode != IP_MODE_NONE) {
+				if (ipMode != IP_MODE_STANDALONE) {
 					fprintf(stderr, "WARNING: multiple -I/-i found, only the last -i will be used, everything else will be discarded");
 				}
 				ipMode = IP_MODE_LEGACY;
@@ -1832,23 +1958,26 @@ int main(int argc, char** argv)
 				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				if (asprintf(&Arg_LocalIPs, "%s", optarg) == -1) ABORT_NO_MEMORY;
 				Arg_LocalIPs_len = strlen_visible(Arg_LocalIPs);
-				Arg_LocalIPsAdditional = (char*)malloc(sizeof(char) * 1);
-				if (Arg_LocalIPsAdditional == NULL) ABORT_NO_MEMORY;
-				Arg_LocalIPsAdditional[0] = 0x00;
-				Arg_LocalIPsAdditional_len = 0;
-				Arg_LocalIPsRoutes = (char*)malloc(sizeof(char) * 1);
-				if (Arg_LocalIPsRoutes == NULL) ABORT_NO_MEMORY;
-				Arg_LocalIPsRoutes[0] = 0x00;
-				Arg_LocalIPsRoutes_len = 0;
-				break;
-			}
-		case 'I':
-			{
-				if (ipMode == IP_MODE_LEGACY) {
-					fprintf(stderr, "ONLY -i OR -I are supported, they are mutually exclusive\nutilizing Legacy mode (-i)\n");
-					break;
+				if (Arg_LocalIPsAdditional != NULL && Arg_LocalIPsAdditional[0] != 0x00) {
+					free(Arg_LocalIPsAdditional);
+					Arg_LocalIPsAdditional = NULL;
 				}
-				ipMode = IP_MODE_STANDALONE;
+				if (Arg_LocalIPsAdditional == NULL) {
+					Arg_LocalIPsAdditional = (char*)malloc(sizeof(char) * 1);
+					if (Arg_LocalIPsAdditional == NULL) ABORT_NO_MEMORY;
+					Arg_LocalIPsAdditional[0] = 0x00;
+					Arg_LocalIPsAdditional_len = 0;
+				}
+				if (Arg_LocalIPsRoutes != NULL && Arg_LocalIPsRoutes[0] != 0x00) {
+					free(Arg_LocalIPsRoutes);
+					Arg_LocalIPsRoutes = NULL;
+				}
+				if (Arg_LocalIPsRoutes == NULL) {
+					Arg_LocalIPsRoutes = (char*)malloc(sizeof(char) * 1);
+					if (Arg_LocalIPsRoutes == NULL) ABORT_NO_MEMORY;
+					Arg_LocalIPsRoutes[0] = 0x00;
+					Arg_LocalIPsRoutes_len = 0;
+				}
 				break;
 			}
 		case 'j':
@@ -1856,17 +1985,6 @@ int main(int argc, char** argv)
 				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_BackgroundJobs = optarg;
 				Arg_BackgroundJobs_len = strlen_visible(Arg_BackgroundJobs);
-				break;
-			}
-		case 'l':
-			{
-				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
-				Arg_SHLVL = optarg;
-				//if the shell level is 1, don't print it, only if shell level >1 show it
-				if (Compare(Arg_SHLVL, " [1]")) {
-					Arg_SHLVL[0] = 0x00;
-				}
-				Arg_SHLVL_len = strlen_visible(Arg_SHLVL);
 				break;
 			}
 		case 'n':
@@ -1892,13 +2010,6 @@ int main(int argc, char** argv)
 			{
 				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				PromptRetCode = atoi(optarg);
-				break;
-			}
-		case 's':
-			{
-				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
-				Arg_SSHInfo = optarg;
-				Arg_SSHInfo_len = strlen_visible(Arg_SSHInfo);
 				break;
 			}
 		case 't':
@@ -1929,101 +2040,152 @@ int main(int argc, char** argv)
 	}
 	const char* path = argv[optind];
 
+#ifdef PROFILING
+	timespec_get(&(profiling_timestamp[PROFILE_MAIN_ARGS]), TIME_UTC);
+#endif
 
 	if (IsSet || IsShow || IsPrompt || IsLowPrompt) {
 		DoSetup();//this reads the config file -> as of hereI can expect to have current options
 	}
 
-	if (ipMode == IP_MODE_STANDALONE) {
-		if (Arg_LocalIPs == NULL && Arg_LocalIPs_len == 0) {
-			//at this point ArgLocalIPs should ALWAYS be NULL, but for sanity's sake I'll check again anyway
-			//only do the own lookup if IP hasn't been passed in in the old format.
-			//if this happens the user is just stuck on the old system but it's functional
-			IpTransportStruct temp = GetBaseIPString();
-			Arg_LocalIPs = temp.BasicIPInfo;
-			Arg_LocalIPs_len = strlen_visible(Arg_LocalIPs);
-			Arg_LocalIPsAdditional = temp.AdditionalIPInfo;
-			Arg_LocalIPsAdditional_len = strlen_visible(Arg_LocalIPsAdditional);
-			Arg_LocalIPsRoutes = temp.RouteInfo;
-			Arg_LocalIPsRoutes_len = strlen_visible(Arg_LocalIPsRoutes);
+#ifdef PROFILING
+	timespec_get(&(profiling_timestamp[PROFILE_CONFIG_READ]), TIME_UTC);
+#endif
+
+	if (IsPrompt) {
+		if (!CONFIG_PROMPT_POWER && Arg_PowerState != NULL) { Arg_PowerState[0] = 0x00; Arg_PowerState_len = 0; }
+		if (!CONFIG_PROMPT_PROXY && Arg_ProxyInfo != NULL) { Arg_ProxyInfo[0] = 0x00; Arg_ProxyInfo_len = 0; }
+		if (!CONFIG_PROMPT_TERMINAL_DEVICE && Arg_TerminalDevice != NULL) { Arg_TerminalDevice[0] = 0x00; Arg_TerminalDevice_len = 0; }
+		if (!CONFIG_PROMPT_JOBS && Arg_BackgroundJobs != NULL) { Arg_BackgroundJobs[0] = 0x00; Arg_BackgroundJobs_len = 0; }
+
+		char* ssh = getenv("SSH_CLIENT");
+		if (ssh != NULL) {
+			//echo "$SSH_CONNECTION" | sed -nE 's~^([-0-9a-zA-Z_\.:]+) ([0-9]+) ([-0-9a-zA-Z_\.:]+) ([0-9]+)$~<SSH: \1:\2 -> \3:\4> ~p'
+			uint8_t SSHRegexGroupCount = 6;
+			regmatch_t SSHRegexGroups[SSHRegexGroupCount];
+			regex_t SSHRegex;
+			const char* SSHRegexString = "^(([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)|([0-9a-fA-F:]+)) ([0-9]+) ([0-9]+)$";
+#define SSHRegexIP 1
+#define SSHRegexIPv4 2
+#define SSHRegexIPv6 3
+#define SSHRegexRemotePort 4
+#define SSHRegexMyPort 5
+			int SSHRegexReturnCode;
+			SSHRegexReturnCode = regcomp(&SSHRegex, SSHRegexString, REG_EXTENDED | REG_NEWLINE);
+			if (SSHRegexReturnCode)
+			{
+				char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
+				if (regErrorBuf == NULL) ABORT_NO_MEMORY;
+				regerror(SSHRegexReturnCode, &SSHRegex, regErrorBuf, 1024);
+				printf("Could not compile regular expression '%s'. [%i(%s)]\n", SSHRegexString, SSHRegexReturnCode, regErrorBuf);
+				fflush(stdout);
+				free(regErrorBuf);
+				exit(1);
+			};
+
+			SSHRegexReturnCode = regexec(&SSHRegex, ssh, SSHRegexGroupCount, SSHRegexGroups, 0);
+			//man regex (3): regexec() returns zero for a successful match or REG_NOMATCH for failure.
+			if (SSHRegexReturnCode == 0) {
+				int len = SSHRegexGroups[0].rm_eo - SSHRegexGroups[0].rm_so;
+				if (len > 0) {
+					int tlen = (len + 1 + 20);
+					Arg_SSHInfo = malloc(sizeof(char) * tlen);//"<SSH: [x]:x -> port x>", regex group 0 contains all three x plus 2 spaces -> if I add 18 I should be fine <SSH: [::1]:55450 -> port 22>
+					if (Arg_SSHInfo == NULL)ABORT_NO_MEMORY;
+					Arg_SSHInfo_len = 0;
+					Arg_SSHInfo[0] = 0x00;
+					Arg_SSHInfo_len += snprintf(Arg_SSHInfo, tlen - (Arg_SSHInfo_len + 1), "<SSH: ");
+
+					int ilen = SSHRegexGroups[SSHRegexIPv4].rm_eo - SSHRegexGroups[SSHRegexIPv4].rm_so;
+					if (ilen > 0) {
+						strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexIPv4].rm_so, ilen);
+						Arg_SSHInfo_len += ilen;
+					}
+					else {
+						ilen = SSHRegexGroups[SSHRegexIPv6].rm_eo - SSHRegexGroups[SSHRegexIPv6].rm_so;
+						if (ilen > 0) {
+							Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), "[");
+							strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexIPv6].rm_so, ilen);
+							Arg_SSHInfo_len += ilen;
+							Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), "]");
+						}
+					}
+					ilen = SSHRegexGroups[SSHRegexRemotePort].rm_eo - SSHRegexGroups[SSHRegexRemotePort].rm_so;
+					if (ilen > 0) {
+						Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), ":");
+						strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexRemotePort].rm_so, ilen);
+						Arg_SSHInfo_len += ilen;
+					}
+					ilen = SSHRegexGroups[SSHRegexMyPort].rm_eo - SSHRegexGroups[SSHRegexMyPort].rm_so;
+					if (ilen > 0) {
+						Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), " -> port ");
+						strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexMyPort].rm_so, ilen);
+						Arg_SSHInfo_len += ilen;
+					}
+					Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), "> ");
+				}
+			}
+			regfree(&SSHRegex);
+		}
+		if (Arg_SSHInfo == NULL) {
+			Arg_SSHInfo = malloc(sizeof(char));
+			if (Arg_SSHInfo == NULL)ABORT_NO_MEMORY;
+			Arg_SSHInfo[0] = 0x00;
+			Arg_SSHInfo_len = 0;
+		}
+		fflush(stdout);
+
+		const char* lvl = getenv("SHLVL");
+		if (!Compare("1", lvl)) {
+			if (asprintf(&Arg_SHLVL, " [%s]", lvl) == -1)ABORT_NO_MEMORY;
+			Arg_SHLVL_len = strlen_visible(Arg_SHLVL);
+		}
+		else {
+			Arg_SHLVL = malloc(sizeof(char));
+			if (Arg_SHLVL == NULL)ABORT_NO_MEMORY;
+			Arg_SHLVL[0] = 0x00;
+			Arg_SHLVL_len = 0;
+		}
+
+		Time = malloc(sizeof(char) * 16);
+		if (Time == NULL) ABORT_NO_MEMORY;
+		if (CONFIG_PROMPT_TIME) {
+			Time_len = strftime(Time, 16, "%T", localtm);
+		}
+		else {
+			Time_len = 0;
+			Time[0] = 0x00;
+		}
+
+		TimeZone = malloc(sizeof(char) * 17);
+		if (TimeZone == NULL) ABORT_NO_MEMORY;
+		if (CONFIG_PROMPT_TIMEZONE) {
+			TimeZone_len = strftime(TimeZone, 17, " UTC%z (%Z)", localtm);
+		}
+		else {
+			TimeZone_len = 0;
+			TimeZone[0] = 0x00;
+		}
+
+		DateInfo = malloc(sizeof(char) * 16);
+		if (DateInfo == NULL) ABORT_NO_MEMORY;
+		if (CONFIG_PROMPT_DATE) {
+			DateInfo_len = strftime(DateInfo, 16, " %a %d.%m.%Y", localtm);
+		}
+		else {
+			DateInfo_len = 0;
+			DateInfo[0] = 0x00;
+		}
+
+		CalendarWeek = malloc(sizeof(char) * 8);
+		if (CalendarWeek == NULL) ABORT_NO_MEMORY;
+		if (CONFIG_PROMPT_CALENDARWEEK) {
+			CalendarWeek_len = strftime(CalendarWeek, 8, " KW%V", localtm);
+		}
+		else {
+			CalendarWeek_len = 0;
+			CalendarWeek[0] = 0x00;
 		}
 	}
-	else if (ipMode == IP_MODE_LEGACY && !CONFIG_PROMPT_NETWORK) {
-		//if IP is disabled in config but legagy IP has been provided, remove the info
-		if (Arg_LocalIPs != NULL) free(Arg_LocalIPs);
-		Arg_LocalIPs = (char*)malloc(sizeof(char) * 1);
-		if (Arg_LocalIPs == NULL) ABORT_NO_MEMORY;
-		Arg_LocalIPs[0] = 0x00;
-		Arg_LocalIPs_len = 0;
-	}
-	if (!CONFIG_PROMPT_POWER && Arg_PowerState != NULL) { Arg_PowerState[0] = 0x00; Arg_PowerState_len = 0; }
-	if (!CONFIG_PROMPT_PROXY && Arg_ProxyInfo != NULL) { Arg_ProxyInfo[0] = 0x00; Arg_ProxyInfo_len = 0; }
-	if (!CONFIG_PROMPT_SSH && Arg_SSHInfo != NULL) { Arg_SSHInfo[0] = 0x00; Arg_SSHInfo_len = 0; }
-	if (!CONFIG_PROMPT_TERMINAL_DEVICE && Arg_TerminalDevice != NULL) { Arg_TerminalDevice[0] = 0x00; Arg_TerminalDevice_len = 0; }
-	if (!CONFIG_PROMPT_JOBS && Arg_BackgroundJobs != NULL) { Arg_BackgroundJobs[0] = 0x00; Arg_BackgroundJobs_len = 0; }
-	Time = malloc(sizeof(char) * 16);
-	if (Time == NULL) ABORT_NO_MEMORY;
-	if (CONFIG_PROMPT_TIME) {
-		Time_len = strftime(Time, 16, "%T", localtm);
-	}
-	else {
-		Time_len = 0;
-		Time[0] = 0x00;
-	}
-
-	TimeZone = malloc(sizeof(char) * 17);
-	if (TimeZone == NULL) ABORT_NO_MEMORY;
-	if (CONFIG_PROMPT_TIMEZONE) {
-		TimeZone_len = strftime(TimeZone, 17, " UTC%z (%Z)", localtm);
-	}
-	else {
-		TimeZone_len = 0;
-		TimeZone[0] = 0x00;
-	}
-
-	DateInfo = malloc(sizeof(char) * 16);
-	if (DateInfo == NULL) ABORT_NO_MEMORY;
-	if (CONFIG_PROMPT_DATE) {
-		DateInfo_len = strftime(DateInfo, 16, " %a %d.%m.%Y", localtm);
-	}
-	else {
-		DateInfo_len = 0;
-		DateInfo[0] = 0x00;
-	}
-
-	CalendarWeek = malloc(sizeof(char) * 8);
-	if (CalendarWeek == NULL) ABORT_NO_MEMORY;
-	if (CONFIG_PROMPT_CALENDARWEEK) {
-		CalendarWeek_len = strftime(CalendarWeek, 8, " KW%V", localtm);
-	}
-	else {
-		CalendarWeek_len = 0;
-		CalendarWeek[0] = 0x00;
-	}
-
-
-#ifdef DEBUG
-	printf("Arg_NewRemote: >%s< (n/a)\n", Arg_NewRemote);fflush(stdout);
-	printf("User: >%s< (%i)\n", User, User_len);fflush(stdout);
-	printf("Host: >%s< (%i)\n", Host, Host_len);fflush(stdout);
-	printf("Arg_TerminalDevice: >%s< (%i)\n", Arg_TerminalDevice, Arg_TerminalDevice_len);fflush(stdout);
-	printf("Time: >%s< (%i)\n", Time, Time_len);fflush(stdout);
-	printf("TimeZone: >%s< (%i)\n", TimeZone, TimeZone_len);fflush(stdout);
-	printf("DateInfo: >%s< (%i)\n", DateInfo, DateInfo_len);fflush(stdout);
-	printf("CalendarWeek: >%s< (%i)\n", CalendarWeek, CalendarWeek_len);fflush(stdout);
-	printf("Arg_LocalIPs: >%s< (%i)\n", Arg_LocalIPs, Arg_LocalIPs_len);fflush(stdout);
-	printf("Arg_LocalIPsAdditional: >%s< (%i)\n", Arg_LocalIPsAdditional, Arg_LocalIPsAdditional_len);fflush(stdout);
-	printf("Arg_LocalIPsRoutes: >%s< (%i)\n", Arg_LocalIPsRoutes, Arg_LocalIPsRoutes_len);fflush(stdout);
-	printf("Arg_ProxyInfo: >%s< (%i)\n", Arg_ProxyInfo, Arg_ProxyInfo_len);fflush(stdout);
-	printf("Arg_PowerState: >%s< (%i)\n", Arg_PowerState, Arg_PowerState_len);fflush(stdout);
-	printf("Arg_BackgroundJobs: >%s< (%i)\n", Arg_BackgroundJobs, Arg_BackgroundJobs_len);fflush(stdout);
-	printf("Arg_SHLVL: >%s< (%i)\n", Arg_SHLVL, Arg_SHLVL_len);fflush(stdout);
-	printf("Arg_SSHInfo: >%s< (%i)\n", Arg_SSHInfo, Arg_SSHInfo_len);fflush(stdout);
-	for (int i = 0;i < argc;i++) {
-		printf("%soption-arg %i:\t>%s<\n", (i >= optind ? "non-" : "\t"), i, argv[i]);
-	}
-	fflush(stdout);
-#endif
 
 	if (CONFIG_GIT_MAXBRANCHES == -2) {
 		//if IsPrompt, default 25; if IsSet, default 50; else default -1
@@ -2042,12 +2204,66 @@ int main(int argc, char** argv)
 	CONFIG_GIT_COMMIT_OVERVIEW = IsPrompt ? CONFIG_PROMPT_GIT_COMMITS : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_COMMITS : CONFIG_LSGIT_QUICK_COMMITS);
 	CONFIG_GIT_LOCALCHANGES = IsPrompt ? CONFIG_PROMPT_GIT_GITSTATUS : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_GITSTATUS : CONFIG_LSGIT_QUICK_GITSTATUS);
 
+#ifdef DEBUG
+	for (int i = 0;i < argc;i++) {
+		printf("%soption-arg %i:\t>%s<\n", (i >= optind ? "non-" : "\t"), i, argv[i]);
+	}
+	fflush(stdout);
+
+#endif
+
+#ifdef PROFILING
+	timespec_get(&(profiling_timestamp[PROFILE_MAIN_COMMON_END]), TIME_UTC);
+#endif
+
 	if (IsPrompt) //show origin info for command prompt
 	{
+		//this is intentionally not OR-ed with IsPrompt as IsPrompt is in an exhaustive if/else where if this would evaluate to false I would get an error to the effect of "unknown option PROMPT"
 		if (CONFIG_PROMPT_OVERALL_ENABLE) {
-			//this is intentionally not OR-ed with IsPrompt as IsPrompt is in an exhaustive if/else where if this would evaluate to false I would get an error to the effect of "unknown option PROMPT"
+			if (ipMode == IP_MODE_STANDALONE && CONFIG_PROMPT_NETWORK) {
+				if (Arg_LocalIPs == NULL && Arg_LocalIPs_len == 0) {
+					//at this point ArgLocalIPs should ALWAYS be NULL, but for sanity's sake I'll check again anyway
+					//only do the own lookup if IP hasn't been passed in in the old format.
+					//if this happens the user is just stuck on the old system but it's functional
+					IpTransportStruct temp = GetBaseIPString();
+					Arg_LocalIPs = temp.BasicIPInfo;
+					Arg_LocalIPs_len = strlen_visible(Arg_LocalIPs);
+					Arg_LocalIPsAdditional = temp.AdditionalIPInfo;
+					Arg_LocalIPsAdditional_len = strlen_visible(Arg_LocalIPsAdditional);
+					Arg_LocalIPsRoutes = temp.RouteInfo;
+					Arg_LocalIPsRoutes_len = strlen_visible(Arg_LocalIPsRoutes);
+				}
+			}
+			else if (ipMode == IP_MODE_LEGACY && !CONFIG_PROMPT_NETWORK) {
+				//if IP is disabled in config but legagy IP has been provided, remove the info
+				if (Arg_LocalIPs != NULL) free(Arg_LocalIPs);
+				Arg_LocalIPs = (char*)malloc(sizeof(char) * 1);
+				if (Arg_LocalIPs == NULL) ABORT_NO_MEMORY;
+				Arg_LocalIPs[0] = 0x00;
+				Arg_LocalIPs_len = 0;
+			}
+#ifdef PROFILING
+			timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_ARGS_IP]), TIME_UTC);
+#endif
 
-
+#ifdef DEBUG
+			printf("Arg_NewRemote: >%s< (n/a)\n", Arg_NewRemote);fflush(stdout);
+			printf("User: >%s< (%i)\n", User, User_len);fflush(stdout);
+			printf("Host: >%s< (%i)\n", Host, Host_len);fflush(stdout);
+			printf("Arg_TerminalDevice: >%s< (%i)\n", Arg_TerminalDevice, Arg_TerminalDevice_len);fflush(stdout);
+			printf("Time: >%s< (%i)\n", Time, Time_len);fflush(stdout);
+			printf("TimeZone: >%s< (%i)\n", TimeZone, TimeZone_len);fflush(stdout);
+			printf("DateInfo: >%s< (%i)\n", DateInfo, DateInfo_len);fflush(stdout);
+			printf("CalendarWeek: >%s< (%i)\n", CalendarWeek, CalendarWeek_len);fflush(stdout);
+			printf("Arg_LocalIPs: >%s< (%i)\n", Arg_LocalIPs, Arg_LocalIPs_len);fflush(stdout);
+			printf("Arg_LocalIPsAdditional: >%s< (%i)\n", Arg_LocalIPsAdditional, Arg_LocalIPsAdditional_len);fflush(stdout);
+			printf("Arg_LocalIPsRoutes: >%s< (%i)\n", Arg_LocalIPsRoutes, Arg_LocalIPsRoutes_len);fflush(stdout);
+			printf("Arg_ProxyInfo: >%s< (%i)\n", Arg_ProxyInfo, Arg_ProxyInfo_len);fflush(stdout);
+			printf("Arg_PowerState: >%s< (%i)\n", Arg_PowerState, Arg_PowerState_len);fflush(stdout);
+			printf("Arg_BackgroundJobs: >%s< (%i)\n", Arg_BackgroundJobs, Arg_BackgroundJobs_len);fflush(stdout);
+			printf("Arg_SHLVL: >%s< (%i)\n", Arg_SHLVL, Arg_SHLVL_len);fflush(stdout);
+			printf("Arg_SSHInfo: >%s< (%i)\n", Arg_SSHInfo, Arg_SSHInfo_len);fflush(stdout);
+#endif
 			//taking the list of jobs as input, this counts the number of spaces (and because of the trailing space also the number of entries)
 			int numBgJobs = 0;
 			if (Arg_BackgroundJobs_len > 0) {
@@ -2070,7 +2286,9 @@ int main(int argc, char** argv)
 				numBgJobsStr[0] = 0x00;
 			}
 
-
+#ifdef PROFILING
+			ALLOW_PROFILING_TESTPATH = true;
+#endif
 			RepoInfo* ri = AllocRepoInfo("", path);
 			//only test git if git is enabled at all
 			if (CONFIG_PROMPT_GIT && !TestPathForRepoAndParseIfExists(ri, -1, true, true)) {
@@ -2079,6 +2297,11 @@ int main(int argc, char** argv)
 				return 1;
 			}
 			AllocUnsetStringsToEmpty(ri);
+
+#ifdef PROFILING
+			ALLOW_PROFILING_TESTPATH = false;
+			timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_PathGitTested]), TIME_UTC);
+#endif
 
 			char* gitSegment1_BaseMarkerStart = NULL;
 			char* gitSegment2_parentRepoLoc = gitSegment1_BaseMarkerStart;//just an empty default
@@ -2143,14 +2366,22 @@ int main(int argc, char** argv)
 					if (gitSegment4_remoteinfo == NULL) ABORT_NO_MEMORY;
 					gitSegment4_remoteinfo[0] = 0x00;
 				}
-
+#ifdef PROFILING
+				timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_GitBranchObtained]), TIME_UTC);
+#endif
 				if (!ri->isBare) {
 					if (CONFIG_GIT_COMMIT_OVERVIEW) {
 						gitSegment5_commitStatus = ConstructCommitStatusString(ri);
 					}
+#ifdef PROFILING
+					timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_CommitOverview]), TIME_UTC);
+#endif
 					if (CONFIG_GIT_LOCALCHANGES) {
 						gitSegment6_gitStatus = ConstructGitStatusString(ri);
 					}
+#ifdef PROFILING
+					timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_GitStatus]), TIME_UTC);
+#endif
 				}
 
 			}
@@ -2218,6 +2449,10 @@ int main(int argc, char** argv)
 				Arg_LocalIPsAdditional_len,
 				Arg_LocalIPsRoutes_len,
 				Arg_SSHInfo_len);
+
+#ifdef PROFILING
+			timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_PREP_COMPLETE]), TIME_UTC);
+#endif
 
 #define AdditionalElementPriorityGitRemoteInfo 0
 #define AdditionalElementPriorityLocalIP 1
@@ -2353,6 +2588,9 @@ int main(int argc, char** argv)
 			//the last two chars on screen were intentionally empty, I am now printing  ' !' there if ANY additional element had to be omitted
 			printf("%s", ~AdditionalElementAvailabilityPackedBool & ~(~0 << AdditionalElementCount) ? " !" : "");
 
+#ifdef PROFILING
+			timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_PRINTING_DONE]), TIME_UTC);
+#endif
 
 			if (ri->isGit) {
 				free(gitSegment1_BaseMarkerStart);
@@ -2378,6 +2616,18 @@ int main(int argc, char** argv)
 				free(Arg_LocalIPsRoutes);
 				Arg_LocalIPsRoutes = NULL;
 			}
+			if (Arg_SHLVL != NULL) {
+				free(Arg_SHLVL);
+				Arg_SHLVL = NULL;
+			}
+			free(Time);
+			Time = NULL;
+			free(TimeZone);
+			TimeZone = NULL;
+			free(DateInfo);
+			DateInfo = NULL;
+			free(CalendarWeek);
+			CalendarWeek = NULL;
 		}
 	}
 	else if (IsSet || IsShow)
@@ -2402,11 +2652,19 @@ int main(int argc, char** argv)
 		}
 		printf("\n\n");
 
+#ifdef PROFILING
+		timespec_get(&(profiling_timestamp[PROFILE_MAIN_SETSHOW_SETUP]), TIME_UTC);
+#endif
+
 		RepoInfo* treeroot = CreateDirStruct("", path, RequestedNewOriginID, IsThoroughSearch);
 		pruneTreeForGit(treeroot);
 		if (RequestedNewOriginID != -1) {
 			printf("\n");
 		}
+
+#ifdef PROFILING
+		timespec_get(&(profiling_timestamp[PROFILE_MAIN_SETSHOW_COMPLETE]), TIME_UTC);
+#endif
 		printTree(treeroot, IsThoroughSearch);
 		printf("\n");
 	}
@@ -2596,11 +2854,22 @@ int main(int argc, char** argv)
 	regfree(&branchParsingRegex);
 
 #ifdef PROFILING
-	struct timespec ts_end;
-	timespec_get(&ts_end, TIME_UTC);
-	uint64_t tstart = ts_start.tv_sec * 1000ULL + (ts_start.tv_nsec / 1000000ULL);
-	uint64_t tstop = ts_end.tv_sec * 1000ULL + (ts_end.tv_nsec / 1000000ULL);
-	printf("\n%lu", tstop - tstart);
+	timespec_get(&(profiling_timestamp[PROFILE_MAIN_END]), TIME_UTC);
+	uint8_t lastNonNull = 0;
+	for (int i = 1;i < PROFILE_MAIN_END + 1;i++) {
+		if (profiling_timestamp[i].tv_nsec == 0 && profiling_timestamp[i].tv_sec == 0) {
+			continue;
+		}
+		else {
+			printf("\n(index %2i->%2i) %s:\t%.3lfms", lastNonNull, i, profiling_label[i], calcProfilingTime(lastNonNull, i));
+			if (i == PROFILE_MAIN_PROMPT_PathGitTested) {
+				printf("\n(index %2i->%2i) [%s->%s]:\t%.3lfms", PROFILE_MAIN_PROMPT_PATHTEST_BASE, i, profiling_label[PROFILE_MAIN_PROMPT_PATHTEST_BASE], profiling_label[i], calcProfilingTime(PROFILE_MAIN_PROMPT_PATHTEST_BASE, i));
+			}
+			lastNonNull = i;
+		}
+	}
+
+	printf("\ntotal:\t%.3lfms%s\n", calcProfilingTime(PROFILE_MAIN_ENTRY, lastNonNull), IsLowPrompt ? " -> " : "");
 #endif
 
 	return main_retcode;
