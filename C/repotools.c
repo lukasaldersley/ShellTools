@@ -20,6 +20,7 @@ exit
 #include <time.h>
 #include <getopt.h>
 #include <signal.h>
+#include <sys/ioctl.h>
 
 #define COLOUR_TERMINAL_DEVICE "\e[38;5;242m"
 #define COLOUR_SHLVL "\e[0m"
@@ -1878,7 +1879,7 @@ IpTransportStruct GetBaseIPString() {
 	}
 	//this works under the assumption the interface names aren't longer than 10-ish characters (true for enpXsY or eth1 or wlpXsY) however at some point my system decided to use wlx18d6c713d4ed as default device and completely ignore the actually fast wifi chip
 
-	int basicIPStringLen = (CONFIG_PROMPT_NET_IFACE ? (2 + (112 * numDefaultRoutes)) : 1);
+	int basicIPStringLen = (CONFIG_PROMPT_NET_IFACE ? (12 + (112 * numDefaultRoutes)) : 1);
 	ret.BasicIPInfo = malloc(sizeof(char) * basicIPStringLen);
 	if (ret.BasicIPInfo == NULL) ABORT_NO_MEMORY;
 	int nondefaultIpStringLen = (CONFIG_PROMPT_NET_ADDITIONAL ? (2 + (numNonDefaultRoutes * 96)) : 1);
@@ -1894,6 +1895,9 @@ IpTransportStruct GetBaseIPString() {
 
 
 	current = head;
+	if (CONFIG_PROMPT_NET_IFACE && numDefaultRoutes == 0) {
+		baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), " \e[4mNC\e[0m");
+	}
 	for (int i = 0;i < numDefaultRoutes;i++) {
 		if (CONFIG_PROMPT_NET_IFACE) {
 			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), " %s%s\e[0m:%s", (current->dev.metric == lowestMetric && numDefaultRoutes > 1 ? "\e[4m" : ""), current->dev.device, current->dev.ipv4);
@@ -1992,7 +1996,13 @@ int main(int argc, char** argv)
 
 	bool IsThoroughSearch = 0;
 	int PromptRetCode = 0;
-	int Arg_TotalPromptWidth = 0;
+	struct winsize windowProps;
+	//note: stdout did NOT work for LOWPROMPT and returns bogus data (I have seen 0 or mid 4 digits), stdin seems to work reliably
+	ioctl(fileno(stdin), TIOCGWINSZ, &windowProps);
+	int Arg_TotalPromptWidth = windowProps.ws_col;
+#ifdef DEBUG
+	printf("ScreenWidth: %i\n", Arg_TotalPromptWidth);
+#endif
 	const char* Arg_NewRemote = NULL;
 
 	const char* Arg_CmdTime = NULL;
@@ -2061,7 +2071,7 @@ int main(int argc, char** argv)
 			{0, 0, 0, 0 }
 		};
 
-		getopt_currentChar = getopt_long(argc, argv, "b:c:d:fhi:j:n:p:qr:t:", long_options, &option_index);
+		getopt_currentChar = getopt_long(argc, argv, "b:fhi:j:n:p:qr:t:", long_options, &option_index);
 		if (getopt_currentChar == -1)
 			break;
 
@@ -2123,19 +2133,6 @@ int main(int argc, char** argv)
 			{
 				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				CONFIG_GIT_MAXBRANCHES = atoi(optarg);
-				break;
-			}
-		case 'c':
-			{
-				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
-				Arg_TotalPromptWidth = atoi(optarg);
-				break;
-			}
-		case 'd':
-			{
-				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
-				Arg_TerminalDevice = optarg;
-				Arg_TerminalDevice_len = strlen_visible(Arg_TerminalDevice);
 				break;
 			}
 		case 'f':
@@ -2229,7 +2226,7 @@ int main(int argc, char** argv)
 			}
 		default:
 			{
-				printf("?? getopt returned character code 0%o (char: %c) with option %s ??\n", getopt_currentChar, getopt_currentChar, optarg);
+				printf("?? getopt returned character code 0x%2x (char: %c) with option %s ??\n", getopt_currentChar, getopt_currentChar, optarg);
 			}
 		}
 	}
@@ -2267,8 +2264,18 @@ int main(int argc, char** argv)
 			Arg_PowerState[0] = 0x00;
 			Arg_PowerState_len = 0;
 		}
+		if (CONFIG_PROMPT_TERMINAL_DEVICE) {
+			Arg_TerminalDevice = ExecuteProcess_alloc("/usr/bin/tty");
+			TerminateStrOn(Arg_TerminalDevice, DEFAULT_TERMINATORS);
+			Arg_TerminalDevice_len = strlen_visible(Arg_TerminalDevice);
+		}
+		else {
+			Arg_TerminalDevice = malloc(sizeof(char));
+			if (Arg_TerminalDevice == NULL)ABORT_NO_MEMORY;
+			Arg_TerminalDevice[0] = 0x00;
+			Arg_TerminalDevice_len = 0;
+		}
 		if (!CONFIG_PROMPT_PROXY && Arg_ProxyInfo != NULL) { Arg_ProxyInfo[0] = 0x00; Arg_ProxyInfo_len = 0; }
-		if (!CONFIG_PROMPT_TERMINAL_DEVICE && Arg_TerminalDevice != NULL) { Arg_TerminalDevice[0] = 0x00; Arg_TerminalDevice_len = 0; }
 		if (!CONFIG_PROMPT_JOBS && Arg_BackgroundJobs != NULL) { Arg_BackgroundJobs[0] = 0x00; Arg_BackgroundJobs_len = 0; }
 
 		if (CONFIG_PROMPT_SSH) {
@@ -2662,7 +2669,7 @@ int main(int argc, char** argv)
 				CalendarWeek_len,
 				TimeZone_len,
 				DateInfo_len,
-				Arg_TerminalDevice_len,
+				Arg_TerminalDevice_len + 1,/*NOTE: the +1 is the : needed infront of /dev/whatever, but it isn't in here yet*/
 				gitSegment2_parentRepoLoc_len,
 				Arg_BackgroundJobs_len,
 				Arg_LocalIPsAdditional_len,
@@ -2704,7 +2711,7 @@ int main(int argc, char** argv)
 
 			//if the fourth-prioritized element (the line/terminal device has space, append it to the user@machine) ":/dev/pts/0"
 			if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTerminalDevice)) {
-				printf(COLOUR_TERMINAL_DEVICE "%s", Arg_TerminalDevice);
+				printf(COLOUR_TERMINAL_DEVICE ":%s", Arg_TerminalDevice);
 			}
 
 			//append the SHLVL (how many shells are nested, ie how many Ctrl+D are needed to properly exit), only shown if >=2 " [2]"
@@ -2841,6 +2848,7 @@ int main(int argc, char** argv)
 			}
 			free(Arg_SSHInfo);
 			free(Arg_PowerState);
+			free(Arg_TerminalDevice);
 			free(Time);
 			Time = NULL;
 			free(TimeZone);

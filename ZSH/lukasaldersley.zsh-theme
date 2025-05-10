@@ -75,26 +75,23 @@ function GetBackgroundTaskInfo (){
 #and https://unix.stackexchange.com/questions/14961/how-to-find-out-which-interface-am-i-using-for-connecting-to-the-internet (the bit about ip route ls |grep defult (the sed is my own work))
 #another way would be to cause a dns lookup like so and grep that ip route get 8.8.8.8
 function GetLocalIP (){
-	if [ "${WSL_VERSION:-0}" -ne 0 ]; then
-		#WSL_VERSION is set and non-zero -> on WSL
-		#since WSL's networking is at best (WSL1) a direct representation of Windows's config or at worst (WSL2) a VM with nonstandard networking I'm just not going to bother with advanced concepts like metrics etc
-		#on bare-metal linux or at least on a non-wsl platform, IP resolution is to be done by repotools.c which is also responsible for gatehring and parsing everything itself in that case Linkspeed and metric are also used
-		IpAddrList=""
-		for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices for any 'default routes'
-		do
-			#lookup the IP for those devices
-			#the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
-			isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
-			if [ "$isupstate" ]; then
-				IpAddrList="$IpAddrList $i:$isupstate"
-			fi
-		done
-
-		if [ ! "$IpAddrList" ]; then
-			IpAddrList=" NC"
+	#since WSL's networking is at best (WSL1) a direct representation of Windows's config or at worst (WSL2)a VM with nonstandard networking I'm just not going to bother with advanced concepts like metrics etc
+	#on bare-metal linux or at least on a non-wsl platform, IP resolution is to be done by repotools.c whichis also responsible for gatehring and parsing everything itself in that case Linkspeed and metric arealso used
+	IpAddrList=""
+	for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices forany 'default routes'
+	do
+		#lookup the IP for those devices
+		#the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
+		isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
+		if [ "$isupstate" ]; then
+			IpAddrList="$IpAddrList $i:$isupstate"
 		fi
-		printf " -i%s\a" "$IpAddrList"
+	done
+
+	if [ ! "$IpAddrList" ]; then
+		IpAddrList=" NC"
 	fi
+	echo "$IpAddrList"
 }
 
 GetProxyInfo(){
@@ -145,16 +142,21 @@ GetProxyInfo(){
 
 #the print -P wrappers are to replace ZSH escape sequences with what they actually mean such as replacing %y with the terminal device and also to transform the sequence \a from effectively \\a (0x5c 0x61) into the real \a (0x07)
 function MainPrompt(){
-	"$ST_CFG/repotools.elf" --prompt -c"$COLUMNS" -d"$(print -P ":/dev/%y\a")""$(GetLocalIP)" -p"$(print -P "$(GetProxyInfo)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" "$(pwd)"
+	if [ "${WSL_VERSION:-0}" -ne 0 ]; then
+		#WSL_VERSION is set and non-zero -> on WSL
+		"$ST_CFG/repotools.elf" --prompt -p"$(print -P "$(GetProxyInfo)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -i"$(GetLocalIP)" "$(pwd)"
+	else
+		"$ST_CFG/repotools.elf" --prompt -p"$(print -P "$(GetProxyInfo)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" "$(pwd)"
+	fi
 }
 
 add-zsh-hook precmd MainPrompt
 
-#this is the old PROMPT, before I integrated it into C for speed
+#this is the old PROMPT, before I integrated it into C for speed (and better path handling)
 #PROMPT='└%F{cyan}%B %2~ %b%f%B%(?:%F{green}:%F{red})[$ST_CmdDur:%?]➜%f%b  '
 #shellcheck disable=SC2016 #reason: If I allowed expansion here, the prompt would be static, it must only be evaluated at runtime, so this is fine
 #shellcheck disable=SC2034 #reason: It IS used, but PROMPT is a special case -> ignore warning
-PROMPT='$("$ST_CFG/repotools.elf" --lowprompt -r"$?" -c"$COLUMNS" -t"$ST_CmdDur" "$(print -P '%~')")'
+PROMPT='$("$ST_CFG/repotools.elf" --lowprompt -r"$?" -t"$ST_CmdDur" "$(print -P '%~')")'
 
 #To do multiline Prompts I am printing the top line before the prompt is ever computed.
 #print -P is a zsh builtin (man zshmisc) that does the same substitution the prompt would.
@@ -165,7 +167,7 @@ PROMPT='$("$ST_CFG/repotools.elf" --lowprompt -r"$?" -c"$COLUMNS" -t"$ST_CmdDur"
 # - : GetBackgroundTasks was being executed, but kept returning empty strings (probably because jobs is a zsh builtin and the prompt building was happening in another subshell with no jobs or something)
 # - : having a linebreak in PROMPT messed with the positioning of RPROMPT and the carret behaviour for editing typed commands
 # - : hitting 'HOME' or 'POS1' often would send the carret to the top line and was showing editing that but in reality it was invisibly editing the command string
-# - : on slow systems (eg the 8-ish watt Laptops, or any ARM device I've tried) the creation of the prompt may take a few seconds, and even with warm cache and optimal conditions still takes about a second (on the real computers (120+W TDP desktops under WSL) it'll run in 0.1s or less (on native linux it's even faster) but on the laptops it's fucking slow, run it with -DPROFILING, you'll see)
+# - : creation of the top ptompt line will take a noticable amount of time on low-power devices (such as the 8-ish Watt TDP laptops and ARM devices), this is much more extreme in large git repos where git may take a while (up into the minute scale when it's a large repo with lots of active changes)
 #Conclusion: Make top line single-fire evaluation
 
 printf "\e[38;5;240mdone loading %s\e[0m\n" "$(basename "$0")"
