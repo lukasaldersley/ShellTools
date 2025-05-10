@@ -5,8 +5,7 @@ if [ ! -d "$TargetDir" ]; then
 fi
 TargetName="$(basename "$0" .c).elf"
 printf "compiling %s into %s/%s" "$0" "$TargetDir" "$TargetName"
-#shellcheck disable=SC2086 #in this case I DO want word splitting to happen at $1
-gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$(realpath "$(dirname "$0")")"/gitfunc.c "$0" -o "$TargetDir/$TargetName" $1
+gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$(realpath "$(dirname "$0")")"/gitfunc.c "$0" -o "$TargetDir/$TargetName" "$@"
 #I WANT to be able to do things like ./repotools.c -DPROFILING to add the compiler flag profiling but ALSO stuff like ./repotools "-DDEBUG -DPROFILING" to add both profiling and debug
 printf " -> \e[32mDONE\e[0m(%s)\n" $?
 exit
@@ -176,6 +175,227 @@ double calcProfilingTime(uint8_t startIndex, uint8_t stopIndex) {
 	return (double)(tstop - tstart) / 1000.0;
 }
 #endif
+
+#define POWER_CHARGE " \e[38;5;157m▲ "
+#define POWER_DISCHARGE " \e[38;5;217m▽ "
+#define POWER_FULL " \e[38;5;157m≻ "
+#define POWER_NOCHARGE_HIGH " \e[38;5;172m◊ "
+#define POWER_NOCHARGE_LOW " \e[38;5;009m◊ "
+#define POWER_UNKNOWN " \e[38;5;9m!⌧? "
+#define CHARGE_AC "≈"
+#define CHARGE_USB "≛"
+#define CHARGE_BOTH "⩰"
+#define CHARGER_CONNECTED "↯"
+
+typedef enum { CHARGING, DISCHARGING, FULL, NOT_CHARGING, UNKNOWN } chargestate;
+
+typedef struct {
+	bool IsWSL;
+	bool IsUSB;
+	bool IsMains;
+} PowerBitField;
+
+uint8_t HandleDev(const char* directory, const char* dir, PowerBitField* field, char* obuf, uint8_t avlen) {
+	//	if path/dir/type==Battery
+	//		path/dir/status to symbol
+	//		path/dir/charging_type for fast/slow charging symbol
+	//		path/dir/capacity%
+	//	else if == Mains
+	//		path/dir/online
+	char* path;
+	FILE* fp;
+	uint8_t buf_max_len = 64;
+	char* buf = malloc(sizeof(char) * buf_max_len + 1);
+	if (buf == NULL)ABORT_NO_MEMORY;
+	buf[buf_max_len] = 0x00;
+
+	bool IsBat = false;
+	bool IsUSB = false;
+	bool IsMains = false;
+	chargestate state = UNKNOWN;
+	uint8_t len = 0;
+
+	if (asprintf(&path, "%s/%s/type", directory, dir) == -1)ABORT_NO_MEMORY;
+	fp = fopen(path, "r");
+	if (fp != NULL) {
+		if (fgets(buf, buf_max_len - 1, fp) != NULL) {
+			TerminateStrOn(buf, DEFAULT_TERMINATORS);
+			if (Compare("Battery", buf)) {
+				IsBat = true;
+			}
+			else if (Compare("USB", buf)) {
+				IsUSB = true;
+			}
+			else if (Compare("Mains", buf)) {
+				IsMains = true;
+			}
+			else {
+				printf("WARNING: Unknown type %s for %s/%s. Please report to ShellTools developer\n", buf, directory, dir);
+			}
+		}
+		fclose(fp);
+		fp = NULL;
+	}
+	if (IsBat) {
+		long percent = 0;
+		free(path);
+		if (asprintf(&path, "%s/%s/status", directory, dir) == -1)ABORT_NO_MEMORY;
+		fp = fopen(path, "r");
+		if (fp != NULL) {
+			if (fgets(buf, buf_max_len - 1, fp) != NULL) {
+				TerminateStrOn(buf, DEFAULT_TERMINATORS);
+				if (Compare(buf, "Charging")) {
+					state = CHARGING;
+				}
+				else if (Compare(buf, "Discharging")) {
+					state = DISCHARGING;
+				}
+				else if (Compare(buf, "Full")) {
+					state = FULL;
+				}
+				else if (Compare(buf, "Not charging")) {
+					state = NOT_CHARGING;
+				}
+				else if (Compare(buf, "Unknown")) {
+					state = UNKNOWN;
+				}
+				else {
+					printf("unknown status '%s' for %s/%s. Please report to ShellTools delevoper\n", buf, directory, dir);
+				}
+			}
+			fclose(fp);
+			fp = NULL;
+		}
+		free(path);
+		if (asprintf(&path, "%s/%s/capacity", directory, dir) == -1)ABORT_NO_MEMORY;
+		fp = fopen(path, "r");
+		if (fp != NULL) {
+			if (fgets(buf, buf_max_len - 1, fp) != NULL) {
+				TerminateStrOn(buf, DEFAULT_TERMINATORS);
+				percent = strtol(buf, NULL, 10);
+			}
+			fclose(fp);
+			fp = NULL;
+		}
+		if (state == FULL && percent == 0 && field->IsWSL) {
+			//printf("likely WSL PC without battery");
+		}
+		else {
+			switch (state) {
+			case CHARGING:
+				{
+					len += snprintf(obuf, avlen - len, POWER_CHARGE "%li%%\e[0m", percent);
+					break;
+				}
+			case DISCHARGING:
+				{
+					len += snprintf(obuf, avlen - len, POWER_DISCHARGE "%li%%\e[0m", percent);
+					break;
+				}
+			case FULL:
+				{
+					len += snprintf(obuf, avlen - len, POWER_FULL "%li%%\e[0m", percent);
+					break;
+				}
+			case NOT_CHARGING:
+				{
+					if (percent >= 95) {
+						len += snprintf(obuf, avlen - len, POWER_NOCHARGE_HIGH "%li%%\e[0m", percent);
+					}
+					else {
+						len += snprintf(obuf, avlen - len, POWER_NOCHARGE_LOW "%li%%\e[0m", percent);
+					}
+					break;
+				}
+			case UNKNOWN:
+				{
+					len += snprintf(obuf, avlen - len, POWER_UNKNOWN "%li%%\e[0m", percent);
+					break;
+				}
+			}
+		}
+	}
+	else {
+		free(path);
+		if (asprintf(&path, "%s/%s/online", directory, dir) == -1)ABORT_NO_MEMORY;
+		fp = fopen(path, "r");
+		if (fp != NULL) {
+			if (fgets(buf, buf_max_len - 1, fp) != NULL) {
+				TerminateStrOn(buf, DEFAULT_TERMINATORS);
+				bool IsOnline = Compare(buf, "1");
+				field->IsMains |= (IsMains && IsOnline);
+				field->IsUSB |= (IsUSB && IsOnline);
+			}
+			fclose(fp);
+			fp = NULL;
+		}
+	}
+	free(path);
+	return len;
+}
+
+char* PowerState() {
+#define POWER_CHARS_PER_BAT 64
+#define POWER_NUM_BAT 2
+#define POWER_CHARS_EXTPWR 8
+	assert(POWER_CHARS_EXTPWR + POWER_CHARS_PER_BAT * POWER_NUM_BAT < UINT8_MAX);
+	uint8_t powerBatMaxLen = POWER_CHARS_PER_BAT * POWER_NUM_BAT;
+	uint8_t powerMaxLen = powerBatMaxLen + POWER_CHARS_EXTPWR;
+	char* powerString = malloc(sizeof(char) * powerMaxLen + 1);
+	if (powerString == NULL)ABORT_NO_MEMORY;
+	powerString[powerMaxLen] = 0x00;
+	powerString[0] = 0x00;
+	uint8_t currentLen = 0;
+
+	PowerBitField field;
+	field.IsWSL = getenv("WSL_VERSION") != NULL;
+	field.IsMains = false;
+	field.IsUSB = false;
+	DIR* directoryPointer;
+	const char* path = "/sys/class/power_supply";
+	directoryPointer = opendir(path);
+	if (directoryPointer != NULL)
+	{
+		//On success, readdir() returns a pointer to a dirent structure.  (This structure may be statically allocated; do not attempt to free(3) it.)
+		const struct dirent* direntptr;
+		while ((direntptr = readdir(directoryPointer)))
+		{
+			if (/*direntptr->d_type == DT_LNK && */!Compare(direntptr->d_name, ".") && !Compare(direntptr->d_name, "..")) {
+				currentLen += HandleDev(path, direntptr->d_name, &field, powerString + currentLen, powerBatMaxLen - currentLen);
+			}
+		}
+		closedir(directoryPointer);
+	}
+	else
+	{
+		fprintf(stderr, "failed on directory: %s\n", path);
+		perror("Couldn't open the directory");
+	}
+	if (field.IsMains || field.IsUSB) {
+		if (field.IsWSL) {
+			currentLen += snprintf(powerString + currentLen, powerMaxLen - currentLen, " ");
+		}
+		else {
+			//WSL only ever reports as usb -> only report details if not WSL
+			if (field.IsMains && field.IsUSB) {
+				//both
+				currentLen += snprintf(powerString + currentLen, powerMaxLen - currentLen, " " CHARGE_BOTH);
+			}
+			else if (field.IsMains) {
+				//only mains
+				currentLen += snprintf(powerString + currentLen, powerMaxLen - currentLen, " " CHARGE_AC);
+			}
+			else {
+				//only USB
+				currentLen += snprintf(powerString + currentLen, powerMaxLen - currentLen, " " CHARGE_USB);
+			}
+		}
+		snprintf(powerString + currentLen, powerMaxLen - currentLen, CHARGER_CONNECTED);
+	}
+	//printf("PowerString: <%s> (%i/%i)", powerString, strlen(powerString), strlen_visible(powerString));
+	//printf("\n");
+	return powerString;
+}
 
 bool CheckBranching(RepoInfo* ri) {
 	//this method checks the status of all branches on a given repo
@@ -1841,7 +2061,7 @@ int main(int argc, char** argv)
 			{0, 0, 0, 0 }
 		};
 
-		getopt_currentChar = getopt_long(argc, argv, "b:c:d:e:fhi:j:n:p:qr:t:", long_options, &option_index);
+		getopt_currentChar = getopt_long(argc, argv, "b:c:d:fhi:j:n:p:qr:t:", long_options, &option_index);
 		if (getopt_currentChar == -1)
 			break;
 
@@ -1918,22 +2138,6 @@ int main(int argc, char** argv)
 				Arg_TerminalDevice_len = strlen_visible(Arg_TerminalDevice);
 				break;
 			}
-		case 'e':
-			{
-				//since the output will be sent through an escape sequence processing system to do the colours and stuff I must replace the literal % for the battery with a %% (the literal % is marked by \a%)
-				char* temp = optarg;
-				while (*temp != 0x00) {
-					if (*temp == '\a' && *(temp + 1) == '%') {
-						*temp = '%';
-					}
-					temp++;
-				}
-				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
-				Arg_PowerState = optarg;
-				Arg_PowerState_len = strlen_visible(Arg_PowerState);
-				break;
-			}
-
 		case 'f':
 			{
 				IsThoroughSearch = 1;
@@ -2053,78 +2257,89 @@ int main(int argc, char** argv)
 #endif
 
 	if (IsPrompt) {
-		if (!CONFIG_PROMPT_POWER && Arg_PowerState != NULL) { Arg_PowerState[0] = 0x00; Arg_PowerState_len = 0; }
+		if (CONFIG_PROMPT_POWER) {
+			Arg_PowerState = PowerState();
+			Arg_PowerState_len = strlen_visible(Arg_PowerState);
+		}
+		else {
+			Arg_PowerState = malloc(sizeof(char));
+			if (Arg_PowerState == NULL)ABORT_NO_MEMORY;
+			Arg_PowerState[0] = 0x00;
+			Arg_PowerState_len = 0;
+		}
 		if (!CONFIG_PROMPT_PROXY && Arg_ProxyInfo != NULL) { Arg_ProxyInfo[0] = 0x00; Arg_ProxyInfo_len = 0; }
 		if (!CONFIG_PROMPT_TERMINAL_DEVICE && Arg_TerminalDevice != NULL) { Arg_TerminalDevice[0] = 0x00; Arg_TerminalDevice_len = 0; }
 		if (!CONFIG_PROMPT_JOBS && Arg_BackgroundJobs != NULL) { Arg_BackgroundJobs[0] = 0x00; Arg_BackgroundJobs_len = 0; }
 
-		char* ssh = getenv("SSH_CLIENT");
-		if (ssh != NULL) {
-			//echo "$SSH_CONNECTION" | sed -nE 's~^([-0-9a-zA-Z_\.:]+) ([0-9]+) ([-0-9a-zA-Z_\.:]+) ([0-9]+)$~<SSH: \1:\2 -> \3:\4> ~p'
-			uint8_t SSHRegexGroupCount = 6;
-			regmatch_t SSHRegexGroups[SSHRegexGroupCount];
-			regex_t SSHRegex;
-			const char* SSHRegexString = "^(([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)|([0-9a-fA-F:]+)) ([0-9]+) ([0-9]+)$";
+		if (CONFIG_PROMPT_SSH) {
+			char* ssh = getenv("SSH_CLIENT");
+			if (ssh != NULL) {
+				//echo "$SSH_CONNECTION" | sed -nE 's~^([-0-9a-zA-Z_\.:]+) ([0-9]+) ([-0-9a-zA-Z_\.:]+) ([0-9]+)$~<SSH: \1:\2 -> \3:\4> ~p'
+				uint8_t SSHRegexGroupCount = 6;
+				regmatch_t SSHRegexGroups[SSHRegexGroupCount];
+				regex_t SSHRegex;
+				const char* SSHRegexString = "^(([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)|([0-9a-fA-F:]+)) ([0-9]+) ([0-9]+)$";
 #define SSHRegexIP 1
 #define SSHRegexIPv4 2
 #define SSHRegexIPv6 3
 #define SSHRegexRemotePort 4
 #define SSHRegexMyPort 5
-			int SSHRegexReturnCode;
-			SSHRegexReturnCode = regcomp(&SSHRegex, SSHRegexString, REG_EXTENDED | REG_NEWLINE);
-			if (SSHRegexReturnCode)
-			{
-				char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
-				if (regErrorBuf == NULL) ABORT_NO_MEMORY;
-				regerror(SSHRegexReturnCode, &SSHRegex, regErrorBuf, 1024);
-				printf("Could not compile regular expression '%s'. [%i(%s)]\n", SSHRegexString, SSHRegexReturnCode, regErrorBuf);
-				fflush(stdout);
-				free(regErrorBuf);
-				exit(1);
-			};
+				int SSHRegexReturnCode;
+				SSHRegexReturnCode = regcomp(&SSHRegex, SSHRegexString, REG_EXTENDED | REG_NEWLINE);
+				if (SSHRegexReturnCode)
+				{
+					char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
+					if (regErrorBuf == NULL) ABORT_NO_MEMORY;
+					regerror(SSHRegexReturnCode, &SSHRegex, regErrorBuf, 1024);
+					printf("Could not compile regular expression '%s'. [%i(%s)]\n", SSHRegexString, SSHRegexReturnCode, regErrorBuf);
+					fflush(stdout);
+					free(regErrorBuf);
+					exit(1);
+				};
 
-			SSHRegexReturnCode = regexec(&SSHRegex, ssh, SSHRegexGroupCount, SSHRegexGroups, 0);
-			//man regex (3): regexec() returns zero for a successful match or REG_NOMATCH for failure.
-			if (SSHRegexReturnCode == 0) {
-				int len = SSHRegexGroups[0].rm_eo - SSHRegexGroups[0].rm_so;
-				if (len > 0) {
-					int tlen = (len + 1 + 20);
-					Arg_SSHInfo = malloc(sizeof(char) * tlen);//"<SSH: [x]:x -> port x>", regex group 0 contains all three x plus 2 spaces -> if I add 18 I should be fine <SSH: [::1]:55450 -> port 22>
-					if (Arg_SSHInfo == NULL)ABORT_NO_MEMORY;
-					Arg_SSHInfo_len = 0;
-					Arg_SSHInfo[0] = 0x00;
-					Arg_SSHInfo_len += snprintf(Arg_SSHInfo, tlen - (Arg_SSHInfo_len + 1), "<SSH: ");
+				SSHRegexReturnCode = regexec(&SSHRegex, ssh, SSHRegexGroupCount, SSHRegexGroups, 0);
+				//man regex (3): regexec() returns zero for a successful match or REG_NOMATCH for failure.
+				if (SSHRegexReturnCode == 0) {
+					int len = SSHRegexGroups[0].rm_eo - SSHRegexGroups[0].rm_so;
+					if (len > 0) {
+						int tlen = (len + 1 + 20);
+						Arg_SSHInfo = malloc(sizeof(char) * tlen);//"<SSH: [x]:x -> port x>", regex group 0 contains all three x plus 2 spaces -> if I add 18 I should be fine <SSH: [::1]:55450 -> port 22>
+						if (Arg_SSHInfo == NULL)ABORT_NO_MEMORY;
+						Arg_SSHInfo_len = 0;
+						Arg_SSHInfo[0] = 0x00;
+						Arg_SSHInfo_len += snprintf(Arg_SSHInfo, tlen - (Arg_SSHInfo_len + 1), "<SSH: ");
 
-					int ilen = SSHRegexGroups[SSHRegexIPv4].rm_eo - SSHRegexGroups[SSHRegexIPv4].rm_so;
-					if (ilen > 0) {
-						strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexIPv4].rm_so, ilen);
-						Arg_SSHInfo_len += ilen;
-					}
-					else {
-						ilen = SSHRegexGroups[SSHRegexIPv6].rm_eo - SSHRegexGroups[SSHRegexIPv6].rm_so;
+						int ilen = SSHRegexGroups[SSHRegexIPv4].rm_eo - SSHRegexGroups[SSHRegexIPv4].rm_so;
 						if (ilen > 0) {
-							Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), "[");
-							strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexIPv6].rm_so, ilen);
+							strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexIPv4].rm_so, ilen);
 							Arg_SSHInfo_len += ilen;
-							Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), "]");
 						}
+						else {
+							ilen = SSHRegexGroups[SSHRegexIPv6].rm_eo - SSHRegexGroups[SSHRegexIPv6].rm_so;
+							if (ilen > 0) {
+								Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), "[");
+								strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexIPv6].rm_so, ilen);
+								Arg_SSHInfo_len += ilen;
+								Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), "]");
+							}
+						}
+						ilen = SSHRegexGroups[SSHRegexRemotePort].rm_eo - SSHRegexGroups[SSHRegexRemotePort].rm_so;
+						if (ilen > 0) {
+							Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), ":");
+							strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexRemotePort].rm_so, ilen);
+							Arg_SSHInfo_len += ilen;
+						}
+						ilen = SSHRegexGroups[SSHRegexMyPort].rm_eo - SSHRegexGroups[SSHRegexMyPort].rm_so;
+						if (ilen > 0) {
+							Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), " -> port ");
+							strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexMyPort].rm_so, ilen);
+							Arg_SSHInfo_len += ilen;
+						}
+						Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), "> ");
 					}
-					ilen = SSHRegexGroups[SSHRegexRemotePort].rm_eo - SSHRegexGroups[SSHRegexRemotePort].rm_so;
-					if (ilen > 0) {
-						Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), ":");
-						strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexRemotePort].rm_so, ilen);
-						Arg_SSHInfo_len += ilen;
-					}
-					ilen = SSHRegexGroups[SSHRegexMyPort].rm_eo - SSHRegexGroups[SSHRegexMyPort].rm_so;
-					if (ilen > 0) {
-						Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), " -> port ");
-						strncpy(Arg_SSHInfo + Arg_SSHInfo_len, ssh + SSHRegexGroups[SSHRegexMyPort].rm_so, ilen);
-						Arg_SSHInfo_len += ilen;
-					}
-					Arg_SSHInfo_len += snprintf(Arg_SSHInfo + Arg_SSHInfo_len, tlen - (Arg_SSHInfo_len), "> ");
 				}
+				regfree(&SSHRegex);
 			}
-			regfree(&SSHRegex);
 		}
 		if (Arg_SSHInfo == NULL) {
 			Arg_SSHInfo = malloc(sizeof(char));
@@ -2218,6 +2433,7 @@ int main(int argc, char** argv)
 
 	if (IsPrompt) //show origin info for command prompt
 	{
+		printf("   \n");
 		//this is intentionally not OR-ed with IsPrompt as IsPrompt is in an exhaustive if/else where if this would evaluate to false I would get an error to the effect of "unknown option PROMPT"
 		if (CONFIG_PROMPT_OVERALL_ENABLE) {
 			if (ipMode == IP_MODE_STANDALONE && CONFIG_PROMPT_NETWORK) {
@@ -2263,7 +2479,7 @@ int main(int argc, char** argv)
 			printf("Arg_BackgroundJobs: >%s< (%i)\n", Arg_BackgroundJobs, Arg_BackgroundJobs_len);fflush(stdout);
 			printf("Arg_SHLVL: >%s< (%i)\n", Arg_SHLVL, Arg_SHLVL_len);fflush(stdout);
 			printf("Arg_SSHInfo: >%s< (%i)\n", Arg_SSHInfo, Arg_SSHInfo_len);fflush(stdout);
-			printf("Workpath: >%s<", path);fflush(stdout);
+			printf("Workpath: >%s<\n", path);fflush(stdout);
 #endif
 			//taking the list of jobs as input, this counts the number of spaces (and because of the trailing space also the number of entries)
 			int numBgJobs = 0;
@@ -2290,6 +2506,8 @@ int main(int argc, char** argv)
 #ifdef PROFILING
 			ALLOW_PROFILING_TESTPATH = true;
 #endif
+			printf("[ShellTools] Waiting for git in directory %s\r", path);
+			fflush(stdout);
 			RepoInfo* ri = AllocRepoInfo("", path);
 			//only test git if git is enabled at all
 			if (CONFIG_PROMPT_GIT && !TestPathForRepoAndParseIfExists(ri, -1, true, true)) {
@@ -2587,7 +2805,7 @@ int main(int argc, char** argv)
 			printf("%s", Arg_PowerState);
 
 			//the last two chars on screen were intentionally empty, I am now printing  ' !' there if ANY additional element had to be omitted
-			printf("%s", ~AdditionalElementAvailabilityPackedBool & ~(~0 << AdditionalElementCount) ? " !" : "");
+			printf("%s\n", ~AdditionalElementAvailabilityPackedBool & ~(~0 << AdditionalElementCount) ? " !" : "");
 
 #ifdef PROFILING
 			timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_PRINTING_DONE]), TIME_UTC);
@@ -2621,6 +2839,8 @@ int main(int argc, char** argv)
 				free(Arg_SHLVL);
 				Arg_SHLVL = NULL;
 			}
+			free(Arg_SSHInfo);
+			free(Arg_PowerState);
 			free(Time);
 			Time = NULL;
 			free(TimeZone);
@@ -2674,7 +2894,7 @@ int main(int argc, char** argv)
 		return 0;
 	}
 	else if (IsLowPrompt) {
-		printf("└%%F{cyan}%%B ");
+		printf("⮱%%{\e[36m\e[1m%%} ");//⮡ //⮱ //└ //⮩ //↳
 		if (CONFIG_LOWPROMPT_PATH_LIMIT) {
 			int chars = 0;
 			switch (CONFIG_LOWPROMPT_PATH_MAXLEN) {
@@ -2717,7 +2937,7 @@ int main(int argc, char** argv)
 			printf("%s", path);
 		}
 		//fprintf(stderr, "(%i %i)%s | %s\n", chars, segments, temp, path);
-		printf("%s ", (PromptRetCode == 0 ? "%F{green}" : "%F{red}"));
+		printf("%%{%s %%}", (PromptRetCode == 0 ? "\e[32m" : "\e[31m"));
 		if (CONFIG_LOWPROMPT_RETCODE || CONFIG_LOWPROMPT_TIMER) {
 			printf("[");
 			if (CONFIG_LOWPROMPT_TIMER) {
@@ -2842,7 +3062,7 @@ int main(int argc, char** argv)
 			}
 			printf("]");
 		}
-		printf("➜%%f%%b  ");
+		printf("%%{➜\e[0m  %%}");
 	}
 	else {
 		printf("unknown command %s\n", argv[1]);

@@ -169,11 +169,35 @@ THIS MUST NOT BE USED TO DETERMINE REQUIRED BUFFER SIZES
 A Usecase for this is computing how much space on screen is taken up by a string accounting for the fact control characters don't take up space
 an example of this can be found in repotools.c
 */
-int strlen_visible(const char* s) {
+int strlen_visible(const char* charstring) {
+	const uint8_t* s = (const uint8_t*)charstring;
 	int count = 0;
 	int idx = 0;
-	char c;
+	uint8_t c;
 	while ((c = s[idx]) != 0x00) {
+		//ANSI CSI sequences https://en.wikipedia.org/wiki/ANSI_escape_code
+		//don't count them at all
+		if (c == '\e' && s[idx + 1] == '[') {
+
+			idx += 2;//advance over \e[to test for the rest
+			//walk until valid 'final byte (0x40-0x7e)' or NULL found
+			while (s[idx] != 0x00 && !(s[idx] >= 0x40 && s[idx] <= 0x7E)) {
+				idx++;
+			}
+			idx++;
+			continue;
+		}
+		//UTF-8 multibyte characters -> only count them once
+		if ((c & 0b11000000) == 0b11000000) {
+			//begins with 11... -> UTF8
+			count++;
+			idx++;
+			while (s[idx] != 0x00 && (s[idx] & 0b11000000) == 0b10000000) {
+				//in utf-8 the first byte is 11------ while all following bytes are 10------
+				idx++;
+			}
+			continue;
+		}
 		//test for zsh prompt stuff
 		if (c == '%') {
 			//%F{...} -> set colour
@@ -200,34 +224,16 @@ int strlen_visible(const char* s) {
 				continue;
 			}
 			//%% -> escaped %, an actual % sign
-			else if (s[idx + 1 == '%']) {
+			else if (s[idx + 1] == '%') {
 				//NOTE: NO continue and ONLY +1 because I WANT to read that
 				idx++;
 			}
 		}
-		//ANSI CSI sequences https://en.wikipedia.org/wiki/ANSI_escape_code
-		//don't count them at all
-		if (c == '\e' && s[idx + 1] == '[') {
-			idx += 2;//advance over \e[to test for the rest
-			//walk until valid 'final byte (0x40-0x7e)' or NULL found
-			while (s[idx] != 0x00 && !(s[idx] >= 0x40 && s[idx] <= 0x7E)) {
-				idx++;
-			}
-		}
-		//UTF-8 multibyte characters -> only count them once
-		if ((c & 0b11000000) == 0b11000000) {
-			//begins with 11... -> UTF8
-			count++;
-			while (s[idx] != 0x00 && (s[idx] & 0b11000000) == 0b10000000) {
-				//in utf-8 the first byte is 11------ while all following bytes are 10------
-				idx++;
-			}
-		}
 		//all basic ascii, excluding the first 0x20 control chars and the DEL on 0x7f
-		if (c >= 0x20 && c <= 0x7e) {
+		if (s[idx] >= 0x20 && s[idx] <= 0x7e) {
 			count++;
+			idx++;
 		}
-		idx++;
 	}
 	return count;
 }

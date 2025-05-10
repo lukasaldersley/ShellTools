@@ -38,7 +38,7 @@ bool StartsWith(const char* a, const char* b);
 bool ContainsString(const char* str, const char* test);
 int16_t LastIndexOf(const char* txt, char tst);
 int16_t NextIndexOf(const char* txt, char tst, int startindex);
-int strlen_visible(const char* s);
+int strlen_visible(const char* charstring);
 uint32_t TerminateStrOn(char* str, const char* terminators);
 int cpyString(char* dest, const char* src, int maxCount);
 char ToLowerCase(const char c);

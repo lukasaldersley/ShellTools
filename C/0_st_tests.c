@@ -35,8 +35,7 @@ fi
 printf "compiling %s into %s/%s" "$0" "$TargetDir" "$TargetName"
 #cppcheck is configured to use C23, while for gcc I use c2x, which is essentially the same. c2x is the older, deprecated name for c23.
 #gcc-13 (used in ubuntu 24.04 LTS, which I do want to support) doesn't understand -std=c23, only -stx=c2x, the c23 flag was added with gcc-14
-#shellcheck disable=SC2086 #in this case I DO want word splitting to happen at $1
-gcc -O3 -std=c2x -Wall "$ThisFolder/commons.c" "$0" -o "$TargetDir/$TargetName" $1
+gcc -O3 -std=c2x -Wall "$ThisFolder/commons.c" "$0" -o "$TargetDir/$TargetName" "$@"
 #I WANT to be able to do things like ./repotools.c -DPROFILING to add the compiler flag profiling but ALSO stuff like ./repotools "-DDEBUG -DPROFILING" to add both profiling and debug
 printf " -> \e[32mDONE\e[0m(%s)\n" $?
 "$TargetDir/$TargetName"
