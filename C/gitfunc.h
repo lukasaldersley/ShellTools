@@ -88,4 +88,6 @@ char* ConstructCommitStatusString(const RepoInfo* ri);
 char* FixImplicitProtocol(const char* input);
 void AddChild(RepoInfo* parent, RepoInfo* child);
 bool CheckExtendedGitStatus(RepoInfo* ri);
+
+void printTree(RepoInfo* ri, bool Detailed);
 #endif

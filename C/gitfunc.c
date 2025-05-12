@@ -4,6 +4,7 @@ exit
 */
 
 #include "gitfunc.h"
+#include "config.h"
 #include <dirent.h>
 #include <regex.h>
 
@@ -536,4 +537,112 @@ bool pruneTreeForGit(RepoInfo* ri) {
 		}
 	}
 	return ri->isGit || hasGitInTree;
+}
+
+void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSameLevelEntryFollows, bool fullOut) {
+	if (ri == NULL) {
+		return;
+	}
+	if (ri->ParentDirectory != NULL) {
+		printf("%s%s\u2500\u2500 ", parentPrefix, (anotherSameLevelEntryFollows ? "\u251c" : "\u2514"));
+	}
+	if (ri->isGit) {
+		printf("%s", ri->DirectoryName);
+		if (CONFIG_GIT_REPOTYPE) {
+			printf(" [" COLOUR_GIT_BARE "%s" COLOUR_GIT_INDICATOR "GIT", ri->isBare ? "BARE " : "");
+			if (ri->isSubModule) {
+				printf("-SM" COLOUR_CLEAR);
+				if (CONFIG_GIT_REPOTYPE_PARENT) {
+					printf("@" COLOUR_GIT_PARENT "%s", ri->parentRepo);
+				}
+			}
+			printf(COLOUR_CLEAR "]");
+		}
+		if (CONFIG_GIT_REPONAME) {
+			printf(" " COLOUR_GIT_NAME "%s" COLOUR_CLEAR, ri->RepositoryName);
+		}
+		if (CONFIG_GIT_BRANCHNAME) {
+			printf(" on " COLOUR_GIT_BRANCH "%s", ri->branch);
+			if (CONFIG_GIT_BRANCH_OVERVIEW) {
+				printf(COLOUR_GREYOUT "/%i+%i",
+					ri->CountActiveBranches,
+					ri->CountFullyMergedBranches);
+			}
+		}
+		if (!ri->isBare && CONFIG_GIT_BRANCHSTATUS) {
+			char* gitBranchInfo = ConstructGitBranchInfoString(ri);
+			printf("%s%s%s",
+				(CONFIG_GIT_BRANCHNAME || CONFIG_GIT_REPONAME) ? ":" : "",
+				(CONFIG_GIT_BRANCH_OVERVIEW) ? "" : COLOUR_GREYOUT,
+				gitBranchInfo);
+			free(gitBranchInfo);
+			gitBranchInfo = NULL;
+		}
+
+		if (CONFIG_GIT_REMOTE || ri->RepositoryOriginID_PREVIOUS != -1) {
+			printf(" " COLOUR_CLEAR "from ");
+		}
+
+		char* GitComStrTemp = ConstructCommitStatusString(ri);
+		char* GitStatStrTemp = ConstructGitStatusString(ri);
+		//differentiate between display only and display after change
+		if (ri->RepositoryOriginID_PREVIOUS != -1) {
+			printf(COLOUR_GIT_ORIGIN "[%s(index %i, group %i) -> %s(index %i, group %i)]" COLOUR_CLEAR, NAMES[ri->RepositoryOriginID_PREVIOUS], ri->RepositoryOriginID_PREVIOUS, GROUPS[ri->RepositoryOriginID_PREVIOUS], NAMES[ri->RepositoryOriginID], ri->RepositoryOriginID, GROUPS[ri->RepositoryOriginID]);
+			if (!ri->isBare) {
+				if (CONFIG_GIT_COMMIT_OVERVIEW) {
+					printf("%s", GitComStrTemp);
+				}
+				if (CONFIG_GIT_LOCALCHANGES) {
+					printf("%s", GitStatStrTemp);
+				}
+			}
+			if (fullOut) {
+				printf(COLOUR_GREYOUT " (%s -> %s)" COLOUR_CLEAR, ri->RepositoryUnprocessedOrigin_PREVIOUS, ri->RepositoryUnprocessedOrigin);
+			}
+			putc('\n', stdout);
+		}
+		else {
+			if (CONFIG_GIT_REMOTE) {
+				printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin);
+			}
+			if (!ri->isBare) {
+				if (CONFIG_GIT_COMMIT_OVERVIEW) {
+					printf("%s", GitComStrTemp);
+				}
+				if (CONFIG_GIT_LOCALCHANGES) {
+					printf("%s", GitStatStrTemp);
+				}
+			}
+			if (fullOut && CONFIG_GIT_REMOTE) {
+				printf(COLOUR_GREYOUT " (%s)" COLOUR_CLEAR, ri->RepositoryUnprocessedOrigin);
+			}
+			putc('\n', stdout);
+		}
+		free(GitStatStrTemp);
+		free(GitComStrTemp);
+		GitStatStrTemp = NULL;
+		GitComStrTemp = NULL;
+
+	}
+	else {
+		printf(COLOUR_GREYOUT "%s" COLOUR_CLEAR "\n", ri->DirectoryName);
+		//this prints the name of intermediate folders that are not git repos, but contain a repo somewhere within
+		//-> those are less important->print greyed out
+	}
+	fflush(stdout);
+	RepoList* current = ri->SubDirectories;
+	int procedSubDirs = 0;
+	char* temp;
+	if (asprintf(&temp, "%s%s", parentPrefix, (ri->ParentDirectory != NULL) ? (anotherSameLevelEntryFollows ? "\u2502   " : "    ") : "") == -1) ABORT_NO_MEMORY;
+	while (current != NULL)
+	{
+		procedSubDirs++;
+		printTree_internal(current->self, temp, procedSubDirs < ri->SubDirectoryCount, fullOut);
+		current = current->next;
+	}
+	free(temp);
+}
+
+void printTree(RepoInfo* ri, bool Detailed) {
+	printTree_internal(ri, "", ri->SubDirectoryCount > 1, Detailed);
 }

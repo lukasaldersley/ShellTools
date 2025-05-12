@@ -2,15 +2,16 @@
 #define __BVBS_ZSH_COMMONS__
 
 #define _GNU_SOURCE
+#include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <inttypes.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <assert.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <errno.h>
 #include <bits/wordsize.h>
 #define COLOUR_GREYOUT "\e[38;5;240m"
 #define COLOUR_CLEAR "\e[0m"
