@@ -20,6 +20,15 @@
 #to see what users are running: "who"
 #to forcibly log out a non-gui user: pkill -t "terminalDevice" such as sudo pkill -t pts/1
 
+## To run a script with the users default shell but still have a fallback shebang use the following
+# # Prevent infinite loops using an environment flag
+# if [ -z "$IsOnDefaultShell" ]; then
+# 	export IsOnDefaultShell=1
+# 	exec "${SHELL:-/bin/sh}" "$0" "$@"
+# fi
+# unset IsOnDefaultShell
+# echo "Running in: $(which "$(ps -p $$ -o comm=)")"
+
 #shellcheck disable=SC2120 # reason: The parameter is optional, therefore it needn't be used. it's only use is in an alias for quicker development
 ST_CoreUpdate (){
 	printf "Updating/Installing ShellTools on branch %s" "$(git -C "$ST_SRC" symbolic-ref --short HEAD)"
@@ -315,6 +324,17 @@ enableProxy(){
 	else
 		echo "PROXY_HOST not provided -> NO ACTION"
 	fi
+}
+
+wat(){
+	apropos "$1"
+	type "$1"
+	printf "from Package:\n"
+	dpkg -S "$(which "$1")"
+	printf "\nalso located at:\n"
+	builtin where "$1"
+	printf "\ncontained in following packages\n"
+	dpkg -S "$1"
 }
 
 disableProxy(){

@@ -1598,16 +1598,17 @@ int main(int argc, char** argv)
 
 			//fill the empty space between left and right side
 			for (int i = 0;i < RemainingPromptWidth;i++) {
-				switch (CONFIG_PROMPT_FILLER_CHAR) {
+				//this switch statement is only responsible for printing possibly neccessary escape chars
+				switch (CONFIG_PROMPT_FILLER_CHAR[0]) {
 				case '\\': {
-						putc(CONFIG_PROMPT_FILLER_CHAR, stdout);
-						putc(CONFIG_PROMPT_FILLER_CHAR, stdout);
+						putc(CONFIG_PROMPT_FILLER_CHAR[0], stdout);
+						putc(CONFIG_PROMPT_FILLER_CHAR[0], stdout);
 						//intentionally missing break; as \ needs more escaping to work
 					}
 				case '%':
 					{
 						//since % is an escape char for the prompt string, escape it as %%
-						putc(CONFIG_PROMPT_FILLER_CHAR, stdout);
+						putc(CONFIG_PROMPT_FILLER_CHAR[0], stdout);
 						break;
 					}
 				case '$':
@@ -1627,7 +1628,7 @@ int main(int argc, char** argv)
 						;
 					}
 				}
-				putc(CONFIG_PROMPT_FILLER_CHAR, stdout);
+				printf("%s", CONFIG_PROMPT_FILLER_CHAR);
 			}
 
 			//print the time in HH:mm:ss "21:24:31"
@@ -1763,7 +1764,7 @@ int main(int argc, char** argv)
 		return 0;
 	}
 	else if (IsLowPrompt) {
-		printf("⮱%%{\e[36m\e[1m%%} ");//⮡ //⮱ //└ //⮩ //↳
+		printf("%s%%{\e[36m\e[1m%%} ", CONFIG_LOWPROMPT_START_CHAR);
 		if (CONFIG_LOWPROMPT_PATH_LIMIT) {
 			int chars = 0;
 			switch (CONFIG_LOWPROMPT_PATH_MAXLEN) {
@@ -1931,7 +1932,7 @@ int main(int argc, char** argv)
 			}
 			printf("]");
 		}
-		printf("%%{➜\e[0m  %%}");
+		printf("%%{%s\e[0m  %%}", CONFIG_LOWPROMPT_END_CHAR);
 	}
 	else {
 		printf("unknown command %s\n", argv[1]);

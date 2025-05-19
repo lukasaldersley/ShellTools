@@ -48,4 +48,6 @@ char* ExecuteProcess_alloc(const char* command);
 int AbbreviatePathAuto(char** ret, const char* path, uint16_t KeepAllIfShorterThan, uint8_t DesiredKeepElements);
 int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, uint8_t DesiredKeepElementsFront, uint8_t DesiredKeepElementsBack);
 uint32_t determinePossibleCombinations(int* availableLength, int NumElements, ...);
+bool ParseUnicodeToUTF8(const char* CodePoint, char bUTF8DestBuf[]);
+bool ParseCharOrCodePoint(const char* Input, char DestBuf[]);
 #endif

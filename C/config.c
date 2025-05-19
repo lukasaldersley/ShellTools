@@ -18,6 +18,8 @@ int CONFIG_LOWPROMPT_PATH_MAXLEN = -3;
 bool CONFIG_LOWPROMPT_RETCODE = true;
 bool CONFIG_LOWPROMPT_RETCODE_DECODE = true;
 bool CONFIG_LOWPROMPT_TIMER = true;
+char CONFIG_LOWPROMPT_START_CHAR[5];
+char CONFIG_LOWPROMPT_END_CHAR[5];
 
 bool CONFIG_PROMPT_OVERALL_ENABLE = true;
 
@@ -34,7 +36,7 @@ bool CONFIG_PROMPT_POWER = true;
 bool CONFIG_PROMPT_GIT = true;
 bool CONFIG_PROMPT_USER = true;
 bool CONFIG_PROMPT_HOST = true;
-char CONFIG_PROMPT_FILLER_CHAR = '-';
+char CONFIG_PROMPT_FILLER_CHAR[5];
 
 bool CONFIG_PROMPT_NET_IFACE = true;
 bool CONFIG_PROMPT_NET_ADDITIONAL = true;
@@ -94,6 +96,19 @@ bool DIPFALSCHEISSER_WARNINGS = false;
 
 
 void DoSetup() {
+	//default filler is '-' (U+002D)
+	CONFIG_PROMPT_FILLER_CHAR[0] = '-';
+	CONFIG_PROMPT_FILLER_CHAR[1] = 0x00;
+	//default lowprompt char is '⮱' (U+2BB1)
+	CONFIG_LOWPROMPT_START_CHAR[0] = 0xE2;
+	CONFIG_LOWPROMPT_START_CHAR[1] = 0xAE;
+	CONFIG_LOWPROMPT_START_CHAR[2] = 0xB1;
+	CONFIG_LOWPROMPT_START_CHAR[3] = 0x00;
+	//default lowprompt char is '➜' (U+279C)
+	CONFIG_LOWPROMPT_END_CHAR[0] = 0xE2;
+	CONFIG_LOWPROMPT_END_CHAR[1] = 0x9E;
+	CONFIG_LOWPROMPT_END_CHAR[2] = 0x9C;
+	CONFIG_LOWPROMPT_END_CHAR[3] = 0x00;
 	for (int i = 0;i < MaxLocations;i++) {
 		LOCS[i] = NULL;
 		NAMES[i] = NULL;
@@ -283,6 +298,18 @@ void DoSetup() {
 				CONFIG_LOWPROMPT_TIMER = Compare("true", buf + 42);
 #ifdef DEBUG
 				printf("CONFIG:%s : %s -> %i\n", buf, buf + 42, CONFIG_LOWPROMPT_TIMER);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.START_CHAR:	")) {
+				ParseCharOrCodePoint(buf + 32, CONFIG_LOWPROMPT_START_CHAR);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 32, CONFIG_LOWPROMPT_START_CHAR);
+#endif
+			}
+			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.END_CHAR:	")) {
+				ParseCharOrCodePoint(buf + 30, CONFIG_LOWPROMPT_END_CHAR);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 30, CONFIG_LOWPROMPT_END_CHAR);
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.SSHINFO.ENABLE:	")) {
@@ -569,9 +596,10 @@ void DoSetup() {
 #endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.PROMPT.FILLER_CHAR:	")) {
-				CONFIG_PROMPT_FILLER_CHAR = buf[31];
+				//CONFIG_PROMPT_FILLER_CHAR = buf[31];
+				ParseCharOrCodePoint(buf + 30, CONFIG_PROMPT_FILLER_CHAR);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> '%c'\n", buf, buf + 30, CONFIG_PROMPT_FILLER_CHAR);
+				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 30, CONFIG_PROMPT_FILLER_CHAR);
 #endif
 			}
 			else {

@@ -482,3 +482,89 @@ uint32_t determinePossibleCombinations(int* availableLength, int NumElements, ..
 
 	return res;
 }
+
+void CopyErrorByteToBuffer(char UTF8DestBuf[], const char* CodePoint) {
+	UTF8DestBuf[0] = 0xEF;
+	UTF8DestBuf[1] = 0xBF;
+	UTF8DestBuf[2] = 0xBD;
+	UTF8DestBuf[3] = 0x00;
+	printf("ERROR: invalid Unicode codepoint >%s<\n", CodePoint);
+}
+
+bool ParseUnicodeToUTF8(const char* CodePoint, char UTF8DestBuf[]) {
+	if (CodePoint[0] == 'U' && CodePoint[1] == '+') {
+		//actual unicode decode
+		char* RestChar;
+
+		uint32_t integercp = strtoul(CodePoint + 2, &RestChar, 16);
+		if (RestChar[0] != 0x00) {
+			//if strtol has anything in char **_Nullable restrict endptr (here assigned to Restchar), there was something in the input (char **_Nullable restrict endptr) after the numbers -> failure
+			CopyErrorByteToBuffer(UTF8DestBuf, CodePoint);
+			return false;
+		}
+		if (integercp <= 0x7F) {
+			// basic 7-bit Ascii, but encoded as unicode for some reason
+			UTF8DestBuf[0] = (char)integercp;
+			UTF8DestBuf[1] = 0;
+			return true;
+		}
+		else if (integercp <= 0x07FF) {
+			// above or equal to 0x80 but below or equal to 0x7FF -> Will fit in two-byte UTF-8
+			//the second byte can contain 6 bits of 'payload', therfore the number is right shifted by 6
+			//integer promotion means the right shift may shift-in logical 1 instad of 0 to preserve the sign bit
+			//to prevent/reverse that I mask the three upper bits (the ones denoting a multibyte UTF-8 of two bytes) as zero, then force the bits to their correct positions
+			//then I do something similar to the restbits (6 each in every continuation byte)
+			//UTF8DestBuf[0] = (char)(((integercp >> 6) & 0x1F) | 0xC0);
+			//UTF8DestBuf[1] = (char)(((integercp >> 0) & 0x3F) | 0x80);
+			UTF8DestBuf[0] = (char)(((integercp >> 6) & 0b00011111) | 0b11000000);
+			UTF8DestBuf[1] = (char)((integercp & 0b00111111) | 0b10000000);
+			UTF8DestBuf[2] = 0;
+			return true;
+		}
+		else if (integercp <= 0xFFFF) {
+			// above or equal to 0x800 but below or equal to 0xFFFF -> Will fit in three-byte UTF-8
+			//this works analogous to the block 0x80 to 0x7ff
+			//UTF8DestBuf[0] = (char)(((integercp >> 12) & 0x0F) | 0xE0);
+			//UTF8DestBuf[1] = (char)(((integercp >> 6) & 0x3F) | 0x80);
+			//UTF8DestBuf[2] = (char)(((integercp >> 0) & 0x3F) | 0x80);
+			UTF8DestBuf[0] = (char)(((integercp >> 12) & 0b00001111) | 0b11100000);
+			UTF8DestBuf[1] = (char)(((integercp >> 6) & 0b00111111) | 0b10000000);
+			UTF8DestBuf[2] = (char)(((integercp >> 0) & 0b00111111) | 0b10000000);
+			UTF8DestBuf[3] = 0;
+			return true;
+		}
+		else if (integercp <= 0x10FFFF) {
+			// above or equal to 0x10000 but below or equal to 10FFFF -> Will fit in four byte UTF-8
+			//this works analogous to the block 0x80 to 0x7ff
+			UTF8DestBuf[0] = (char)(((integercp >> 18) & 0b00000111) | 0b11110000);
+			UTF8DestBuf[1] = (char)(((integercp >> 12) & 0b00111111) | 0b10000000);
+			UTF8DestBuf[2] = (char)(((integercp >> 6) & 0b00111111) | 0b10000000);
+			UTF8DestBuf[3] = (char)((integercp & 0b00111111) | 0b10000000);
+			UTF8DestBuf[4] = 0;
+			return true;
+		}
+		else {
+			// above or equal to 0x110000 -> guaranteed invalid -> error
+			CopyErrorByteToBuffer(UTF8DestBuf, CodePoint);
+			return false;
+		}
+	}
+	else {
+		//not supported format
+
+		CopyErrorByteToBuffer(UTF8DestBuf, CodePoint);
+		return false;
+	}
+}
+
+bool ParseCharOrCodePoint(const char* Input, char DestBuf[]) {
+	if (Input[0] == '\'' && Input[2] == '\'' && Input[1] <= 0x7F) {
+		//basic ASCII (between 0x00 and 0x7F inclusive), enclosed by single quotes can be simply copied over, everything else I need to attempt Unicode-codepoint decoding
+		DestBuf[0] = Input[1];
+		DestBuf[1] = 0x00;
+		return true;
+	}
+	else {
+		return ParseUnicodeToUTF8(Input, DestBuf);
+	}
+}
