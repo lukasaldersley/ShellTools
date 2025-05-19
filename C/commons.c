@@ -483,7 +483,7 @@ uint32_t determinePossibleCombinations(int* availableLength, int NumElements, ..
 	return res;
 }
 
-void CopyErrorByteToBuffer(char UTF8DestBuf[], const char* CodePoint) {
+static void CopyErrorByteToBuffer(char UTF8DestBuf[], const char* CodePoint) {
 	UTF8DestBuf[0] = 0xEF;
 	UTF8DestBuf[1] = 0xBF;
 	UTF8DestBuf[2] = 0xBD;
@@ -491,7 +491,7 @@ void CopyErrorByteToBuffer(char UTF8DestBuf[], const char* CodePoint) {
 	printf("ERROR: invalid Unicode codepoint >%s<\n", CodePoint);
 }
 
-bool ParseUnicodeToUTF8(const char* CodePoint, char UTF8DestBuf[]) {
+static bool ParseUnicodeToUTF8(const char* CodePoint, char UTF8DestBuf[]) {
 	if (CodePoint[0] == 'U' && CodePoint[1] == '+') {
 		//actual unicode decode
 		char* RestChar;

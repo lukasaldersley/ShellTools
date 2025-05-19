@@ -53,7 +53,7 @@ fi
 #include <assert.h>
 
 #pragma region AutomatedTests
-bool TestCommonsCompare() {
+static bool TestCommonsCompare() {
 	char* ForceNoSamePointer;
 	if (asprintf(&ForceNoSamePointer, "Hello World!") == -1) ABORT_NO_MEMORY;
 	int TestNo = 0;
@@ -74,11 +74,11 @@ bool TestCommonsCompare() {
 	return testPass;
 }
 
-bool TestCommonsCompareStrings() {
+static bool TestCommonsCompareStrings() {
 	return true;
 }
 
-bool TestCommonsStartsWith() {
+static bool TestCommonsStartsWith() {
 	char* ForceNoSamePointer;
 	if (asprintf(&ForceNoSamePointer, "Hello World!") == -1) ABORT_NO_MEMORY;
 	int TestNo = 0;
@@ -99,11 +99,11 @@ bool TestCommonsStartsWith() {
 	return testPass;
 }
 
-bool TestCommonsContainsString() {
+static bool TestCommonsContainsString() {
 	return true;
 }
 
-bool TestCommonsLastIndexOf() {
+static bool TestCommonsLastIndexOf() {
 	const char* teststring = "/some/string/0/~string~/";
 	int TestNo = 0;
 	bool testPass = true;
@@ -117,7 +117,7 @@ bool TestCommonsLastIndexOf() {
 	return testPass;
 }
 
-bool TestCommonsNextIndexOf() {
+static bool TestCommonsNextIndexOf() {
 	const char* teststring = "/some/string/0/~string~/";
 	int TestNo = 0;
 	bool testPass = true;
@@ -134,27 +134,47 @@ bool TestCommonsNextIndexOf() {
 	return testPass;
 }
 
-bool TestCommonsstrlen_visible() {
+static bool TestCommonsstrlen_visible() {
 	return true;
 }
 
-bool TestCommonsTerminateStrOn() {
+static bool TestCommonsTerminateStrOn() {
 	return true;
 }
 
-bool TestCommonsToLowerCase() {
+static bool TestCommonsToLowerCase() {
+	bool testPass = true;
+	for (char i = 0;i < 'A';i++) {
+		if (i != ToLowerCase(i)) {
+			testPass = false;
+			printf("TestToLowerCase Number %i failed\n", i);
+		}
+	}
+	for (char i = 'A';i <= 'Z';i++) {
+		if ((i + 0x20) != ToLowerCase(i)) {
+			testPass = false;
+			printf("TestToLowerCase Number %i failed\n", i);
+		}
+	}
+	for (char i = ('Z' + 1);i <= 0x7f;i++) {
+		if (i != ToLowerCase(i)) {
+			testPass = false;
+			printf("TestToLowerCase Number %i failed [%c/%c]\n", i, i, ToLowerCase(i));
+		}
+		if (i == 0x7f)break;//to allow the full range to be tested
+	}
+	return testPass;
+}
+
+static bool TestCommonsToUpperCase() {
 	return true;
 }
 
-bool TestCommonsToUpperCase() {
+static bool TestCommonsExecuteProcess_alloc() {
 	return true;
 }
 
-bool TestCommonsExecuteProcess_alloc() {
-	return true;
-}
-
-bool TestCommonsAbbreviatePath() {
+static bool TestCommonsAbbreviatePath() {
 	bool testPass = true;
 	int TestNo = 0;
 	char* res;

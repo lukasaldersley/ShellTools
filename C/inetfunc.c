@@ -5,7 +5,7 @@ exit
 #include "inetfunc.h"
 #include <regex.h>
 
-NetList* InitNetListElement() {
+static NetList* InitNetListElement() {
 	NetList* a = (NetList*)malloc(sizeof(NetList));
 	if (a == NULL) ABORT_NO_MEMORY;
 	NetDevice* e = &(a->dev);
@@ -19,7 +19,7 @@ NetList* InitNetListElement() {
 	return a;
 }
 
-NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* ipv4, int metric, bool isDefault, int IPV4cidr, const char* linkspeed, const char* routedNet) {
+static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* ipv4, int metric, bool isDefault, int IPV4cidr, const char* linkspeed, const char* routedNet) {
 	if (head != NULL && head->dev.isDefault == false && isDefault == true) {
 		abortMessage("assumption on the order of routes incorrect (assume default routes are listed first)");
 	}
@@ -135,7 +135,7 @@ NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* 
 	}
 }
 
-char* GetIfaceSpeed(const char* iface) {
+static char* GetIfaceSpeed(const char* iface) {
 	char* ret;
 	int size = 32;
 	char* result = (char*)malloc(sizeof(char) * size);

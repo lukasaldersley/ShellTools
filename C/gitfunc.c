@@ -8,7 +8,7 @@ exit
 #include <dirent.h>
 #include <regex.h>
 
-bool IsMergeCommit(const char* repoPath, const char* commitHash) {
+static bool IsMergeCommit(const char* repoPath, const char* commitHash) {
 	const int size = 32;
 	char* result = (char*)malloc(sizeof(char) * size);
 	if (result == NULL) ABORT_NO_MEMORY;
@@ -147,7 +147,7 @@ void AllocUnsetStringsToEmpty(RepoInfo* ri) {
 	if (ri->parentRepo == NULL) { ri->parentRepo = (char*)malloc(sizeof(char)); if (ri->parentRepo == NULL) { ABORT_NO_MEMORY; } ri->parentRepo[0] = 0x00; }
 }
 
-BranchListSorted* InitBranchListSortedElement() {
+static BranchListSorted* InitBranchListSortedElement() {
 	BranchListSorted* a = (BranchListSorted*)malloc(sizeof(BranchListSorted));
 	if (a == NULL) ABORT_NO_MEMORY;
 	BranchInfo* e = &(a->branchinfo);
@@ -539,7 +539,7 @@ bool pruneTreeForGit(RepoInfo* ri) {
 	return ri->isGit || hasGitInTree;
 }
 
-void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSameLevelEntryFollows, bool fullOut) {
+static void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anotherSameLevelEntryFollows, bool fullOut) {
 	if (ri == NULL) {
 		return;
 	}

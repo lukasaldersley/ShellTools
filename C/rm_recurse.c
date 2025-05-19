@@ -22,7 +22,7 @@ I should mention a simple rm -rf from WSL didn't fix the problem, I assume since
 #include "commons.h"
 #include <dirent.h>
 
-void func(const char* dir) {
+static void func(const char* dir) {
 	printf("start recursive rm on %s\n", dir);
 	DIR* directoryPointer;
 	directoryPointer = opendir(dir);

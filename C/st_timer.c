@@ -25,7 +25,7 @@ exit
 #include <time.h>
 #include <stdlib.h>
 
-void stopTimer(unsigned long long start) {
+static void stopTimer(unsigned long long start) {
 	struct timespec ts;
 	timespec_get(&ts, TIME_UTC);
 	uint64_t stop = ts.tv_sec * 10ULL + (ts.tv_nsec / 100000000ULL);

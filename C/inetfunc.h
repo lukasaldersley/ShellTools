@@ -21,12 +21,6 @@ struct NetList_t {
 	NetList* prev;
 };
 
-NetList* InitNetListElement();
-
-NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* ipv4, int metric, bool isDefault, int IPV4cidr, const char* linkspeed, const char* routedNet);
-
-char* GetIfaceSpeed(const char* iface);
-
 typedef struct {
 	char* BasicIPInfo;
 	char* AdditionalIPInfo;

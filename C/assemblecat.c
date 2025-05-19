@@ -33,11 +33,11 @@ fi
 #include <string.h>
 #include <getopt.h>
 
-bool in_list(char c, char* eqlist) {
+static bool in_list(char c, char* eqlist) {
 	if (eqlist == NULL) {
 		return false;
 	}
-	char* lptr = eqlist;
+	const char* lptr = eqlist;
 	while (*lptr != 0x00) {
 		if (*lptr == c) {
 			return true;
@@ -47,7 +47,7 @@ bool in_list(char c, char* eqlist) {
 	return false;
 }
 
-bool checkEquality(char a, char b, bool caseIndependant, char** eqlists, int numEQList) {
+static bool checkEquality(char a, char b, bool caseIndependant, char** eqlists, int numEQList) {
 	if (a == b || (caseIndependant && ToUpperCase(a) == ToUpperCase(b))) {
 		return true;
 	}
@@ -60,7 +60,7 @@ bool checkEquality(char a, char b, bool caseIndependant, char** eqlists, int num
 	return false;
 }
 
-int assemble(char* targetBuffer, int targetBufferLength, int alreadyFixedChars, char* newSegmentBuffer, int newSegmentBufferLength, char** equalityLists, int numEqualityLists, bool caseIndependant) {
+static int assemble(char* targetBuffer, int targetBufferLength, int alreadyFixedChars, const char* newSegmentBuffer, int newSegmentBufferLength, char** equalityLists, int numEqualityLists, bool caseIndependant) {
 	//the new segment is added at the end, so if I were to add only a single char I don't need to check anything but the last char of the already established text, but I mustn't start before the start of the buffer
 	int startOffset = alreadyFixedChars - newSegmentBufferLength;
 	if (startOffset < 0) {

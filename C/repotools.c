@@ -85,7 +85,7 @@ const char* profiling_label[PROFILE_COUNT] = {
 	"exit"
 };
 
-double calcProfilingTime(uint8_t startIndex, uint8_t stopIndex) {
+static double calcProfilingTime(uint8_t startIndex, uint8_t stopIndex) {
 	uint64_t tstart = profiling_timestamp[startIndex].tv_sec * 1000000ULL + (profiling_timestamp[startIndex].tv_nsec / 1000ULL);
 	uint64_t tstop = profiling_timestamp[stopIndex].tv_sec * 1000000ULL + (profiling_timestamp[stopIndex].tv_nsec / 1000ULL);
 	return (double)(tstop - tstart) / 1000.0;
@@ -111,7 +111,7 @@ typedef struct {
 	bool IsMains;
 } PowerBitField;
 
-uint8_t ParsePowerSupplyEntry(const char* directory, const char* dir, PowerBitField* field, char* obuf, uint8_t avlen) {
+static uint8_t ParsePowerSupplyEntry(const char* directory, const char* dir, PowerBitField* field, char* obuf, uint8_t avlen) {
 	//	if path/dir/type==Battery
 	//		path/dir/status to symbol
 	//		path/dir/charging_type for fast/slow charging symbol
@@ -250,7 +250,7 @@ uint8_t ParsePowerSupplyEntry(const char* directory, const char* dir, PowerBitFi
 	return len;
 }
 
-char* GetSystemPowerState() {
+static char* GetSystemPowerState() {
 #define POWER_CHARS_PER_BAT 64
 #define POWER_NUM_BAT 2
 #define POWER_CHARS_EXTPWR 8
@@ -313,7 +313,7 @@ char* GetSystemPowerState() {
 	return powerString;
 }
 
-bool CheckBranching(RepoInfo* ri) {
+static bool CheckBranching(RepoInfo* ri) {
 	//this method checks the status of all branches on a given repo
 	//and then computes how many differ, howm many up to date, how many branches local-only, how many branches remote-only
 	BranchListSorted* ListBase = NULL;
@@ -488,7 +488,7 @@ bool CheckBranching(RepoInfo* ri) {
 	This method provides me with a list of relative paths
 	*/
 
-bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoProcessWorktree, bool BeThorough) {
+static bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoProcessWorktree, bool BeThorough) {
 	//the return value is just: has this successfully executed
 
 	char* cmd;
@@ -773,7 +773,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 	return true;
 }
 
-RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, int newRepoSpec, bool BeThorough) {
+static RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, int newRepoSpec, bool BeThorough) {
 	RepoInfo* ri = AllocRepoInfo(directoryPath, directoryName);
 	if (BeThorough) {
 		//If I am searching thorough I need to know if I encountered a bare repo, so I need to check the current folder first.
@@ -816,7 +816,7 @@ RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, 
 	return ri;
 }
 
-void ListAvailableRemotes() {
+static void ListAvailableRemotes() {
 	for (int i = 0;i < numLOCS;i++) {
 		printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR " (-> %s), Group: %i\n", NAMES[i], LOCS[i], GROUPS[i]);
 	}
