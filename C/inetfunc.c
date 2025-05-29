@@ -135,13 +135,48 @@ static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const
 	}
 }
 
-static char* GetIfaceSpeed(const char* iface) {
-	char* ret;
+static bool DecodeIfaceSpeed(char* result, char** ret) {
+	TerminateStrOn(result, DEFAULT_TERMINATORS);
+	if (Compare(result, "")) {
+		return false;
+	}
+	if (Compare(result, "1000M")) {
+		if (asprintf(ret, "1G") == -1) ABORT_NO_MEMORY;
+		return true;
+	}
+	else if (Compare(result, "2500M")) {
+		if (asprintf(ret, "2.5G") == -1) ABORT_NO_MEMORY;
+		return true;
+	}
+	else if (Compare(result, "5000M")) {
+		if (asprintf(ret, "5G") == -1) ABORT_NO_MEMORY;
+		return true;
+	}
+	else if (Compare(result, "10000M")) {
+		if (asprintf(ret, "10G") == -1) ABORT_NO_MEMORY;
+		return true;
+	}
+	else if (Compare(result, "unknown")) {
+		return false;
+	}
+	else {
+		if (asprintf(ret, "%s", result) == -1) ABORT_NO_MEMORY;
+		return true;
+	}
+}
+
+static char* GetIfaceSpeed_int(const char* iface, bool IsBackup) {
+	char* ret = NULL;
 	int size = 32;
 	char* result = (char*)malloc(sizeof(char) * size);
 	if (result == NULL) ABORT_NO_MEMORY;
 	char* command;
-	if (asprintf(&command, "nmcli -g CAPABILITIES.SPEED device show %s 2>/dev/null | sed -E 's~([0-9]+) (.).+~\\1\\2~'", iface) == -1) ABORT_NO_MEMORY;
+	if (IsBackup) {
+		if (asprintf(&command, "ethtool %s 2>/dev/null | sed -nE 's~\tSpeed: ([0-9]+)([kMG])b/s~\\1\\2~p'", iface) == -1) ABORT_NO_MEMORY;
+	}
+	else {
+		if (asprintf(&command, "nmcli -g CAPABILITIES.SPEED device show %s 2>/dev/null | sed -E 's~([0-9]+) (.).+~\\1\\2~'", iface) == -1) ABORT_NO_MEMORY;
+	}
 	FILE* fp = popen(command, "r");
 	if (fp == NULL)
 	{
@@ -150,30 +185,26 @@ static char* GetIfaceSpeed(const char* iface) {
 	else {
 		while (fgets(result, size - 1, fp) != NULL)
 		{
-			TerminateStrOn(result, DEFAULT_TERMINATORS);
-			if (Compare(result, ""))continue;
-			if (Compare(result, "1000M")) {
-				if (asprintf(&ret, "1G") == -1) ABORT_NO_MEMORY;
+			if (DecodeIfaceSpeed(result, &ret)) {
+				break;
 			}
-			else if (Compare(result, "2500M")) {
-				if (asprintf(&ret, "2.5G") == -1) ABORT_NO_MEMORY;
-			}
-			else if (Compare(result, "5000M")) {
-				if (asprintf(&ret, "5G") == -1) ABORT_NO_MEMORY;
-			}
-			else if (Compare(result, "10000M")) {
-				if (asprintf(&ret, "10G") == -1) ABORT_NO_MEMORY;
-			}
-			else if (Compare(result, "unknown")) {
-				return NULL;
-			}
-			else {
-				if (asprintf(&ret, "%s", result) == -1) ABORT_NO_MEMORY;
-			}
-			return ret;
 		}
+		pclose(fp);
+		fp = NULL;
 	}
-	return NULL;
+	free(command);
+	command = NULL;
+	free(result);
+	result = NULL;
+	return ret;
+}
+
+static char* GetIfaceSpeed(const char* iface) {
+	char* val = GetIfaceSpeed_int(iface, false);
+	if (val == NULL) {
+		val = GetIfaceSpeed_int(iface, true);
+	}
+	return val;
 }
 
 IpTransportStruct GetBaseIPString() {

@@ -491,7 +491,7 @@ static void CopyErrorByteToBuffer(char UTF8DestBuf[], const char* CodePoint) {
 	printf("ERROR: invalid Unicode codepoint >%s<\n", CodePoint);
 }
 
-static bool ParseUnicodeToUTF8(const char* CodePoint, char UTF8DestBuf[]) {
+static bool ParseUnicodeCPToUTF8String(const char* CodePoint, char UTF8DestBuf[]) {
 	if (CodePoint[0] == 'U' && CodePoint[1] == '+') {
 		//actual unicode decode
 		char* RestChar;
@@ -529,7 +529,7 @@ static bool ParseUnicodeToUTF8(const char* CodePoint, char UTF8DestBuf[]) {
 			//UTF8DestBuf[2] = (char)(((integercp >> 0) & 0x3F) | 0x80);
 			UTF8DestBuf[0] = (char)(((integercp >> 12) & 0b00001111) | 0b11100000);
 			UTF8DestBuf[1] = (char)(((integercp >> 6) & 0b00111111) | 0b10000000);
-			UTF8DestBuf[2] = (char)(((integercp >> 0) & 0b00111111) | 0b10000000);
+			UTF8DestBuf[2] = (char)((integercp & 0b00111111) | 0b10000000);
 			UTF8DestBuf[3] = 0;
 			return true;
 		}
@@ -550,7 +550,7 @@ static bool ParseUnicodeToUTF8(const char* CodePoint, char UTF8DestBuf[]) {
 		}
 	}
 	else {
-		//not supported format
+		//not supported format (doesn't start  with U+)
 
 		CopyErrorByteToBuffer(UTF8DestBuf, CodePoint);
 		return false;
@@ -565,6 +565,6 @@ bool ParseCharOrCodePoint(const char* Input, char DestBuf[]) {
 		return true;
 	}
 	else {
-		return ParseUnicodeToUTF8(Input, DestBuf);
+		return ParseUnicodeCPToUTF8String(Input, DestBuf);
 	}
 }
