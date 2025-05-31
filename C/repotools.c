@@ -1764,7 +1764,8 @@ int main(int argc, char** argv)
 		return 0;
 	}
 	else if (IsLowPrompt) {
-		printf("%s%%{\e[36m\e[1m%%} ", CONFIG_LOWPROMPT_START_CHAR);
+		//once again a single unicode char and escape sequence -> mark as escape sequence for ZSH with %{...%} and add %G to signify glitch (the unicode char)
+		printf("%%{%%G%s%%}%%{\e[36m\e[1m %%}", CONFIG_LOWPROMPT_START_CHAR);
 		if (CONFIG_LOWPROMPT_PATH_LIMIT) {
 			int chars = 0;
 			switch (CONFIG_LOWPROMPT_PATH_MAXLEN) {
@@ -1932,7 +1933,8 @@ int main(int argc, char** argv)
 			}
 			printf("]");
 		}
-		printf("%%{%s\e[0m  %%}", CONFIG_LOWPROMPT_END_CHAR);
+		//escape sequence and a singe unicode char -> treat as single char
+		printf("%%{%%G%s%%}%%{\e[0m  %%}", CONFIG_LOWPROMPT_END_CHAR);
 	}
 	else {
 		printf("unknown command %s\n", argv[1]);
