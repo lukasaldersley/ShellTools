@@ -1,4 +1,5 @@
 <!-- markdownlint-disable MD010 -->
+<!--MD010 is a rule to use spaces instead of tabs for indentation which I strongly disagree with-->
 
 # ShellTools
 
@@ -44,6 +45,16 @@ Some Design choices made sense at the time but are kind of legacy at this point,
 	+ This *should* automatically install/set up ShellTools.
 	+ If not (or if you want to update ShellTools) run `UpdateZSH` or `uz` to fetch the repo and recompile everything.
 5) enjoy
+
+## Configuration
+
+Shelltools can be configured with the file `$ST_CFG/config.cfg`.<br>
+If that file doesn't exist, it will be automatically created from [DEFAULTCONFIG.cfg](DEFAULTCONFIG.cfg).<br>
+Once `$ST_CFG/config.cfg` exists ShellTools will *not* change/update it.<br>
+Should new configuration options become availabe it will be up to you to add those to your config file.<br>
+It is not mandatory to have all available configuration options present in your config file. For any missing options the default values (as seen in `DEFAULTCONFIG.cfg`) will be used implicitly.<br>
+The config file contains it's own documentation as comments. Please make sure to read those carefully.<br>
+When updating your local config file with newly introduced options, it is not mandatory to also update the expanatory comments, but it is highly advisable.
 
 ## Extensions
 

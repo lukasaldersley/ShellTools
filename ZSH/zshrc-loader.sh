@@ -132,6 +132,9 @@ alias cat-assemble='$ST_CFG/assemblecat.elf'
 alias argtest='$ST_CFG/argtest.elf'
 alias rm-recurse='$ST_CFG/rm_recurse.elf'
 
+alias force-git-enable='touch "$ST_CFG/forcegit"'
+alias force-git-disable='rm "$ST_CFG/forcegit"'
+
 #custom git log
 #e -> extended (name), x-> exact (author/committer)
 alias   gitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as/%C(auto)%ar]%d %C(brightblack)%ae:%C(auto) %s\" HEAD"

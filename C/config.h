@@ -15,6 +15,11 @@ extern char* GitHubs[];
 extern uint8_t numGitHubs;
 extern uint8_t numLOCS;
 
+extern char* GIT_EXCLUSIONS[];
+extern uint8_t numGitExclusions;
+
+extern bool CONFIG_GIT_AUTO_RESTORE_EXCLUSION;
+
 extern bool CONFIG_LOWPROMPT_PATH_LIMIT;
 extern int CONFIG_LOWPROMPT_PATH_MAXLEN;
 extern bool CONFIG_LOWPROMPT_RETCODE;

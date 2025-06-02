@@ -101,6 +101,7 @@ RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName) {
 	ri->RepositoryOriginID = -1;
 	ri->RepositoryOriginID_PREVIOUS = -1;
 	ri->isGit = false;
+	ri->isGitDisabled = false;
 	ri->isSubModule = false;
 	ri->isBare = false;
 	ri->DirtyWorktree = false;

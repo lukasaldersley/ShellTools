@@ -13,6 +13,11 @@ char* GitHubs[MaxLocations];
 uint8_t numGitHubs = 0;
 uint8_t numLOCS = 0;
 
+char* GIT_EXCLUSIONS[MaxLocations];
+uint8_t numGitExclusions;
+
+bool CONFIG_GIT_AUTO_RESTORE_EXCLUSION = true;
+
 bool CONFIG_LOWPROMPT_PATH_LIMIT = true;
 int CONFIG_LOWPROMPT_PATH_MAXLEN = -3;
 bool CONFIG_LOWPROMPT_RETCODE = true;
@@ -245,12 +250,40 @@ void DoSetup() {
 					continue;
 				}
 				//found host
-				if (asprintf(&GitHubs[numGitHubs], "%s", buf + 13) == -1) { fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!"); }
-				//the +6 is the offset to just after "HOST:	"
+				if (asprintf(&GitHubs[numGitHubs], "%s", buf + 13) == -1) {
+					fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!");
+					continue;
+				}
+				else {
 #ifdef DEBUG
-				printf("host>%s<\n", GitHubs[numGitHubs]);
+					printf("host>%s<\n", GitHubs[numGitHubs]);
 #endif
-				numGitHubs++;
+					numGitHubs++;
+				}
+				//the +13 is the offset to just after "GITHUB_HOST:	"
+			}
+			else if (StartsWith(buf, "GIT_EXCLUSION:	")) {
+				if (numGitExclusions >= (MaxLocations - 1)) {
+					fprintf(stderr, "WARNING: YOU HAVE CONFIGURED MORE THAN %1$i GIT_EXCLUSION ENTRIES. ONLY THE FIRST %1$i WILL BE USED\n", MaxLocations);
+					continue;
+				}
+				//found host
+				if (asprintf(&GIT_EXCLUSIONS[numGitExclusions], "%s", buf + 15) == -1) {
+					fprintf(stderr, "WARNING: not enough memory, provisionally continuing, be prepared!");
+					continue;
+				}
+				else {
+#ifdef DEBUG
+					printf("git-exclusions>%s<\n", GIT_EXCLUSIONS[numGitExclusions]);
+#endif
+					numGitExclusions++;
+				}
+			}
+			else if (StartsWith(buf, "REPOTOOLS.GIT.AUTO_RESTORE_EXCLUSION:	")) {
+				CONFIG_GIT_AUTO_RESTORE_EXCLUSION = Compare("true", buf + 38);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_GIT_AUTO_RESTORE_EXCLUSION);
+#endif
 			}
 			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.MAXBRANCHES:	")) {
 				CONFIG_LSGIT_QUICK_BRANCHLIMIT = atoi(buf + 35);

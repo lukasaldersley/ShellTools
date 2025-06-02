@@ -1378,10 +1378,39 @@ int main(int argc, char** argv)
 			fflush(stdout);
 			RepoInfo* ri = AllocRepoInfo("", path);
 			//only test git if git is enabled at all
-			if (CONFIG_PROMPT_GIT && !TestPathForRepoAndParseIfExists(ri, -1, true, true)) {
-				//if TestPathForRepoAndParseIfExists fails it'll do it's own cleanup (= deallocation etc)
-				fprintf(stderr, "error at main: TestPathForRepoAndParseIfExists returned null\n");
-				return 1;
+			if (CONFIG_PROMPT_GIT) {
+				char* overridefile;
+				if (asprintf(&overridefile, "%s/forcegit", getenv("ST_CFG")) == -1)ABORT_NO_MEMORY;
+
+				bool hasOverride = (access(overridefile, F_OK) != -1);
+				bool allowTesting = true;
+				if (hasOverride == false) {//I only need to check the exclusions if I don't have an override
+					for (int i = 0;i < numGitExclusions;i++) {
+						if (StartsWith(path, GIT_EXCLUSIONS[i])) {
+							allowTesting = false;
+							break;
+						}
+					}
+				}
+				else {
+					//I have an override
+					if (CONFIG_GIT_AUTO_RESTORE_EXCLUSION) {
+						//override needs to be reset
+						remove(overridefile);
+					}
+				}
+				free(overridefile);
+				overridefile = NULL;
+				if (allowTesting) {
+					if (!TestPathForRepoAndParseIfExists(ri, -1, true, true)) {
+						//if TestPathForRepoAndParseIfExists fails it'll do it's own cleanup (= deallocation etc)
+						fprintf(stderr, "error at main: TestPathForRepoAndParseIfExists returned null\n");
+						return 1;
+					}
+				}
+				else {
+					ri->isGitDisabled = true;
+				}
 			}
 			AllocUnsetStringsToEmpty(ri);
 
@@ -1403,74 +1432,79 @@ int main(int argc, char** argv)
 			int gitSegment5_commitStatus_len = 0;
 			int gitSegment6_gitStatus_len = 0;
 
-			if (CONFIG_PROMPT_GIT && ri->isGit) {
-				if (CONFIG_GIT_REPOTYPE) {
-					if (asprintf(&gitSegment1_BaseMarkerStart, " [" COLOUR_GIT_BARE "%s" COLOUR_GIT_INDICATOR "GIT%s", ri->isBare ? "BARE " : "", ri->isSubModule ? "-SM" : "") == -1) ABORT_NO_MEMORY;//[%F{006}BARE %F{002}GIT-SM
-					if (ri->isSubModule && CONFIG_GIT_REPOTYPE_PARENT) {
-						if (asprintf(&gitSegment2_parentRepoLoc, COLOUR_CLEAR "@" COLOUR_GIT_PARENT "%s" COLOUR_CLEAR, ri->parentRepo) == -1) ABORT_NO_MEMORY;
+			if (CONFIG_PROMPT_GIT) {
+				if (ri->isGitDisabled) {
+					if (asprintf(&gitSegment1_BaseMarkerStart, " [GIT DISABLED]") == -1) ABORT_NO_MEMORY;
+				}
+				else if (ri->isGit) {
+					if (CONFIG_GIT_REPOTYPE) {
+						if (asprintf(&gitSegment1_BaseMarkerStart, " [" COLOUR_GIT_BARE "%s" COLOUR_GIT_INDICATOR "GIT%s", ri->isBare ? "BARE " : "", ri->isSubModule ? "-SM" : "") == -1) ABORT_NO_MEMORY;//[%F{006}BARE %F{002}GIT-SM
+						if (ri->isSubModule && CONFIG_GIT_REPOTYPE_PARENT) {
+							if (asprintf(&gitSegment2_parentRepoLoc, COLOUR_CLEAR "@" COLOUR_GIT_PARENT "%s" COLOUR_CLEAR, ri->parentRepo) == -1) ABORT_NO_MEMORY;
+						}
 					}
-				}
-				if (gitSegment1_BaseMarkerStart == NULL) {
-					gitSegment1_BaseMarkerStart = malloc(sizeof(char) * 1);
-					if (gitSegment1_BaseMarkerStart == NULL) ABORT_NO_MEMORY;
-					gitSegment1_BaseMarkerStart[0] = 0x00;
-				}
-				if (gitSegment2_parentRepoLoc == NULL) {
-					gitSegment2_parentRepoLoc = malloc(sizeof(char) * 1);
-					if (gitSegment2_parentRepoLoc == NULL) ABORT_NO_MEMORY;
-					gitSegment2_parentRepoLoc[0] = 0x00;
-				}
+					if (gitSegment1_BaseMarkerStart == NULL) {
+						gitSegment1_BaseMarkerStart = malloc(sizeof(char) * 1);
+						if (gitSegment1_BaseMarkerStart == NULL) ABORT_NO_MEMORY;
+						gitSegment1_BaseMarkerStart[0] = 0x00;
+					}
+					if (gitSegment2_parentRepoLoc == NULL) {
+						gitSegment2_parentRepoLoc = malloc(sizeof(char) * 1);
+						if (gitSegment2_parentRepoLoc == NULL) ABORT_NO_MEMORY;
+						gitSegment2_parentRepoLoc[0] = 0x00;
+					}
 
-				char* gitBranchInfo = NULL;
-				if (!ri->isBare && CONFIG_GIT_BRANCHSTATUS) {
-					gitBranchInfo = ConstructGitBranchInfoString(ri);
-				}
-				else {
-					gitBranchInfo = malloc(sizeof(char));
-					if (gitBranchInfo == NULL) ABORT_NO_MEMORY;
-					gitBranchInfo[0] = 0x00;
-				}
-				char* temp1_reponame = NULL;
-				char* temp2_branchname = NULL;
-				char* temp3_branchoverview = NULL;
-				if (asprintf(&temp1_reponame, " "COLOUR_GIT_NAME"%s", ri->RepositoryName) == -1) ABORT_NO_MEMORY;
-				if (asprintf(&temp2_branchname, COLOUR_CLEAR " on "COLOUR_GIT_BRANCH "%s", ri->branch) == -1) ABORT_NO_MEMORY;
-				if (asprintf(&temp3_branchoverview, "/%i+%i", ri->CountActiveBranches, ri->CountFullyMergedBranches) == -1) ABORT_NO_MEMORY;
-				if (asprintf(&gitSegment3_BaseMarkerEnd, COLOUR_CLEAR "%s" "%s%s" COLOUR_GREYOUT "%s%s%s" COLOUR_CLEAR,
-					CONFIG_GIT_REPOTYPE ? "]" : "",
-					CONFIG_GIT_REPONAME ? temp1_reponame : "",
-					CONFIG_GIT_BRANCHNAME ? temp2_branchname : "",
-					CONFIG_GIT_BRANCH_OVERVIEW && CONFIG_GIT_BRANCHNAME ? temp3_branchoverview : "",
-					(CONFIG_GIT_BRANCHSTATUS && (CONFIG_GIT_BRANCHNAME || CONFIG_GIT_REPONAME)) ? ":" : "",
-					gitBranchInfo) == -1) ABORT_NO_MEMORY;
+					char* gitBranchInfo = NULL;
+					if (!ri->isBare && CONFIG_GIT_BRANCHSTATUS) {
+						gitBranchInfo = ConstructGitBranchInfoString(ri);
+					}
+					else {
+						gitBranchInfo = malloc(sizeof(char));
+						if (gitBranchInfo == NULL) ABORT_NO_MEMORY;
+						gitBranchInfo[0] = 0x00;
+					}
+					char* temp1_reponame = NULL;
+					char* temp2_branchname = NULL;
+					char* temp3_branchoverview = NULL;
+					if (asprintf(&temp1_reponame, " "COLOUR_GIT_NAME"%s", ri->RepositoryName) == -1) ABORT_NO_MEMORY;
+					if (asprintf(&temp2_branchname, COLOUR_CLEAR " on "COLOUR_GIT_BRANCH "%s", ri->branch) == -1) ABORT_NO_MEMORY;
+					if (asprintf(&temp3_branchoverview, "/%i+%i", ri->CountActiveBranches, ri->CountFullyMergedBranches) == -1) ABORT_NO_MEMORY;
+					if (asprintf(&gitSegment3_BaseMarkerEnd, COLOUR_CLEAR "%s" "%s%s" COLOUR_GREYOUT "%s%s%s" COLOUR_CLEAR,
+						CONFIG_GIT_REPOTYPE ? "]" : "",
+						CONFIG_GIT_REPONAME ? temp1_reponame : "",
+						CONFIG_GIT_BRANCHNAME ? temp2_branchname : "",
+						CONFIG_GIT_BRANCH_OVERVIEW && CONFIG_GIT_BRANCHNAME ? temp3_branchoverview : "",
+						(CONFIG_GIT_BRANCHSTATUS && (CONFIG_GIT_BRANCHNAME || CONFIG_GIT_REPONAME)) ? ":" : "",
+						gitBranchInfo) == -1) ABORT_NO_MEMORY;
 
-				if (gitBranchInfo != NULL)free(gitBranchInfo);
-				if (CONFIG_GIT_REMOTE) {
-					if (asprintf(&gitSegment4_remoteinfo, " from " COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin) == -1) ABORT_NO_MEMORY;
-				}
-				if (gitSegment4_remoteinfo == NULL) {
-					gitSegment4_remoteinfo = malloc(sizeof(char) * 1);
-					if (gitSegment4_remoteinfo == NULL) ABORT_NO_MEMORY;
-					gitSegment4_remoteinfo[0] = 0x00;
-				}
-#ifdef PROFILING
-				timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_GitBranchObtained]), TIME_UTC);
-#endif
-				if (!ri->isBare) {
-					if (CONFIG_GIT_COMMIT_OVERVIEW) {
-						gitSegment5_commitStatus = ConstructCommitStatusString(ri);
+					if (gitBranchInfo != NULL)free(gitBranchInfo);
+					if (CONFIG_GIT_REMOTE) {
+						if (asprintf(&gitSegment4_remoteinfo, " from " COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin) == -1) ABORT_NO_MEMORY;
+					}
+					if (gitSegment4_remoteinfo == NULL) {
+						gitSegment4_remoteinfo = malloc(sizeof(char) * 1);
+						if (gitSegment4_remoteinfo == NULL) ABORT_NO_MEMORY;
+						gitSegment4_remoteinfo[0] = 0x00;
 					}
 #ifdef PROFILING
-					timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_CommitOverview]), TIME_UTC);
+					timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_GitBranchObtained]), TIME_UTC);
 #endif
-					if (CONFIG_GIT_LOCALCHANGES) {
-						gitSegment6_gitStatus = ConstructGitStatusString(ri);
-					}
+					if (!ri->isBare) {
+						if (CONFIG_GIT_COMMIT_OVERVIEW) {
+							gitSegment5_commitStatus = ConstructCommitStatusString(ri);
+						}
 #ifdef PROFILING
-					timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_GitStatus]), TIME_UTC);
+						timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_CommitOverview]), TIME_UTC);
 #endif
-				}
+						if (CONFIG_GIT_LOCALCHANGES) {
+							gitSegment6_gitStatus = ConstructGitStatusString(ri);
+						}
+#ifdef PROFILING
+						timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_GitStatus]), TIME_UTC);
+#endif
+					}
 
+				}
 			}
 			if (gitSegment1_BaseMarkerStart == NULL) {
 				gitSegment1_BaseMarkerStart = malloc(sizeof(char) * 1);

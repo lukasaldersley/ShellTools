@@ -56,6 +56,7 @@ struct RepoInfo_t {
 	int RepositoryOriginID;
 	int RepositoryOriginID_PREVIOUS;
 	bool isGit;
+	bool isGitDisabled;
 	bool isSubModule;
 	bool isBare;
 	bool DirtyWorktree;
