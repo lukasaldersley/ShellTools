@@ -4,6 +4,7 @@ exit
 */
 #include "commons.h"
 #include "config.h"
+#include "gitfunc.h"
 #include <regex.h>
 
 char* NAMES[MaxLocations];
@@ -12,6 +13,7 @@ int8_t GROUPS[MaxLocations];
 char* GitHubs[MaxLocations];
 uint8_t numGitHubs = 0;
 uint8_t numLOCS = 0;
+bool CONFIG_DISABLE_LOCS_CHECKING = false;
 
 char* GIT_EXCLUSIONS[MaxLocations];
 uint8_t numGitExclusions;
@@ -222,6 +224,7 @@ void DoSetup() {
 				}
 				int len = ConfigRegexGroups[ConfigRegexURL].rm_eo - ConfigRegexGroups[ConfigRegexURL].rm_so;
 				if (len > 0) {
+					//run fiximplicitProtocol and warn if there's differences. (do it after everything in config has been read to facilitate disabling via config)
 					LOCS[numLOCS] = malloc(sizeof(char) * (len + 1));
 					if (LOCS[numLOCS] == NULL) ABORT_NO_MEMORY;
 					strncpy(LOCS[numLOCS], buf + ConfigRegexGroups[ConfigRegexURL].rm_so, len);
@@ -243,6 +246,13 @@ void DoSetup() {
 #endif
 				numLOCS++;
 
+			}
+
+			else if (StartsWith(buf, "DISABLE_ORIGIN_ALIAS_ERROR_CHECKING:	")) {
+				CONFIG_DISABLE_LOCS_CHECKING = Compare("true", buf + 37);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_DISABLE_LOCS_CHECKING);
+#endif
 			}
 			else if (StartsWith(buf, "GITHUB_HOST:	")) {
 				if (numGitHubs >= (MaxLocations - 1)) {
@@ -643,6 +653,15 @@ void DoSetup() {
 	}
 	fclose(fp);
 	free(buf);
+	if (!CONFIG_DISABLE_LOCS_CHECKING) {
+		for (int i = 0;i < numLOCS;i++) {
+			char* temp = FixImplicitProtocol(LOCS[i]);
+			if (!Compare(temp, LOCS[i])) {
+				fprintf(stderr, "WARNING: one of your ORIGIN_ALIAS definitions (%s) has an implicit protocol, please correct it (likely should be %s).\n\tIf you are sure it works as you expect, you can disable this warning in the config file (DISABLE_ORIGIN_ALIAS_ERROR_CHECKING:	true)\n", LOCS[i], temp);
+			}
+			free(temp);
+		}
+	}
 	if (UnknownConfig) {
 		fprintf(stderr, "WARNING: You have unknown entires in your config file (%s/config.cfg).\n\tPlease check the template at %s/DEFAULTCONFIG.cfg for a list of all understood options and correct your own config file\n", getenv("ST_CFG"), getenv("ST_SRC"));
 	}

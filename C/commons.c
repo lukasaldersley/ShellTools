@@ -320,7 +320,7 @@ char* ExecuteProcess_alloc(const char* command) {
 int AbbreviatePathAuto(char** ret, const char* path, uint16_t KeepAllIfShorterThan, uint8_t DesiredKeepElements) {
 	//plausi-check the number of elements to keep and distribute them between front and back, ensure there is at least one back element
 	if (DesiredKeepElements < 1) {
-		//if the number of KeepFront and KeepBack are both 0, I designed AbbreviatePath to act as sumb truncation or error out if the given length is less than 5 (for [...])
+		//if the number of KeepFront and KeepBack are both 0, I designed AbbreviatePath to act as dumb truncation or error out if the given length is less than 5 (for [...])
 		//in my Shell I always want at least one element, therefore force at least one element
 		DesiredKeepElements = 1;
 	}

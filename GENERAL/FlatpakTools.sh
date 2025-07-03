@@ -12,4 +12,4 @@ fi
 
 # Flatpak remote-ls --updates uses the same logic as flatpak list, the confirmation for flatpak update (the actual update command does show the locale packages)
 
-printf "Out of %s installed flatpaks (%s apps) [flatpak list interpretation, Ignoring Localisation], there are %s to be updated\n" "$(flatpak list | tail -n+1 | wc -l)" "$(find /var/lib/flatpak/app -maxdepth 1 -mindepth 1 -type d | wc -l)" "$(flatpak remote-ls --updates | tail -n+1 | wc -l)"
+printf "Out of %s installed flatpaks (%s apps) [flatpak list interpretation, Ignoring Localisation], there are %s to be updated\n" "$(flatpak list | tail -n+1 | wc -l)" "$(find /var/lib/flatpak/app -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)" "$(flatpak remote-ls --updates | tail -n+1 | wc -l)"

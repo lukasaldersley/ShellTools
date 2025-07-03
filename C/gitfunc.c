@@ -314,7 +314,67 @@ char* FixImplicitProtocol(const char* input)
 	if (ContainsString(input, "@") && !ContainsString(input, "://"))
 	{
 		// repo contains @ but not :// ie it is a ssh://, but ssh:// is implicit
-		if (asprintf(&reply, "ssh://%s", input) == -1) ABORT_NO_MEMORY;
+		//if ^(.*@[-a-zA-Z_\.0-9]+)(:[0-9]+){0,1}:([^0-9]*/.*)$ matches, the string contains one of github's idiosyncracies where they have git urls of git@github.com:username/repo.git, which do not work if you prepend ssh:// to it as ssh would treat :username as part of the host (more specifically it'd see username as port spec), if the sequence is host:port/whatever or even host:/whatever I can prepend ssh:// for clarity. in that case, replace the : with / and prepend ssh://
+		//if so, replace it with ssh://$1$2/$3  group 2 in there is to support if someone has a different ssh port assigned
+		uint8_t ghFixRegexGroupCount = 5;
+		regmatch_t ghFixRegexGroups[ghFixRegexGroupCount];
+		regex_t ghFixRegex;
+		const char* ghFixRegexString = "^(.*@[-a-zA-Z_\\.0-9]+)(:[0-9]+){0,1}:([^0-9]*(/.*){0,1})$"; //the last bit with (/.*){0,1} is to allow, but not require anything after the user name on github (relevant for origin definitions)
+#define GitHubFixHost 1
+#define GitHubFixPort 2
+#define GitHubFixRestRepo 3
+		int ghFixRegexReturnCode;
+		ghFixRegexReturnCode = regcomp(&ghFixRegex, ghFixRegexString, REG_EXTENDED | REG_NEWLINE);
+		if (ghFixRegexReturnCode)
+		{
+			char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
+			if (regErrorBuf == NULL) ABORT_NO_MEMORY;
+			regerror(ghFixRegexReturnCode, &ghFixRegex, regErrorBuf, 1024);
+			printf("Could not compile regular expression '%s'. [%i(%s)]\n", ghFixRegexString, ghFixRegexReturnCode, regErrorBuf);
+			fflush(stdout);
+			free(regErrorBuf);
+			exit(1);
+		};
+
+		ghFixRegexReturnCode = regexec(&ghFixRegex, input, ghFixRegexGroupCount, ghFixRegexGroups, 0);
+		//man regex (3): regexec() returns zero for a successful match or REG_NOMATCH for failure.
+		if (ghFixRegexReturnCode == 0) {
+			int len = ghFixRegexGroups[0].rm_eo - ghFixRegexGroups[0].rm_so;
+			if (len > 0) {
+				uint8_t used_reply_len = 0;
+				int tlen = (len + 1 + 6); //total max length is 6 for ssh:// plus the existing string length plus 1 for terminating zero
+				reply = malloc(sizeof(char) * tlen);
+				if (reply == NULL)ABORT_NO_MEMORY;
+				reply[0] = 0x00;
+				used_reply_len += snprintf(reply, tlen - (used_reply_len + 1), "ssh://");
+
+				int ilen = ghFixRegexGroups[GitHubFixHost].rm_eo - ghFixRegexGroups[GitHubFixHost].rm_so;
+				if (ilen > 0) {
+					strncpy(reply + used_reply_len, input + ghFixRegexGroups[GitHubFixHost].rm_so, ilen);
+					used_reply_len += ilen;
+				}
+
+				ilen = ghFixRegexGroups[GitHubFixPort].rm_eo - ghFixRegexGroups[GitHubFixPort].rm_so;
+				if (ilen > 1) { //this is >1 to ensure there actually is a number following the :
+					strncpy(reply + used_reply_len, input + ghFixRegexGroups[GitHubFixPort].rm_so, ilen);
+					used_reply_len += ilen;
+				}
+
+				used_reply_len += snprintf(reply + used_reply_len, tlen - (used_reply_len), "/");
+
+				ilen = ghFixRegexGroups[GitHubFixRestRepo].rm_eo - ghFixRegexGroups[GitHubFixRestRepo].rm_so;
+				if (ilen > 0) {
+					strncpy(reply + used_reply_len, input + ghFixRegexGroups[GitHubFixRestRepo].rm_so, ilen);
+					used_reply_len += ilen;
+				}
+				reply[used_reply_len] = 0x00;
+			}
+		}
+		else {
+			//no need to fix github's weirdness -> just simply prepend ssh://
+			if (asprintf(&reply, "ssh://%s", input) == -1) ABORT_NO_MEMORY;
+		}
+		regfree(&ghFixRegex);
 	}
 	else
 	{

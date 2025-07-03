@@ -14,6 +14,7 @@ extern int8_t GROUPS[];
 extern char* GitHubs[];
 extern uint8_t numGitHubs;
 extern uint8_t numLOCS;
+extern bool CONFIG_DISABLE_LOCS_CHECKING;
 
 extern char* GIT_EXCLUSIONS[];
 extern uint8_t numGitExclusions;

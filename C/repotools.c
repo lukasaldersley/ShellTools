@@ -629,7 +629,7 @@ static bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, boo
 
 			char* sedCmd;
 			//this regex is basically:
-			//^(?<proto>[-\w+])://(?:(?<user>[-\w]+)@)?(?<host>[-\.\w]+)(?::(?<port>\d+))?(?:[:/](?<remotePath_GitHubUser>[-\w]+))?.*/(?<reponame>[-\w]+)(?:\.git/?)?$ //this is the debuggin version for regex101.com (PCRE<7.3, delimiter ~)
+			//^(?<proto>[-a-zA-Z0-9_]+)://(?:(?<user>[-a-zA-Z0-9_]+)@){0,1}(?<host>[-\.0-9a-zA-Z_]+)(?::(?<port>[0-9]+)){0,1}(?:[:/](?<remotePath_GitHubUser>[-0-9a-zA-Z_]+)){0,1}.*/(?<reponame>[-0-9a-zA-Z_]+)(?:\.git/{0,1}){0,1}$ //this is the debuggin version for regex101.com (PCRE<7.3, delimiter ~)
 			//sed does not have non-capturing groups, so all non-capturing groups are included in the group count
 			//the mapping of sed-groups to the regex101 groups is as follows:
 			//1->protoc
@@ -643,7 +643,7 @@ static bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, boo
 			//9->reponame
 			//10->Non-Capturing(.git)
 			//DO NOT CHANGE THIS REGEX WITHOUT UPDATING THE Regex101 VARIANT, THE GROUP DEFINITIONS AND THE DESCRIPTION
-			if (asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin) == -1) ABORT_NO_MEMORY;
+			if (asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-\\.0-9a-zA-Z_]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin) == -1) ABORT_NO_MEMORY;
 			//I take the capturing groups and paste them into a | seperated sting. There's 6 words (5 |), so I'll need 6 pointers into this memory area to resolve the six words
 			const int REPO_ORIGIN_WORDS_IN_STRING = 6;
 			const int REPO_ORIGIN_GROUP_PROTOCOL = 0;
@@ -1828,7 +1828,7 @@ int main(int argc, char** argv)
 					break;
 				}
 			default: {
-					chars = CONFIG_LOWPROMPT_PATH_MAXLEN;
+					chars = CONFIG_LOWPROMPT_PATH_MAXLEN < 0 ? 0 : CONFIG_LOWPROMPT_PATH_MAXLEN;
 				}
 			}
 			int segments = chars / 16; //impose a limit on how many segments make sense. if the terminal is 256 wide, chars would be 64 (with my default 1/4 setup) and I would allow 4 segements

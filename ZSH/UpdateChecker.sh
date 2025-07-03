@@ -13,7 +13,7 @@ ST_diff=$((ST_DateNow-ST_DateLast))
 unset ST_DateNow
 unset ST_DateNow
 if [ $ST_diff -gt $ST_UpdateTargetDiff ]; then
-	printf "[INFO] Last known successfull fetch of ShellTools was more than %s days ago (on %s). Checking now.\n" "$ST_UPDATE_INTERVAL_DAYS" "$(date --date="@$(cat "$ST_CFG"/.lastfetch)" +'%Y-%m-%dT%H:%M:%S%z (%Z)')"
+	printf "[INFO] Last known successfull fetch of ShellTools was more than %s days ago (on %s).\nChecking now. If applicable auto-update will be prompted next login\n" "$ST_UPDATE_INTERVAL_DAYS" "$(date --date="@$(cat "$ST_CFG"/.lastfetch)" +'%Y-%m-%dT%H:%M:%S%z (%Z)')"
 	if git -C "$ST_SRC" fetch 1>/dev/null 2>&1 ; then
 		date +%s > "$ST_CFG/.lastfetch"
 	fi

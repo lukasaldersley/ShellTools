@@ -81,6 +81,7 @@ UpdateShellTools(){
 	ST_CoreUpdate "$@"
 }
 
+#Notify about updates if the currently checked out branch is behind origin
 ST_NUM_UPDATE_COMMITS="$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | sed -nE 's~# branch.ab.*-([0-9]+)~\1~p')"
 if [ "$ST_NUM_UPDATE_COMMITS" -gt 0 ]; then
 #if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | grep  branch.ab)" != "# branch.ab +0 -0" ]; then
@@ -98,6 +99,7 @@ if [ "$ST_NUM_UPDATE_COMMITS" -gt 0 ]; then
 fi
 unset ST_NUM_UPDATE_COMMITS
 
+#Ensure the config directory and at the basic elfs exist
 if [ ! -e "$ST_CFG" ] || [ ! -e "$ST_CFG/repotools.elf" ]; then
 	echo "$ST_CFG directory or repotools binary didn't exist -> creating now"
 	mkdir -p "$ST_CFG"
@@ -142,7 +144,8 @@ alias  egitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%
 alias  xgitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae|%ce:%C(auto) %s\" HEAD"
 alias exgitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae(%an)|%ce(%cn):%C(auto) %s\" HEAD"
 alias procowners="sudo ps axo user:64 |sort|uniq"
-alias gitupdate="git submodule foreach git pull --ff-only --prune ; git pull --ff-only --prune"
+alias gitupdate='git submodule foreach --recursive '\''{ if git symbolic-ref --short HEAD >/dev/null 2>&1 ; then git pull --ff-only --prune ; else printf "%s is not on a branch -> skip\n" "$(pwd)" ; fi }'\'' ; git pull --ff-only --prune'
+alias ff='STBREF="$(git symbolic-ref --short HEAD 2>/dev/null)" ; if [ -n "$STBREF" ]; then ;  git pull --ff-only ; else ; echo "cannot determine branch -> no action" ; fi ; unset STBREF'
 alias gitauthor='printf "Configured authors for %s:\n\t[System]: %s (%s)\n\t[Global]: %s (%s)\n\t[Local]: %s (%s)\n" "$(pwd)" "$(git config --system --get user.name)" "$(git config --system user.email)" "$(git config --global --get user.name)" "$(git config --global user.email)" "$(git config --local --get user.name)" "$(git config --local user.email)"'
 #%C(auto) basically tells git to do colouring as it usually would in it's predefined versions until another colour instruction is given
 #%C(string) basically means display a CSI defined 4-bit colour
@@ -193,13 +196,13 @@ searchapt(){
 cleanFile(){
 	#the reason I use a temp file is to avoid the same file on both ends of the pipe.
 	___tempfile_local=$(mktemp)
-	sort < "$1" | uniq > "$___tempfile_local"
+	LC_ALL=C LANG=C LC_COLLATE=C sort -Vu < "$1" > "$___tempfile_local"
 	mv "$___tempfile_local" "$1"
 }
 
 sortFile(){
 	___tempfile_local=$(mktemp)
-	sort < "$1" > "$___tempfile_local"
+	LC_ALL=C LANG=C LC_COLLATE=C sort -V < "$1" > "$___tempfile_local"
 	mv "$___tempfile_local" "$1"
 }
 
