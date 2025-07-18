@@ -173,18 +173,19 @@ alias cf=cleanFile
 alias sf=sortFile
 alias uz=UpdateShellTools
 alias iuz="UpdateShellTools --nopull"
-#UpdateZSH was the old name for my update function, it now is included as a legacy option
-alias UpdateZSH=UpdateShellTools
 alias ss=SystemStatus
 alias syss=SystemStatus
 alias pkgstatus=SystemStatus
 alias pkgstat=SystemStatus
-alias or="omz reload"
 alias hist='cat "$HOME/.zsh_history" "$HOME/.bash_history" | less'
 alias qlac="qalc"
 alias qcla="qalc"
 alias calc="qalc"
 alias qacl="qalc"
+#legacy alias definitions for old names, or old functionality
+alias UpdateZSH=UpdateShellTools
+alias or="omz reload" # becomes legacy as omz no longer a core requirement
+
 
 searchapt(){
 	printf "Apt packages:\n"
