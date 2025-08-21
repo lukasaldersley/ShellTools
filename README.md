@@ -12,6 +12,7 @@ Some Design choices made sense at the time but are kind of legacy at this point,
 
 ## Requirements
 
+- git >= 2.38, see [Known Issues](#known-issues)
 - gcc
 - zsh
 - [oh-my-zsh](https://github.com/ohmyzsh/ohmyzsh)
@@ -39,7 +40,7 @@ Some Design choices made sense at the time but are kind of legacy at this point,
 	+ "$HOME/.oh-my-zsh" is the default path for oh-my-zsh.<br>
 	If you configured that to use a different path, adjust the path here to match.
 	+ obviously replace whereverYouPutThisRepo with the actual path
-	+ ST_CFG can really be anything, as long as it can be written to, the above is just a recomendation in this case
+	+ ST_CFG can really be anything, as long as it can be written to, the above is just a recommendation in this case
 
 4) reload your session (`omz reload` or just start a new shell)
 	+ This *should* automatically install/set up ShellTools.
@@ -54,15 +55,21 @@ Once `$ST_CFG/config.cfg` exists ShellTools will *not* change/update it.<br>
 Should new configuration options become availabe it will be up to you to add those to your config file.<br>
 It is not mandatory to have all available configuration options present in your config file. For any missing options the default values (as seen in `DEFAULTCONFIG.cfg`) will be used implicitly.<br>
 The config file contains it's own documentation as comments. Please make sure to read those carefully.<br>
-When updating your local config file with newly introduced options, it is not mandatory to also update the expanatory comments, but it is highly advisable.
+When updating your local config file with newly introduced options, it is not mandatory to also update the explanatory comments, but it is highly advisable.
 
 ## Extensions
 
 ShellTools supports Extensions.<br>
 If you installed ShellTools in `~/TOOLS/ShellTools`, Extensions can be placed in `~/TOOLS`.<br>
-ShellTools will look for files named `CUSTOM.sh` and `ShellToolsExtensionLoader.sh` in ShellTools's parent diectory and source them as part of it's startup.<br>
+ShellTools will look for files named `CUSTOM.sh` and `ShellToolsExtensionLoader.sh` in ShellTools's parent directory and source them as part of it's startup.<br>
 ShellToolsExtensionLoader.sh is used as the entry point for my non-public extensions and is tracked in those repos, CUSTOM.sh is meant for general extensions or machine-specific adjustments and is set to be ignored by git in my extension repos.<br>
 You are free to use ShellToolsExtensionLoader.sh and CUSTOM.sh as you see fit, my usecase for those is just described for reference<br><br>
 *Keep in mind, those files aren't strictly executed, but they are sourced, i.e. loaded into ShellTools's context.*
+
+## Known Issues
+
+If you are on a system with a git version < 2.38.0, you need to add a line with the text `TEMP_OVERRIDE_OLD_GIT_VERSION` anywhere in the config file.<br>
+This will make ShellTools use a slightly less optimized function, without this option the readout of what branches are merged and which are not will not work.<br>
+If you don't want git integration in the first place, you can set `REPOTOOLS.PROMPT.GIT.ENABLE` to false in the config file. This removes the necessity to have git in the first place outright (though auto update would not function)
 
 <!-- markdownlint-enable MD010 -->

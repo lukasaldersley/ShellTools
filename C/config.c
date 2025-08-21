@@ -100,6 +100,7 @@ bool CONFIG_LSGIT_THOROUGH_COMMITS = true;
 bool CONFIG_LSGIT_THOROUGH_GITSTATUS = true;
 
 bool DIPFALSCHEISSER_WARNINGS = false;
+bool I_HAVE_ANCIENT_GIT=false;
 
 
 void DoSetup() {
@@ -289,361 +290,364 @@ void DoSetup() {
 					numGitExclusions++;
 				}
 			}
-			else if (StartsWith(buf, "REPOTOOLS.GIT.AUTO_RESTORE_EXCLUSION:	")) {
-				CONFIG_GIT_AUTO_RESTORE_EXCLUSION = Compare("true", buf + 38);
+			else if (StartsWith(buf, "SHELLTOOLS.GIT.AUTO_RESTORE_EXCLUSION:	")) {
+				CONFIG_GIT_AUTO_RESTORE_EXCLUSION = Compare("true", buf + 39);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_GIT_AUTO_RESTORE_EXCLUSION);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_GIT_AUTO_RESTORE_EXCLUSION);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.MAXBRANCHES:	")) {
-				CONFIG_LSGIT_QUICK_BRANCHLIMIT = atoi(buf + 35);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.MAXBRANCHES:	")) {
+				CONFIG_LSGIT_QUICK_BRANCHLIMIT = atoi(buf + 36);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 35, CONFIG_LSGIT_QUICK_BRANCHLIMIT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_LSGIT_QUICK_BRANCHLIMIT);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.MAXBRANCHES:	")) {
-				CONFIG_LSGIT_THOROUGH_BRANCHLIMIT = atoi(buf + 38);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.MAXBRANCHES:	")) {
+				CONFIG_LSGIT_THOROUGH_BRANCHLIMIT = atoi(buf + 39);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_LSGIT_THOROUGH_BRANCHLIMIT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_LSGIT_THOROUGH_BRANCHLIMIT);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.WARN_BRANCH_LIMIT:	")) {
-				CONFIG_LSGIT_WARN_BRANCHLIMIT = Compare("true", buf + 35);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.WARN_BRANCH_LIMIT:	")) {
+				CONFIG_LSGIT_WARN_BRANCHLIMIT = Compare("true", buf + 36);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 35, CONFIG_LSGIT_WARN_BRANCHLIMIT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_LSGIT_WARN_BRANCHLIMIT);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.PATH.LIMIT_DISPLAY_LENGTH.ENABLE:	")) {
-				CONFIG_LOWPROMPT_PATH_LIMIT = Compare("true", buf + 54);
+			else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.PATH.LIMIT_DISPLAY_LENGTH.ENABLE:	")) {
+				CONFIG_LOWPROMPT_PATH_LIMIT = Compare("true", buf + 55);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 54, CONFIG_LOWPROMPT_PATH_LIMIT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 55, CONFIG_LOWPROMPT_PATH_LIMIT);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.PATH.LIMIT_DISPLAY_LENGTH.TARGET:	")) {
-				CONFIG_LOWPROMPT_PATH_MAXLEN = atoi(buf + 54);
+			else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.PATH.LIMIT_DISPLAY_LENGTH.TARGET:	")) {
+				CONFIG_LOWPROMPT_PATH_MAXLEN = atoi(buf + 55);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 54, CONFIG_LOWPROMPT_PATH_MAXLEN);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 55, CONFIG_LOWPROMPT_PATH_MAXLEN);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.RETURNCODE.ENABLE:	")) {
-				CONFIG_LOWPROMPT_RETCODE = Compare("true", buf + 39);
+			else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.RETURNCODE.ENABLE:	")) {
+				CONFIG_LOWPROMPT_RETCODE = Compare("true", buf + 40);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_LOWPROMPT_RETCODE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LOWPROMPT_RETCODE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.RETURNCODE.DECODE.ENABLE:	")) {
-				CONFIG_LOWPROMPT_RETCODE_DECODE = Compare("true", buf + 46);
+			else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.RETURNCODE.DECODE.ENABLE:	")) {
+				CONFIG_LOWPROMPT_RETCODE_DECODE = Compare("true", buf + 47);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_LOWPROMPT_RETCODE_DECODE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 47, CONFIG_LOWPROMPT_RETCODE_DECODE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.COMMAND_TIMER.ENABLE:	")) {
-				CONFIG_LOWPROMPT_TIMER = Compare("true", buf + 42);
+			else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.COMMAND_TIMER.ENABLE:	")) {
+				CONFIG_LOWPROMPT_TIMER = Compare("true", buf + 43);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 42, CONFIG_LOWPROMPT_TIMER);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_LOWPROMPT_TIMER);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.START_CHAR:	")) {
-				ParseCharOrCodePoint(buf + 32, CONFIG_LOWPROMPT_START_CHAR);
+			else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.START_CHAR:	")) {
+				ParseCharOrCodePoint(buf + 33, CONFIG_LOWPROMPT_START_CHAR);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 32, CONFIG_LOWPROMPT_START_CHAR);
+				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 33, CONFIG_LOWPROMPT_START_CHAR);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LOWPROMPT.END_CHAR:	")) {
-				ParseCharOrCodePoint(buf + 30, CONFIG_LOWPROMPT_END_CHAR);
+			else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.END_CHAR:	")) {
+				ParseCharOrCodePoint(buf + 31, CONFIG_LOWPROMPT_END_CHAR);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 30, CONFIG_LOWPROMPT_END_CHAR);
+				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 31, CONFIG_LOWPROMPT_END_CHAR);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.SSHINFO.ENABLE:	")) {
-				CONFIG_PROMPT_SSH = Compare("true", buf + 33);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.SSHINFO.ENABLE:	")) {
+				CONFIG_PROMPT_SSH = Compare("true", buf + 34);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 33, CONFIG_PROMPT_SSH);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_PROMPT_SSH);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.TERMINALDEVICE.ENABLE:	")) {
-				CONFIG_PROMPT_TERMINAL_DEVICE = Compare("true", buf + 40);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.TERMINALDEVICE.ENABLE:	")) {
+				CONFIG_PROMPT_TERMINAL_DEVICE = Compare("true", buf + 41);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_PROMPT_TERMINAL_DEVICE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_PROMPT_TERMINAL_DEVICE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.TIME.ENABLE:	")) {
-				CONFIG_PROMPT_TIME = Compare("true", buf + 30);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.TIME.ENABLE:	")) {
+				CONFIG_PROMPT_TIME = Compare("true", buf + 31);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_TIME);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 31, CONFIG_PROMPT_TIME);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.TIMEZONE.ENABLE:	")) {
-				CONFIG_PROMPT_TIMEZONE = Compare("true", buf + 34);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.TIMEZONE.ENABLE:	")) {
+				CONFIG_PROMPT_TIMEZONE = Compare("true", buf + 35);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_PROMPT_TIMEZONE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 35, CONFIG_PROMPT_TIMEZONE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.DATE.ENABLE:	")) {
-				CONFIG_PROMPT_DATE = Compare("true", buf + 30);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.DATE.ENABLE:	")) {
+				CONFIG_PROMPT_DATE = Compare("true", buf + 31);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_DATE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 31, CONFIG_PROMPT_DATE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.CALENDARWEEK.ENABLE:	")) {
-				CONFIG_PROMPT_CALENDARWEEK = Compare("true", buf + 38);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.CALENDARWEEK.ENABLE:	")) {
+				CONFIG_PROMPT_CALENDARWEEK = Compare("true", buf + 39);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_PROMPT_CALENDARWEEK);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_PROMPT_CALENDARWEEK);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.PROXYSTATUS.ENABLE:	")) {
-				CONFIG_PROMPT_PROXY = Compare("true", buf + 37);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.PROXYSTATUS.ENABLE:	")) {
+				CONFIG_PROMPT_PROXY = Compare("true", buf + 38);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_PROMPT_PROXY);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_PROMPT_PROXY);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.NETWORK.ENABLE:	")) {
-				CONFIG_PROMPT_NETWORK = Compare("true", buf + 33);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.NETWORK.ENABLE:	")) {
+				CONFIG_PROMPT_NETWORK = Compare("true", buf + 34);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 33, CONFIG_PROMPT_NETWORK);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_PROMPT_NETWORK);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.BACKGROUNDJOBS.ENABLE:	")) {
-				CONFIG_PROMPT_JOBS = Compare("true", buf + 40);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.BACKGROUNDJOBS.ENABLE:	")) {
+				CONFIG_PROMPT_JOBS = Compare("true", buf + 41);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_PROMPT_JOBS);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_PROMPT_JOBS);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.POWER.ENABLE:	")) {
-				CONFIG_PROMPT_POWER = Compare("true", buf + 31);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.POWER.ENABLE:	")) {
+				CONFIG_PROMPT_POWER = Compare("true", buf + 32);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 31, CONFIG_PROMPT_POWER);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 32, CONFIG_PROMPT_POWER);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.ENABLE:	")) {
-				CONFIG_PROMPT_OVERALL_ENABLE = Compare("true", buf + 25);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.ENABLE:	")) {
+				CONFIG_PROMPT_OVERALL_ENABLE = Compare("true", buf + 26);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 25, CONFIG_PROMPT_OVERALL_ENABLE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 26, CONFIG_PROMPT_OVERALL_ENABLE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.ENABLE:	")) {
-				CONFIG_PROMPT_GIT = Compare("true", buf + 29);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.ENABLE:	")) {
+				CONFIG_PROMPT_GIT = Compare("true", buf + 30);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 29, CONFIG_PROMPT_GIT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_GIT);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.NETWORK.INTERFACES.DEFAULT.ENABLE:	")) {
-				CONFIG_PROMPT_NET_IFACE = Compare("true", buf + 52);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.NETWORK.INTERFACES.DEFAULT.ENABLE:	")) {
+				CONFIG_PROMPT_NET_IFACE = Compare("true", buf + 53);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 52, CONFIG_PROMPT_NET_IFACE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 53, CONFIG_PROMPT_NET_IFACE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.NETWORK.INTERFACES.NONDEFAULT.ENABLE:	")) {
-				CONFIG_PROMPT_NET_ADDITIONAL = Compare("true", buf + 55);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.NETWORK.INTERFACES.NONDEFAULT.ENABLE:	")) {
+				CONFIG_PROMPT_NET_ADDITIONAL = Compare("true", buf + 56);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 55, CONFIG_PROMPT_NET_ADDITIONAL);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 56, CONFIG_PROMPT_NET_ADDITIONAL);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.NETWORK.ROUTINGINFO.ENABLE:	")) {
-				CONFIG_PROMPT_NET_ROUTE = Compare("true", buf + 45);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.NETWORK.ROUTINGINFO.ENABLE:	")) {
+				CONFIG_PROMPT_NET_ROUTE = Compare("true", buf + 46);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 45, CONFIG_PROMPT_NET_ROUTE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_PROMPT_NET_ROUTE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.NETWORK.LINKSPEED.ENABLE:	")) {
-				CONFIG_PROMPT_NET_LINKSPEED = Compare("true", buf + 43);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.NETWORK.LINKSPEED.ENABLE:	")) {
+				CONFIG_PROMPT_NET_LINKSPEED = Compare("true", buf + 44);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_PROMPT_NET_LINKSPEED);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 44, CONFIG_PROMPT_NET_LINKSPEED);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.REPOTYPE.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_REPOTYPE = Compare("true", buf + 38);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.REPOTYPE.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_REPOTYPE = Compare("true", buf + 39);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_PROMPT_GIT_REPOTYPE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_PROMPT_GIT_REPOTYPE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.REPOTYPE.PARENT_REPO.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_REPOTYPE_PARENT = Compare("true", buf + 50);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.REPOTYPE.PARENT_REPO.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_REPOTYPE_PARENT = Compare("true", buf + 51);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 50, CONFIG_PROMPT_GIT_REPOTYPE_PARENT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 51, CONFIG_PROMPT_GIT_REPOTYPE_PARENT);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.COMMIT_OVERVIEW.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_COMMITS = Compare("true", buf + 45);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.COMMIT_OVERVIEW.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_COMMITS = Compare("true", buf + 46);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 45, CONFIG_PROMPT_GIT_COMMITS);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_PROMPT_GIT_COMMITS);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.REPOTYPE.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_REPOTYPE = Compare("true", buf + 39);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.REPOTYPE.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_REPOTYPE = Compare("true", buf + 40);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_LSGIT_QUICK_REPOTYPE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LSGIT_QUICK_REPOTYPE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.REPOTYPE.PARENT_REPO.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_REPOTYPE_PARENT = Compare("true", buf + 51);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.REPOTYPE.PARENT_REPO.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_REPOTYPE_PARENT = Compare("true", buf + 52);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 51, CONFIG_LSGIT_QUICK_REPOTYPE_PARENT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 52, CONFIG_LSGIT_QUICK_REPOTYPE_PARENT);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.REPONAME.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_REPONAME = Compare("true", buf + 39);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.REPONAME.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_REPONAME = Compare("true", buf + 40);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_LSGIT_QUICK_REPONAME);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LSGIT_QUICK_REPONAME);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.BRANCH.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_BRANCHNAME = Compare("true", buf + 37);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.BRANCH.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_BRANCHNAME = Compare("true", buf + 38);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_LSGIT_QUICK_BRANCHNAME);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_LSGIT_QUICK_BRANCHNAME);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.BRANCH.OVERVIEW.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_BRANCHINFO = Compare("true", buf + 46);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.BRANCH.OVERVIEW.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_BRANCHINFO = Compare("true", buf + 47);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_LSGIT_QUICK_BRANCHINFO);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 47, CONFIG_LSGIT_QUICK_BRANCHINFO);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.REMOTE.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_REMOTE = Compare("true", buf + 37);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.REMOTE.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_REMOTE = Compare("true", buf + 38);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_LSGIT_QUICK_REMOTE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_LSGIT_QUICK_REMOTE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.COMMIT_OVERVIEW.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_COMMITS = Compare("true", buf + 46);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.COMMIT_OVERVIEW.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_COMMITS = Compare("true", buf + 47);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_LSGIT_QUICK_COMMITS);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 47, CONFIG_LSGIT_QUICK_COMMITS);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.LOCALCHANGES.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_GITSTATUS = Compare("true", buf + 43);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.LOCALCHANGES.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_GITSTATUS = Compare("true", buf + 44);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_LSGIT_QUICK_GITSTATUS);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 44, CONFIG_LSGIT_QUICK_GITSTATUS);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.REPOTYPE.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_REPOTYPE = Compare("true", buf + 42);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.REPOTYPE.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_REPOTYPE = Compare("true", buf + 43);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 42, CONFIG_LSGIT_THOROUGH_REPOTYPE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_LSGIT_THOROUGH_REPOTYPE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.REPOTYPE.PARENT_REPO.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT = Compare("true", buf + 54);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.REPOTYPE.PARENT_REPO.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT = Compare("true", buf + 55);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 54, CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 55, CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.REPONAME.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_REPONAME = Compare("true", buf + 42);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.REPONAME.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_REPONAME = Compare("true", buf + 43);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 42, CONFIG_LSGIT_THOROUGH_REPONAME);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_LSGIT_THOROUGH_REPONAME);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.BRANCH.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_BRANCHNAME = Compare("true", buf + 40);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.BRANCH.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_BRANCHNAME = Compare("true", buf + 41);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LSGIT_THOROUGH_BRANCHNAME);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_LSGIT_THOROUGH_BRANCHNAME);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.BRANCH.OVERVIEW.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_BRANCHINFO = Compare("true", buf + 49);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.BRANCH.OVERVIEW.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_BRANCHINFO = Compare("true", buf + 50);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 49, CONFIG_LSGIT_THOROUGH_BRANCHINFO);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 50, CONFIG_LSGIT_THOROUGH_BRANCHINFO);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.REMOTE.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_REMOTE = Compare("true", buf + 40);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.REMOTE.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_REMOTE = Compare("true", buf + 41);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LSGIT_THOROUGH_REMOTE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_LSGIT_THOROUGH_REMOTE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.COMMIT_OVERVIEW.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_COMMITS = Compare("true", buf + 49);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.COMMIT_OVERVIEW.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_COMMITS = Compare("true", buf + 50);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 49, CONFIG_LSGIT_THOROUGH_COMMITS);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 50, CONFIG_LSGIT_THOROUGH_COMMITS);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.LOCALCHANGES.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_GITSTATUS = Compare("true", buf + 46);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.LOCALCHANGES.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_GITSTATUS = Compare("true", buf + 47);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_LSGIT_THOROUGH_GITSTATUS);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 47, CONFIG_LSGIT_THOROUGH_GITSTATUS);
 #endif
 			}
 
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.REMOTE.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_REMOTE = Compare("true", buf + 36);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.REMOTE.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_REMOTE = Compare("true", buf + 37);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_REMOTE);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_PROMPT_GIT_REMOTE);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.BRANCH.OVERVIEW.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_BRANCHINFO = Compare("true", buf + 45);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.BRANCH.OVERVIEW.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_BRANCHINFO = Compare("true", buf + 46);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 45, CONFIG_PROMPT_GIT_BRANCHINFO);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_PROMPT_GIT_BRANCHINFO);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.BRANCHSTATUS.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_BRANCHSTATUS = Compare("true", buf + 42);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.BRANCHSTATUS.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_BRANCHSTATUS = Compare("true", buf + 43);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 42, CONFIG_PROMPT_GIT_BRANCHSTATUS);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_PROMPT_GIT_BRANCHSTATUS);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.QUICK.BRANCHSTATUS.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_BRANCHSTATUS = Compare("true", buf + 43);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.BRANCHSTATUS.ENABLE:	")) {
+				CONFIG_LSGIT_QUICK_BRANCHSTATUS = Compare("true", buf + 44);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_LSGIT_QUICK_BRANCHSTATUS);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 44, CONFIG_LSGIT_QUICK_BRANCHSTATUS);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.LSGIT.THOROUGH.BRANCHSTATUS.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_BRANCHSTATUS = Compare("true", buf + 46);
+			else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.BRANCHSTATUS.ENABLE:	")) {
+				CONFIG_LSGIT_THOROUGH_BRANCHSTATUS = Compare("true", buf + 47);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_LSGIT_THOROUGH_BRANCHSTATUS);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 47, CONFIG_LSGIT_THOROUGH_BRANCHSTATUS);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.BRANCH.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_BRANCHNAME = Compare("true", buf + 36);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.BRANCH.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_BRANCHNAME = Compare("true", buf + 37);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_PROMPT_GIT_BRANCHNAME);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_PROMPT_GIT_BRANCHNAME);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.REPONAME.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_REPONAME = Compare("true", buf + 38);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.REPONAME.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_REPONAME = Compare("true", buf + 39);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_PROMPT_GIT_REPONAME);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_PROMPT_GIT_REPONAME);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.LOCALCHANGES.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_GITSTATUS = Compare("true", buf + 42);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.LOCALCHANGES.ENABLE:	")) {
+				CONFIG_PROMPT_GIT_GITSTATUS = Compare("true", buf + 43);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 42, CONFIG_PROMPT_GIT_GITSTATUS);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_PROMPT_GIT_GITSTATUS);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.MAXBRANCHES:	")) {
-				CONFIG_PROMPT_GIT_BRANCHLIMIT = atoi(buf + 34);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.MAXBRANCHES:	")) {
+				CONFIG_PROMPT_GIT_BRANCHLIMIT = atoi(buf + 35);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_PROMPT_GIT_BRANCHLIMIT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 35, CONFIG_PROMPT_GIT_BRANCHLIMIT);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.GIT.WARN_BRANCH_LIMIT:	")) {
-				CONFIG_LSGIT_WARN_BRANCHLIMIT = Compare("true", buf + 40);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.WARN_BRANCH_LIMIT:	")) {
+				CONFIG_LSGIT_WARN_BRANCHLIMIT = Compare("true", buf + 41);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LSGIT_WARN_BRANCHLIMIT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_LSGIT_WARN_BRANCHLIMIT);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.USER.ENABLE:	")) {
-				CONFIG_PROMPT_USER = Compare("true", buf + 30);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.USER.ENABLE:	")) {
+				CONFIG_PROMPT_USER = Compare("true", buf + 31);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_USER);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 31, CONFIG_PROMPT_USER);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.HOST.ENABLE:	")) {
-				CONFIG_PROMPT_HOST = Compare("true", buf + 30);
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.HOST.ENABLE:	")) {
+				CONFIG_PROMPT_HOST = Compare("true", buf + 31);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_HOST);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 31, CONFIG_PROMPT_HOST);
 #endif
 			}
-			else if (StartsWith(buf, "REPOTOOLS.PROMPT.FILLER_CHAR:	")) {
+			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.FILLER_CHAR:	")) {
 				//CONFIG_PROMPT_FILLER_CHAR = buf[31];
-				ParseCharOrCodePoint(buf + 30, CONFIG_PROMPT_FILLER_CHAR);
+				ParseCharOrCodePoint(buf + 31, CONFIG_PROMPT_FILLER_CHAR);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 30, CONFIG_PROMPT_FILLER_CHAR);
+				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 31, CONFIG_PROMPT_FILLER_CHAR);
 #endif
+			}
+			else if (Compare(buf,"TEMP_OVERRIDE_OLD_GIT_VERSION")){
+				I_HAVE_ANCIENT_GIT=true;
 			}
 			else {
 				fprintf(stderr, "Warning: unknown entry in config file: >%s<\n", buf);

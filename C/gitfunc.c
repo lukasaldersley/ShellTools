@@ -49,12 +49,18 @@ bool IsMerged(const char* repopath, const char* commithash) {
 	//git rev-list --children --all | grep ^a40691c4edac3e3e9cff1f651f79a80dd3bd792a | cut -c42- | tr ' ' '\n'
 	//NOTE: the commit hash is a demo of this case, BUT it's NOT in the public GitHub version, just in the "Ground Truth" repo on a private server
 	//for each check if merge commit, if at least one is a merge commit, then this branch has been merged
+	//--ancestry-path was changed in git 2.38 to allow an argument. ubuntu 22.04 has only git 2.34.1 -> I cannot use this if git is older... I don't want to check it every time but may have to...
 	const int size = 64;
 	char* result = (char*)malloc(sizeof(char) * size);
 	if (result == NULL) ABORT_NO_MEMORY;
 	char* cmd;
 	bool RES = false;
-	if (asprintf(&cmd, "git -C \"%1$s\" rev-list --children --all --ancestry-path=%2$s | grep ^%2$s | cut -c42- | tr ' ' '\n'", repopath, commithash) == -1) ABORT_NO_MEMORY;
+	if(I_HAVE_ANCIENT_GIT){
+		if(asprintf(&cmd, "git -C \"%s\" rev-list --children --all | grep ^%s | cut -c42- | tr ' ' '\n'", repopath, commithash)==-1) ABORT_NO_MEMORY;
+	}
+	else{
+		if (asprintf(&cmd, "git -C \"%1$s\" rev-list --children --all --ancestry-path=%2$s | grep ^%2$s | cut -c42- | tr ' ' '\n'", repopath, commithash) == -1) ABORT_NO_MEMORY;
+	}
 	FILE* fp = popen(cmd, "r");
 	if (fp == NULL)
 	{
