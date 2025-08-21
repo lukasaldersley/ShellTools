@@ -69,8 +69,8 @@ ST_CoreUpdate (){
 	else
 		echo "WARNING: cannot update $ZSH/custom/themes/lukasaldersley.zsh-theme: not writeable"
 	fi
-	if [ "$BranchAdvance" -eq 1 ] || [ "${1:-"--pull"}" = "--nopull" ]; then
-		#if I didn't manage to advance the branch, I don't really need to reload since there were no new files, but if I passed nopull I probably want to debug local changes -> do reload
+	if [ "$BranchAdvance" -eq 1 ]; then
+		#if the branch moved, then there are new files -> reload to get those
 		omz reload
 	fi
 }
@@ -172,7 +172,7 @@ alias gu=gitupdate
 alias cf=cleanFile
 alias sf=sortFile
 alias uz=UpdateShellTools
-alias iuz="UpdateShellTools --nopull"
+alias iuz="UpdateShellTools --nopull ; or"
 alias ss=SystemStatus
 alias syss=SystemStatus
 alias pkgstatus=SystemStatus
