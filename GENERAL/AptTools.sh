@@ -172,7 +172,10 @@ echo " ago]"
 if [ -f /var/run/reboot-required ]; then
 	cat /var/run/reboot-required
 	printf "Reboot required since "
-	stat -c"%y" /var/run/reboot-required
+	stat -c"%w" /var/run/reboot-required | sed -E 's~\.[0-9]{1,}~~' | tr -d '\n'
+	printf " (last modified "
+	stat -c"%y" /var/run/reboot-required | sed -E 's~\.[0-9]{1,}~~' | tr -d '\n'
+	printf ")\n"
 fi
 if [ -f /var/run/reboot-required.pkgs ]; then
 	echo "Reboot is required to apply updates for following packages:"

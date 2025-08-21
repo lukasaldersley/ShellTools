@@ -42,13 +42,13 @@ ST_CoreUpdate (){
 		fi
 		if ! git -C "$ST_SRC" symbolic-ref --short HEAD 1>/dev/null 2>&1 ; then
 			#if I am on any branch, stay there, if I'm on a tag or a detached commit, go to master
-			printf "INFO: ShellTools was on %s, checking out master\n" "$(git -C  "$ST_SRC" symbolic-ref --short HEAD 2>/dev/null || git -C "$ST_SRC" describe --tags --exact-match HEAD 2>/dev/null || git -C "$ST_SRC" rev-parse --short HEAD)"
+			printf "INFO: ShellTools was on %s, checking out master\n" "$(git -C "$ST_SRC" symbolic-ref --short HEAD 2>/dev/null || git -C "$ST_SRC" describe --tags --exact-match HEAD 2>/dev/null || git -C "$ST_SRC" rev-parse --short HEAD)"
 			git -C "$ST_SRC" checkout master
 		fi
 		if git -C "$ST_SRC" pull --ff-only ; then
 			BranchAdvance=1
 			date +%s > "$ST_CFG/.lastfetch"
-		elif git -C "$ST_SRC" merge origin/"$(git -C  "$ST_SRC" symbolic-ref --short HEAD)" --ff-only; then
+		elif git -C "$ST_SRC" merge origin/"$(git -C "$ST_SRC" symbolic-ref --short HEAD)" --ff-only; then
 			#I can't pull, per se, but I CAN ff-merge (ie I currently don't have network but I do have the stuff cached)
 			BranchAdvance=1
 		else
@@ -64,7 +64,7 @@ ST_CoreUpdate (){
 		if [ -e "$ZSH/custon/themes/lukasaldersley.zsh-theme" ]; then
 			rm "$ZSH/custom/themes/lukasaldersley.zsh-theme"
 		fi
-		echo "copying $ST_SRC/ZSH/lukasaldersley.zsh-theme to  $ZSH/custom/themes/lukasaldersley.zsh-theme"
+		echo "copying $ST_SRC/ZSH/lukasaldersley.zsh-theme to $ZSH/custom/themes/lukasaldersley.zsh-theme"
 		cp "$ST_SRC/ZSH/lukasaldersley.zsh-theme" "$ZSH/custom/themes/lukasaldersley.zsh-theme"
 	else
 		echo "WARNING: cannot update $ZSH/custom/themes/lukasaldersley.zsh-theme: not writeable"
@@ -84,7 +84,7 @@ UpdateShellTools(){
 #Notify about updates if the currently checked out branch is behind origin
 ST_NUM_UPDATE_COMMITS="$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | sed -nE 's~# branch.ab.*-([0-9]+)~\1~p')"
 if [ "$ST_NUM_UPDATE_COMMITS" -gt 0 ]; then
-#if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | grep  branch.ab)" != "# branch.ab +0 -0" ]; then
+#if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | grep branch.ab)" != "# branch.ab +0 -0" ]; then
 	printf "There are ShellTools Updates available on the current branch (%s, %s commit(s)).\nDo you wish to update now [Y/n] " "$(git -C "$ST_SRC" symbolic-ref --short HEAD)" "$ST_NUM_UPDATE_COMMITS"
 	read -r -k 1 versionconfirm
 	printf '\n'
@@ -100,8 +100,8 @@ fi
 unset ST_NUM_UPDATE_COMMITS
 
 #Ensure the config directory and at the basic elfs exist
-if [ ! -e "$ST_CFG" ] || [ ! -e "$ST_CFG/repotools.elf" ]; then
-	echo "$ST_CFG directory or repotools binary didn't exist -> creating now"
+if [ ! -e "$ST_CFG" ] || [ ! -e "$ST_CFG/shelltoolsmain.elf" ]; then
+	echo "$ST_CFG directory or shelltoolsmain binary didn't exist -> creating now"
 	mkdir -p "$ST_CFG"
 	UpdateShellTools --nopull
 fi
@@ -145,7 +145,7 @@ alias  xgitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%
 alias exgitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae(%an)|%ce(%cn):%C(auto) %s\" HEAD"
 alias procowners="sudo ps axo user:64 |sort|uniq"
 alias gitupdate='git submodule foreach --recursive '\''{ if git symbolic-ref --short HEAD >/dev/null 2>&1 ; then git pull --ff-only --prune ; else printf "%s is not on a branch -> skip\n" "$(pwd)" ; fi }'\'' ; git pull --ff-only --prune'
-alias ff='STBREF="$(git symbolic-ref --short HEAD 2>/dev/null)" ; if [ -n "$STBREF" ]; then ;  git pull --ff-only ; else ; echo "cannot determine branch -> no action" ; fi ; unset STBREF'
+alias ff='STBREF="$(git symbolic-ref --short HEAD 2>/dev/null)" ; if [ -n "$STBREF" ]; then ; git pull --ff-only ; else ; echo "cannot determine branch -> no action" ; fi ; unset STBREF'
 alias gitauthor='printf "Configured authors for %s:\n\t[System]: %s (%s)\n\t[Global]: %s (%s)\n\t[Local]: %s (%s)\n" "$(pwd)" "$(git config --system --get user.name)" "$(git config --system user.email)" "$(git config --global --get user.name)" "$(git config --global user.email)" "$(git config --local --get user.name)" "$(git config --local user.email)"'
 #%C(auto) basically tells git to do colouring as it usually would in it's predefined versions until another colour instruction is given
 #%C(string) basically means display a CSI defined 4-bit colour
@@ -184,7 +184,39 @@ alias calc="qalc"
 alias qacl="qalc"
 #legacy alias definitions for old names, or old functionality
 alias UpdateZSH=UpdateShellTools
-alias or="omz reload" # becomes legacy as omz no longer a core requirement
+#alias or="omz reload" # becomes legacy as omz no longer a core requirement
+alias or=shellReload
+
+shellReload() {
+	#This function is based on what oh-my-zsh has done in it's _omz::reload function found in it's lib/cli.zsh
+
+	# Delete current completion cache if the variables are set
+	# Reason: reload is liekely because of updates, so delete the cache to force it be regenerated
+	[ -n "$_comp_dumpfile" ] && rm -f "$_comp_dumpfile"
+	[ -n "$ZSH_COMPDUMP" ] && rm -f "$ZSH_COMPDUMP"
+
+	# Determine the shell executable
+	if [ -n "$BASH_VERSION" ]; then
+		# If running in Bash, use $BASH
+		shell="$BASH"
+	elif [ -n "$ZSH_VERSION" ]; then
+		# If running in Zsh, use $ZSH_ARGZERO or fallback to the last function trace
+		shell="${ZSH_ARGZERO:-$(basename "${0}")}"
+	else
+		# Fallback for other shells
+		shell="$(basename "${0}")"
+	fi
+	#echo "DEBUG: Shell is \"$shell\""
+	# Check whether to run a login shell
+	if [ "${shell#-}" != "$shell" ]; then
+		#echo "DEBUG: login shell for '${shell#-}'"
+		exec -l "${shell#-}"
+	else
+		#echo "DEBUG: other shell"
+		exec "$shell"
+	fi
+}
+
 
 
 searchapt(){
@@ -208,12 +240,12 @@ sortFile(){
 }
 
 SetGitBase(){
-	"$ST_CFG/repotools.elf" --set -n"${1:-"NONE"}" "${2:?}" "${3:-"-q"}"
+	"$ST_CFG/shelltoolsmain.elf" --set -n"${1:-"NONE"}" "${2:?}" "${3:-"-q"}"
 }
 alias sgb=SetGitBase
 
 lsRepo(){
-	"$ST_CFG/repotools.elf" --show "${1:-"$(pwd)"}" "${2:-"-q"}"
+	"$ST_CFG/shelltoolsmain.elf" --show "${1:-"$(pwd)"}" "${2:-"-q"}"
 }
 
 compare(){
@@ -227,7 +259,7 @@ alias lsrepo=lsRepo
 alias lsGit=lsRepo
 alias lsgit=lsrepo
 alias gitls=lsrepo
-alias lsorigin='$ST_CFG/repotools.elf --list'
+alias lsorigin='$ST_CFG/shelltoolsmain.elf --list'
 
 
 SetUpAptProxyConfigFile(){

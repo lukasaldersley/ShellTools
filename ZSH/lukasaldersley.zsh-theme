@@ -20,7 +20,7 @@ printf "\e[38;5;240mSourcing %s\e[0m\n" "$0"
 #conditional syntax: %(TestChar.TrueVal.FalseVal) (for testChar doc see https://zsh.sourceforge.io/Doc/Release/Prompt-Expansion.html#Conditional-Substrings-in-Prompts)
 #conditional: the seperator doesn't need to be . it is arbitrary
 #https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit
-#NOTE at several points in here the character \a (the control char to ring a bell) is used. this is as a marker for repotools to treat that as if it were 0x00, but the substitution is only done in repotools to make it easier to pass all the required data around without something in the chain breaking because it found a null-byte
+#NOTE at several points in here the character \a (the control char to ring a bell) is used. this is as a marker for shelltoolsmain to treat that as if it were 0x00, but the substitution is only done in shelltoolsmain to make it easier to pass all the required data around without something in the chain breaking because it found a null-byte
 
 
 #this will be set by oh-my-zsh anyway but it won't hurt to, for sanity, set it here as well
@@ -61,7 +61,7 @@ function GetBackgroundTaskInfo (){
 	#this calls `jobs` and uses `sed` to un following regex: ^\[(\d+)\]\s+([+|-]?)\s*(\w).+$
 	#(basically takes the number in square brackets, an optional + or - and the first letter of the status as capture groups and prints them in the order 1 3 2)
 	#then tr is used to get rid of linebreaks and shove everything to uppercase. finally rev|cut -c2-|rev chops trailing whitespace off
-	#NOTE: this isn't straight printed, repotools takes this as input and computes the number of jobs and may then print it if there's space
+	#NOTE: this isn't straight printed, shelltoolsmain takes this as input and computes the number of jobs and may then print it if there's space
 	local background_task_info
 	background_task_info="$(jobs|sed -nE 's~^\[([0-9]+)\][^-a-zA-Z+]*([-+]?)[^-a-zA-Z+]*(.).*$~\1\3\2~p'|tr 'a-z\n' 'A-Z '|rev|cut -c2- |rev)"
 	if [ -z "${background_task_info}" ]; then
@@ -76,7 +76,7 @@ function GetBackgroundTaskInfo (){
 #another way would be to cause a dns lookup like so and grep that ip route get 8.8.8.8
 function GetLocalIP (){
 	#since WSL's networking is at best (WSL1) a direct representation of Windows's config or at worst (WSL2)a VM with nonstandard networking I'm just not going to bother with advanced concepts like metrics etc
-	#on bare-metal linux or at least on a non-wsl platform, IP resolution is to be done by repotools.c whichis also responsible for gatehring and parsing everything itself in that case Linkspeed and metric arealso used
+	#on bare-metal linux or at least on a non-wsl platform, IP resolution is to be done by shelltoolsmain.c which is also responsible for gathering and parsing everything itself in that case Linkspeed and metric are also used
 	IpAddrList=""
 	for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices forany 'default routes'
 	do
@@ -144,9 +144,9 @@ GetProxyInfo(){
 function MainPrompt(){
 	if [ "${WSL_VERSION:-0}" -ne 0 ]; then
 		#WSL_VERSION is set and non-zero -> on WSL
-		"$ST_CFG/repotools.elf" --prompt -p"$(print -P "$(GetProxyInfo)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -i"$(GetLocalIP)" "$(pwd)"
+		"$ST_CFG/shelltoolsmain.elf" --prompt -p"$(print -P "$(GetProxyInfo)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -i"$(GetLocalIP)" "$(pwd)"
 	else
-		"$ST_CFG/repotools.elf" --prompt -p"$(print -P "$(GetProxyInfo)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" "$(pwd)"
+		"$ST_CFG/shelltoolsmain.elf" --prompt -p"$(print -P "$(GetProxyInfo)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" "$(pwd)"
 	fi
 }
 
@@ -156,7 +156,7 @@ add-zsh-hook precmd MainPrompt
 #PROMPT='└%F{cyan}%B %2~ %b%f%B%(?:%F{green}:%F{red})[$ST_CmdDur:%?]➜%f%b  '
 #shellcheck disable=SC2016 #reason: If I allowed expansion here, the prompt would be static, it must only be evaluated at runtime, so this is fine
 #shellcheck disable=SC2034 #reason: It IS used, but PROMPT is a special case -> ignore warning
-PROMPT='$("$ST_CFG/repotools.elf" --lowprompt -r"$?" -t"$ST_CmdDur" "$(print -P '%~')")'
+PROMPT='$("$ST_CFG/shelltoolsmain.elf" --lowprompt -r"$?" -t"$ST_CmdDur" "$(print -P '%~')")'
 
 #To do multiline Prompts I am printing the top line before the prompt is ever computed.
 #print -P is a zsh builtin (man zshmisc) that does the same substitution the prompt would.
@@ -167,7 +167,7 @@ PROMPT='$("$ST_CFG/repotools.elf" --lowprompt -r"$?" -t"$ST_CmdDur" "$(print -P 
 # - : GetBackgroundTasks was being executed, but kept returning empty strings (probably because jobs is a zsh builtin and the prompt building was happening in another subshell with no jobs or something)
 # - : having a linebreak in PROMPT messed with the positioning of RPROMPT and the carret behaviour for editing typed commands
 # - : hitting 'HOME' or 'POS1' often would send the carret to the top line and was showing editing that but in reality it was invisibly editing the command string
-# - : creation of the top ptompt line will take a noticable amount of time on low-power devices (such as the 8-ish Watt TDP laptops and ARM devices), this is much more extreme in large git repos where git may take a while (up into the minute scale when it's a large repo with lots of active changes)
+# - : creation of the top prompt line will take a noticable amount of time on low-power devices (such as the 8-ish Watt TDP laptops and ARM devices), this is much more extreme in large git repos where git may take a while (up into the minute scale when it's a large repo with lots of active changes)
 #Conclusion: Make top line single-fire evaluation
 
 printf "\e[38;5;240mdone loading %s\e[0m\n" "$(basename "$0")"

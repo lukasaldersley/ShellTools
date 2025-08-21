@@ -6,6 +6,9 @@ if [ $? -ne 4 ]; then
 	exit 1
 fi
 
+##add option to exclude files/directories. for files it's --exclude="..." for directories it's --exclude-dir
+#using --include="..." I can only allow files matching the include to be searched.
+
 LONGOPTS=pattern:,content
 OPTIONS=p:c
 
@@ -54,7 +57,7 @@ if [ -z "$pattern" ]; then
 fi
 echo "These folders will be processed: $*"
 if [ $# -eq 0 ]; then
-#if no folder given, use ./ as default by inserting it as if it was the last argument
+	#if no folder given, use ./ as default by inserting it as if it was the last argument
 	set -- "./"
 fi
 if [ $# -ge 1 ]; then

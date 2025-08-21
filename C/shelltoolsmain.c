@@ -7,7 +7,7 @@ TargetName="$(basename "$0" .c).elf"
 printf "compiling %s into %s/%s" "$0" "$TargetDir" "$TargetName"
 SourceDirectory="$(realpath "$(dirname "$0")")"
 gcc -O3 -std=c2x -Wall "$SourceDirectory/commons.c" "$SourceDirectory/inetfunc.c" "$SourceDirectory/config.c" "$SourceDirectory/gitfunc.c" "$0" -o "$TargetDir/$TargetName" "$@"
-#I WANT to be able to do things like ./repotools.c -DPROFILING to add the compiler flag profiling but ALSO stuff like ./repotools "-DDEBUG -DPROFILING" to add both profiling and debug
+#I WANT to be able to do things like ./shelltoolsmain.c -DPROFILING to add the compiler flag profiling but ALSO stuff like ./shelltoolsmain "-DDEBUG -DPROFILING" to add both profiling and debug
 printf " -> \e[32mDONE\e[0m(%s)\n" $?
 exit
 */
@@ -1130,7 +1130,7 @@ int main(int argc, char** argv)
 		if (CONFIG_PROMPT_TERMINAL_DEVICE) {
 			Arg_TerminalDevice = ExecuteProcess_alloc("/usr/bin/tty");
 			TerminateStrOn(Arg_TerminalDevice, DEFAULT_TERMINATORS);
-			Arg_TerminalDevice_len = strlen_visible(Arg_TerminalDevice);
+			Arg_TerminalDevice_len = strlen_visible(Arg_TerminalDevice)+1; //NOTE, the +1 is for the : added at print time
 		}
 		else {
 			Arg_TerminalDevice = malloc(sizeof(char));
@@ -1566,7 +1566,7 @@ int main(int argc, char** argv)
 				CalendarWeek_len,
 				TimeZone_len,
 				DateInfo_len,
-				Arg_TerminalDevice_len + 1,/*NOTE: the +1 is the : needed infront of /dev/whatever, but it isn't in here yet*/
+				Arg_TerminalDevice_len,
 				gitSegment2_parentRepoLoc_len,
 				Arg_BackgroundJobs_len,
 				Arg_LocalIPsAdditional_len,
@@ -1606,9 +1606,11 @@ int main(int argc, char** argv)
 			}
 			printf(COLOUR_CLEAR);
 
-			//if the fourth-prioritized element (the line/terminal device has space, append it to the user@machine) ":/dev/pts/0"
-			if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTerminalDevice)) {
-				printf(COLOUR_TERMINAL_DEVICE ":%s", Arg_TerminalDevice);
+			if(CONFIG_PROMPT_TERMINAL_DEVICE) {
+				//if the fourth-prioritized element (the line/terminal device has space, append it to the user@machine) ":/dev/pts/0"
+				if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTerminalDevice)) {
+					printf(COLOUR_TERMINAL_DEVICE ":%s", Arg_TerminalDevice);
+				}
 			}
 
 			//append the SHLVL (how many shells are nested, ie how many Ctrl+D are needed to properly exit), only shown if >=2 " [2]"
@@ -1686,18 +1688,20 @@ int main(int argc, char** argv)
 			//if a proxy is configured, show it (A=Apt, H=http(s), F=FTP, N=NoProxy) " [AHNF]"
 			printf("%s", Arg_ProxyInfo);
 
-			//if the second prioritized element (local IP addresses) has space, print it " eth0:192.168.0.2 wifi0:192.168.0.3"
-			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityLocalIP))) {
-				printf("%s", Arg_LocalIPs);
-			}
+			if(CONFIG_PROMPT_NETWORK) {
+				//if the second prioritized element (local IP addresses) has space, print it " eth0:192.168.0.2 wifi0:192.168.0.3"
+				if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityLocalIP))) {
+					printf("%s", Arg_LocalIPs);
+				}
 
-			//Arg_LocalIPsRoutes and Arg_LocalIPsAdditional can AND WILL be NULL if the old IP-system is used (for example on WSL)
-			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditinoalElementPriorityNonDefaultNetworks))) {
-				printf("%s", Arg_LocalIPsAdditional);
-			}
+				//Arg_LocalIPsRoutes and Arg_LocalIPsAdditional can AND WILL be NULL if the old IP-system is used (for example on WSL)
+				if ((AdditionalElementAvailabilityPackedBool & (1 << AdditinoalElementPriorityNonDefaultNetworks))) {
+					printf("%s", Arg_LocalIPsAdditional);
+				}
 
-			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityRoutingInfo))) {
-				printf("%s", Arg_LocalIPsRoutes);
+				if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityRoutingInfo))) {
+					printf("%s", Arg_LocalIPsRoutes);
+				}
 			}
 
 			printf("%s", numBgJobsStr);

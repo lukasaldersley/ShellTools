@@ -167,7 +167,7 @@ int16_t NextIndexOf(const char* txt, char tst, int startindex) {
 /*This is basically strlen, but only counts VISIBLE characters
 THIS MUST NOT BE USED TO DETERMINE REQUIRED BUFFER SIZES
 A Usecase for this is computing how much space on screen is taken up by a string accounting for the fact control characters don't take up space
-an example of this can be found in repotools.c
+an example of this can be found in shelltoolsmain.c
 */
 int strlen_visible(const char* charstring) {
 	const uint8_t* s = (const uint8_t*)charstring;
