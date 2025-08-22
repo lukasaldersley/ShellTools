@@ -29,5 +29,3 @@ typedef struct {
 
 IpTransportStruct GetBaseIPString();
 #endif
-
-

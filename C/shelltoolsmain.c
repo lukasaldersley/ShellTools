@@ -252,6 +252,9 @@ static uint8_t ParsePowerSupplyEntry(const char* directory, const char* dir, Pow
 }
 
 static char* GetSystemPowerState() {
+	//TODO check the /sys/class/power_supply/whatever/scope file. "Device" was the battery of a connected MX Master 3S mouse, the system itself is a PC where power monitoring isn't needed. if you can query a file at all you have power, else you'd be staring at a dead black screen, but providing peripheral integration would be f**ing awesome
+	//If I could replicate whatever KDE reports in it's bluetooth menu (stuff like the mentioned MX Master, but also the various headphones I have...)
+	//parsing "bluetoothctl info" would do the trick
 #define POWER_CHARS_PER_BAT 64
 #define POWER_NUM_BAT 2
 #define POWER_CHARS_EXTPWR 8
@@ -316,7 +319,7 @@ static char* GetSystemPowerState() {
 
 static bool CheckBranching(RepoInfo* ri) {
 	//this method checks the status of all branches on a given repo
-	//and then computes how many differ, howm many up to date, how many branches local-only, how many branches remote-only
+	//and then computes how many differ, how many up to date, how many branches local-only, how many branches remote-only
 	BranchListSorted* ListBase = NULL;
 
 	int size = 1024;
@@ -581,7 +584,7 @@ static bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, boo
 #endif
 
 	if (desiredorigin != -1 || CONFIG_GIT_REMOTE || CONFIG_GIT_REPONAME) {
-		//I only need to concern myself with the remote and reponame If they are either directly requested or implicity needed for setGitBase
+		//I only need to concern myself with the remote and reponame If they are either directly requested or implicitly needed for setGitBase
 		if (asprintf(&cmd, "git -C \"%s\" ls-remote --get-url origin", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
 		ri->RepositoryUnprocessedOrigin = ExecuteProcess_alloc(cmd);
 		free(cmd);
@@ -1130,7 +1133,7 @@ int main(int argc, char** argv)
 		if (CONFIG_PROMPT_TERMINAL_DEVICE) {
 			Arg_TerminalDevice = ExecuteProcess_alloc("/usr/bin/tty");
 			TerminateStrOn(Arg_TerminalDevice, DEFAULT_TERMINATORS);
-			Arg_TerminalDevice_len = strlen_visible(Arg_TerminalDevice)+1; //NOTE, the +1 is for the : added at print time
+			Arg_TerminalDevice_len = strlen_visible(Arg_TerminalDevice) + 1; //NOTE, the +1 is for the : added at print time
 		}
 		else {
 			Arg_TerminalDevice = malloc(sizeof(char));
@@ -1606,7 +1609,7 @@ int main(int argc, char** argv)
 			}
 			printf(COLOUR_CLEAR);
 
-			if(CONFIG_PROMPT_TERMINAL_DEVICE) {
+			if (CONFIG_PROMPT_TERMINAL_DEVICE) {
 				//if the fourth-prioritized element (the line/terminal device has space, append it to the user@machine) ":/dev/pts/0"
 				if (AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityTerminalDevice)) {
 					printf(COLOUR_TERMINAL_DEVICE ":%s", Arg_TerminalDevice);
@@ -1688,7 +1691,7 @@ int main(int argc, char** argv)
 			//if a proxy is configured, show it (A=Apt, H=http(s), F=FTP, N=NoProxy) " [AHNF]"
 			printf("%s", Arg_ProxyInfo);
 
-			if(CONFIG_PROMPT_NETWORK) {
+			if (CONFIG_PROMPT_NETWORK) {
 				//if the second prioritized element (local IP addresses) has space, print it " eth0:192.168.0.2 wifi0:192.168.0.3"
 				if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityLocalIP))) {
 					printf("%s", Arg_LocalIPs);

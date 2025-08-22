@@ -28,7 +28,7 @@ static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const
 		NetList* n = InitNetListElement();
 		n->next = NULL;
 		n->prev = NULL;
-		//IP and device are the minimum set necessary (this was the original assumption, sincee reduced to just device)
+		//IP and device are the minimum set necessary (this was the original assumption, since reduced to just device)
 		//originally I asserted device AND IP must be present, but on my linode VM in the entry denoting the default route there is no IP -> that assertion does not hold
 		assert(device != NULL);
 		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
@@ -70,13 +70,13 @@ static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const
 		return head;
 	}
 	else if (metric < head->dev.metric) {
-		//The new Element has a lower metric -> insert before myslef
+		//The new Element has a lower metric -> insert before myself
 		NetList* n = InitNetListElement();
 		n->next = head;
 		n->prev = head->prev;
 		if (head->prev != NULL) head->prev->next = n;
 		head->prev = n;
-		//IP and device are the minimum set necessary (this was the original assumption, sincee reduced to just device)
+		//IP and device are the minimum set necessary (this was the original assumption, since reduced to just device)
 		//originally I asserted device AND IP must be present, but on my linode VM in the entry denoting the default route there is no IP -> that assertion does not hold
 		assert(device != NULL);
 		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
@@ -105,7 +105,7 @@ static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const
 		n->prev = head;
 
 		head->next = n;
-		//IP and device are the minimum set necessary (this was the original assumption, sincee reduced to just device)
+		//IP and device are the minimum set necessary (this was the original assumption, since reduced to just device)
 		//originally I asserted device AND IP must be present, but on my linode VM in the entry denoting the default route there is no IP -> that assertion does not hold
 		assert(device != NULL);
 		if (asprintf(&(n->dev.device), "%s", device) == -1) ABORT_NO_MEMORY;
@@ -128,7 +128,7 @@ static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const
 		return head;
 	}
 	else {
-		//The New Element is NOT Equal to myslef and is NOT alphabetically before myself (as per the earlier checks)
+		//The New Element is NOT Equal to myself and is NOT alphabetically before myself (as per the earlier checks)
 		//This time there IS another element after myself -> defer to it.
 		head->next = InsertIntoNetListSorted(head->next, device, ipv4, metric, isDefault, IPV4cidr, linkspeed, routedNet);
 		return head;
@@ -232,7 +232,7 @@ IpTransportStruct GetBaseIPString() {
 	//the following was the originally used regex. it doesn't work for some network configurations (such as linode/akamai VPS).
 	//const char* RouteRegexString="^(((default) via ([0-9.]+))|(([0-9.]+)/([0-9]+))).*?dev ([^ ]+).*?src ([0-9.]+)( metric ([0-9]+))?( linkdown)?.*$";
 	//root cause is problems with lazy matching, which C's regex engine can't do.
-	//I haed copilot help in creating a "fixed" regex. the output was this:
+	//I had copilot help in creating a "fixed" regex. the output was this:
 	//^((default[[:space:]]+via[[:space:]]+([0-9.]+))|(([0-9.]+)/([0-9]+)))[[:space:]]+dev[[:space:]]+([^[:space:]]+)(?:[[:space:]]+proto[[:space:]]+[^[:space:]]+)?(?:[[:space:]]+scope[[:space:]]+link)?(?:[[:space:]]+src[[:space:]]+([0-9.]+))?(?:[[:space:]]+metric[[:space:]]+([0-9]+))?(?:[[:space:]]+linkdown)?[[:space:]]*$
 	//I have then refined it into a much smaller and more easily readable version which is in use currently
 #define RouteIsDefaultIndex 3
@@ -351,7 +351,7 @@ IpTransportStruct GetBaseIPString() {
 	free(result);
 
 	//res (the standard IP line should get (numDefaultRoutes+1)*(1+4+8+4+1+(4*(3+1))+4+4+4+4+4+16+4) bytes (space+CSI+device+CSI+:IP+CSI+CIDR+CSI+CSI+CSI+metric+CSI) bytes
-	//the above calculation comes out to 74 bytes, so if I assign 80 bytes per default route I sould be fine.
+	//the above calculation comes out to 74 bytes, so if I assign 80 bytes per default route I should be fine.
 	//for the third line (the actual route display) I think 6+(10*numNonDefaultRoutes)+30 should be enough
 
 	NetList* current = head;

@@ -54,7 +54,7 @@ If that file doesn't exist, it will be automatically created from [DEFAULTCONFIG
 Once `$ST_CFG/config.cfg` exists ShellTools will *not* change/update it.<br>
 Should new configuration options become availabe it will be up to you to add those to your config file.<br>
 It is not mandatory to have all available configuration options present in your config file. For any missing options the default values (as seen in `DEFAULTCONFIG.cfg`) will be used implicitly.<br>
-The config file contains it's own documentation as comments. Please make sure to read those carefully.<br>
+__*The config file contains it's own documentation as comments. Please make sure to read those carefully.*__<br>
 When updating your local config file with newly introduced options, it is not mandatory to also update the explanatory comments, but it is highly advisable.
 
 ## Extensions

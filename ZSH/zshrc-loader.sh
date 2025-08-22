@@ -61,7 +61,7 @@ ST_CoreUpdate (){
 	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
 	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
 	if [ -w "$ZSH/custom/themes/" ]; then #if file exists and write permission is granted
-		if [ -e "$ZSH/custon/themes/lukasaldersley.zsh-theme" ]; then
+		if [ -e "$ZSH/custom/themes/lukasaldersley.zsh-theme" ]; then
 			rm "$ZSH/custom/themes/lukasaldersley.zsh-theme"
 		fi
 		echo "copying $ST_SRC/ZSH/lukasaldersley.zsh-theme to $ZSH/custom/themes/lukasaldersley.zsh-theme"
@@ -144,7 +144,7 @@ alias  egitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%
 alias  xgitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae|%ce:%C(auto) %s\" HEAD"
 alias exgitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae(%an)|%ce(%cn):%C(auto) %s\" HEAD"
 alias procowners="sudo ps axo user:64 |sort|uniq"
-alias gitupdate='git submodule foreach --recursive '\''{ if git symbolic-ref --short HEAD >/dev/null 2>&1 ; then git pull --ff-only --prune ; else printf "%s is not on a branch -> skip\n" "$(pwd)" ; fi }'\'' ; git pull --ff-only --prune'
+alias gitupdate='git submodule foreach --recursive '\''{ if git symbolic-ref --short HEAD >/dev/null 2>&1 ; then git pull --ff-only --prune ; else printf "%s is not on a branch -> fetch only\n" "$(pwd)" ; git fetch --prune ; fi }'\'' ; git pull --ff-only --prune'
 alias ff='STBREF="$(git symbolic-ref --short HEAD 2>/dev/null)" ; if [ -n "$STBREF" ]; then ; git pull --ff-only ; else ; echo "cannot determine branch -> no action" ; fi ; unset STBREF'
 alias gitauthor='printf "Configured authors for %s:\n\t[System]: %s (%s)\n\t[Global]: %s (%s)\n\t[Local]: %s (%s)\n" "$(pwd)" "$(git config --system --get user.name)" "$(git config --system user.email)" "$(git config --global --get user.name)" "$(git config --global user.email)" "$(git config --local --get user.name)" "$(git config --local user.email)"'
 #%C(auto) basically tells git to do colouring as it usually would in it's predefined versions until another colour instruction is given
@@ -173,6 +173,7 @@ alias cf=cleanFile
 alias sf=sortFile
 alias uz=UpdateShellTools
 alias iuz="UpdateShellTools --nopull ; or"
+alias sr=ShellReload
 alias ss=SystemStatus
 alias syss=SystemStatus
 alias pkgstatus=SystemStatus
@@ -182,12 +183,20 @@ alias qlac="qalc"
 alias qcla="qalc"
 alias calc="qalc"
 alias qacl="qalc"
+alias lsgit=lsRepo
+alias lsrepo=lsRepo
+alias lsGit=lsRepo
+alias lsgit=lsrepo
+alias gitls=lsrepo
+alias lsorigin='$ST_CFG/shelltoolsmain.elf --list'
+
 #legacy alias definitions for old names, or old functionality
 alias UpdateZSH=UpdateShellTools
 #alias or="omz reload" # becomes legacy as omz no longer a core requirement
-alias or=shellReload
+alias or=ShellReload
 
-shellReload() {
+
+ShellReload() {
 	#This function is based on what oh-my-zsh has done in it's _omz::reload function found in it's lib/cli.zsh
 
 	# Delete current completion cache if the variables are set
@@ -216,8 +225,6 @@ shellReload() {
 		exec "$shell"
 	fi
 }
-
-
 
 searchapt(){
 	printf "Apt packages:\n"
@@ -253,14 +260,6 @@ compare(){
 	#diff --width="$EachWidth" -y --color --report-identical-files --suppress-common-lines <(cat "$1") <(cat "$2")
 	code --diff "$1" "$2"
 }
-
-alias lsgit=lsRepo
-alias lsrepo=lsRepo
-alias lsGit=lsRepo
-alias lsgit=lsrepo
-alias gitls=lsrepo
-alias lsorigin='$ST_CFG/shelltoolsmain.elf --list'
-
 
 SetUpAptProxyConfigFile(){
 	if [ "$PROXY_NOAPT" -eq 0 ]; then
@@ -367,7 +366,7 @@ enableProxy(){
 
 wat(){
 	apropos "$1"
-	type "$1"
+	type -a "$1"
 	printf "from Package:\n"
 	dpkg -S "$(which "$1")"
 	printf "\nalso located at:\n"

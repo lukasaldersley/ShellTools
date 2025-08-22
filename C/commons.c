@@ -192,9 +192,14 @@ int strlen_visible(const char* charstring) {
 			//begins with 11... -> UTF8
 			count++;
 			idx++;
+			bool haveAtLeastOneFollowUp=false;
 			while (s[idx] != 0x00 && (s[idx] & 0b11000000) == 0b10000000) {
 				//in utf-8 the first byte is 11------ while all following bytes are 10------
 				idx++;
+				haveAtLeastOneFollowUp=true;
+			}
+			if(!haveAtLeastOneFollowUp){
+				fprintf(stderr,"[SHELLTOOLS: WARNING] a byte starting with 11... indicating start of an UTF-8 character has been encountered, but no follow-up bytes were present => unknown/unexpected byte 0x%x\n",c);
 			}
 			continue;
 		}
@@ -225,14 +230,23 @@ int strlen_visible(const char* charstring) {
 			}
 			//%% -> escaped %, an actual % sign
 			else if (s[idx + 1] == '%') {
-				//NOTE: NO continue and ONLY +1 because I WANT to read that
+				//NOTE: NO continue and ONLY +1 because I WANT to read that, but only once
 				idx++;
 			}
 		}
 		//all basic ascii, excluding the first 0x20 control chars and the DEL on 0x7f
+		//at this point I intentionally do not use c, but rather look up the index, as the index could have advanced away from c
 		if (s[idx] >= 0x20 && s[idx] <= 0x7e) {
 			count++;
 			idx++;
+		}
+		else{
+			//I have NOT continue'd out of here but have found a non-basic ascii I cannot explain.
+			//The expectation is to be in a UTF-8 context so there should not be any high characters.
+			//of course the UTF-8 start marker 0b11...... is expected, but handled above.
+			//there also are UTF-8 continuation bytes, but those are also handled above (provided thex are at an expected position)
+			//this consequently means I have encountered
+			fprintf(stderr,"[SHELLTOOLS: WARNING] unexpected byte 0x%x\n",s[idx]);
 		}
 	}
 	return count;

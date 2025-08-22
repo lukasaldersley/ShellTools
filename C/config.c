@@ -100,7 +100,7 @@ bool CONFIG_LSGIT_THOROUGH_COMMITS = true;
 bool CONFIG_LSGIT_THOROUGH_GITSTATUS = true;
 
 bool DIPFALSCHEISSER_WARNINGS = false;
-bool I_HAVE_ANCIENT_GIT=false;
+bool I_HAVE_ANCIENT_GIT = false;
 
 
 void DoSetup() {
@@ -622,9 +622,9 @@ void DoSetup() {
 #endif
 			}
 			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.WARN_BRANCH_LIMIT:	")) {
-				CONFIG_LSGIT_WARN_BRANCHLIMIT = Compare("true", buf + 41);
+				CONFIG_PROMPT_GIT_WARN_BRANCHLIMIT = Compare("true", buf + 41);
 #ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_LSGIT_WARN_BRANCHLIMIT);
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_PROMPT_GIT_WARN_BRANCHLIMIT);
 #endif
 			}
 			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.USER.ENABLE:	")) {
@@ -646,8 +646,8 @@ void DoSetup() {
 				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 31, CONFIG_PROMPT_FILLER_CHAR);
 #endif
 			}
-			else if (Compare(buf,"TEMP_OVERRIDE_OLD_GIT_VERSION")){
-				I_HAVE_ANCIENT_GIT=true;
+			else if (Compare(buf, "TEMP_OVERRIDE_OLD_GIT_VERSION")) {
+				I_HAVE_ANCIENT_GIT = true;
 			}
 			else {
 				fprintf(stderr, "Warning: unknown entry in config file: >%s<\n", buf);

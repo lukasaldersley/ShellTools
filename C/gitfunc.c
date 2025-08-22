@@ -55,10 +55,10 @@ bool IsMerged(const char* repopath, const char* commithash) {
 	if (result == NULL) ABORT_NO_MEMORY;
 	char* cmd;
 	bool RES = false;
-	if(I_HAVE_ANCIENT_GIT){
-		if(asprintf(&cmd, "git -C \"%s\" rev-list --children --all | grep ^%s | cut -c42- | tr ' ' '\n'", repopath, commithash)==-1) ABORT_NO_MEMORY;
+	if (I_HAVE_ANCIENT_GIT) {
+		if (asprintf(&cmd, "git -C \"%s\" rev-list --children --all | grep ^%s | cut -c42- | tr ' ' '\n'", repopath, commithash) == -1) ABORT_NO_MEMORY;
 	}
-	else{
+	else {
 		if (asprintf(&cmd, "git -C \"%1$s\" rev-list --children --all --ancestry-path=%2$s | grep ^%2$s | cut -c42- | tr ' ' '\n'", repopath, commithash) == -1) ABORT_NO_MEMORY;
 	}
 	FILE* fp = popen(cmd, "r");
