@@ -16,14 +16,14 @@ exit
 //compile: //arm-linux-gnueabi-gcc-12 -std=c2x -Wall ../C/commons.c timer.c -o timer
 //execute: //qemu-arm -L /usr/arm-linux-gnueabi ./timer START
 
-
 //the numbers this is using are UTC time (1/10 seconds), so UTC millis, but with the last two digits chopped off
 
 #include "commons.h"
-#include <stdio.h>
+
 #include <stdbool.h>
-#include <time.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 static void stopTimer(unsigned long long start) {
 	struct timespec ts;
@@ -31,9 +31,9 @@ static void stopTimer(unsigned long long start) {
 	uint64_t stop = ts.tv_sec * 10ULL + (ts.tv_nsec / 100000000ULL);
 	uint64_t diff = stop - start;
 	//printf("start: %llu\tstop: %llu\tdiff: %llu\n\n", start, stop, diff);
-#define DAY_CONVERSION (10*3600*24UL)
-#define HOUR_CONVERSION (10*3600UL)
-#define MINUTE_CONVERSION (10*60UL)
+#define DAY_CONVERSION	  (10UL * 3600UL * 24UL)
+#define HOUR_CONVERSION	  (10UL * 3600UL)
+#define MINUTE_CONVERSION (10UL * 60UL)
 #define SECOND_CONVERSION (10.0)
 	uint32_t days = (uint32_t)(diff / DAY_CONVERSION);
 	diff = diff - (days * DAY_CONVERSION);
@@ -79,25 +79,22 @@ int main(int argc, char** argv) {
 		struct timespec ts;
 		timespec_get(&ts, TIME_UTC);
 		printf("%li%li", ts.tv_sec, (ts.tv_nsec / 100000000L));
-	}
-	else if (Compare(argv[1], "STOP") && argc == 3) {
+	} else if (Compare(argv[1], "STOP") && argc == 3) {
 		uint64_t start = strtoull(argv[2], NULL, 10);
 		stopTimer(start);
-	}
-	else if (Compare(argv[1], "STOPHUMAN") && argc == 8) {
-		struct tm t = { 0 };
-		t.tm_year = atoi(argv[2]) - 1900;	// Year minus 1900
-		t.tm_mon = atoi(argv[3]) - 1;		// Month (0-11, -> really month minus 1)
-		t.tm_mday = atoi(argv[4]);			// Day of the month
-		t.tm_hour = atoi(argv[5]);			// Hour
-		t.tm_min = atoi(argv[6]);			// Minute
-		t.tm_sec = atoi(argv[7]);			// Second
-		t.tm_isdst = -1;					//a negative value means that mktime() should (use timezone information and system databases to) attempt to determine whether DST is in effect at the specified time.
+	} else if (Compare(argv[1], "STOPHUMAN") && argc == 8) {
+		struct tm t = {0};
+		t.tm_year = atoi(argv[2]) - 1900; // Year minus 1900
+		t.tm_mon = atoi(argv[3]) - 1; // Month (0-11, -> really month minus 1)
+		t.tm_mday = atoi(argv[4]); // Day of the month
+		t.tm_hour = atoi(argv[5]); // Hour
+		t.tm_min = atoi(argv[6]); // Minute
+		t.tm_sec = atoi(argv[7]); // Second
+		t.tm_isdst = -1; //a negative value means that mktime() should (use timezone information and system databases to) attempt to determine whether DST is in effect at the specified time.
 
 		time_t ut = mktime(&t);
 		stopTimer(ut * 10ULL);
-	}
-	else {
+	} else {
 		fprintf(stderr, "invalid argument %s or invalid argument count %i", argv[1], argc - 1);
 		return 1;
 	}

@@ -17,8 +17,7 @@ void abortMessage(const char* message) {
 	exit(1);
 }
 
-bool Compare(const char* a, const char* b)
-{
+bool Compare(const char* a, const char* b) {
 	if (a == b) {
 		return true;
 	}
@@ -27,10 +26,8 @@ bool Compare(const char* a, const char* b)
 	}
 	bool matching = true;
 	int idx = 0;
-	while (matching && (a[idx] != 0x00 || b[idx] != 0x00))
-	{
-		if (a[idx] != b[idx])
-		{
+	while (matching && (a[idx] != 0x00 || b[idx] != 0x00)) {
+		if (a[idx] != b[idx]) {
 			matching = false;
 			break;
 		}
@@ -45,13 +42,11 @@ StringRelations CompareStrings(const char* a, const char* b) {
 	while (a[idx] != 0x00 && b[idx] != 0x00) {
 		char ca = ToLowerCase(a[idx]);
 		char cb = ToLowerCase(b[idx]);
-		if (ca != cb)
-		{
+		if (ca != cb) {
 			if (ca < cb) {
 				result = ALPHA_BEFORE;
 				break;
-			}
-			else {
+			} else {
 				result = ALPHA_AFTER;
 				break;
 			}
@@ -61,8 +56,7 @@ StringRelations CompareStrings(const char* a, const char* b) {
 	return result;
 }
 
-bool StartsWith(const char* a, const char* b)
-{
+bool StartsWith(const char* a, const char* b) {
 	if (a == b) {
 		return true;
 	}
@@ -71,13 +65,11 @@ bool StartsWith(const char* a, const char* b)
 	}
 	bool matching = true;
 	int idx = 0;
-	while (matching && a[idx] != 0x00 && b[idx] != 0x00)
-	{
+	while (matching && a[idx] != 0x00 && b[idx] != 0x00) {
 #ifdef DEBUG_txt
 		fprintf(stderr, "a: %1$c <0x%1$x> b: %2$c <0x%2$x>\n", a[idx], b[idx]);
 #endif
-		if (a[idx] != b[idx])
-		{
+		if (a[idx] != b[idx]) {
 #ifdef DEBUG_txt
 			fprintf(stderr, "mismatch between %1$c <0x%1$x> and %2$c <0x%2$x>\n", a[idx], b[idx]);
 #endif
@@ -96,19 +88,15 @@ bool StartsWith(const char* a, const char* b)
 	return matching;
 }
 
-bool ContainsString(const char* str, const char* test)
-{
+bool ContainsString(const char* str, const char* test) {
 	uint32_t sIdx = 0;
-	while (str[sIdx] != 0x00)
-	{
+	while (str[sIdx] != 0x00) {
 		uint32_t tIdx = 0;
-		while (test[tIdx] != 0x00 && test[tIdx] == str[sIdx + tIdx])
-		{
+		while (test[tIdx] != 0x00 && test[tIdx] == str[sIdx + tIdx]) {
 			//TODO optimize this to be a faster text search instead of adumb exhaustive searhc, if possible skip sIdx forward at the same time as tIdx
 			tIdx++;
 		}
-		if (test[tIdx] == 0x00)
-		{
+		if (test[tIdx] == 0x00) {
 			// if I reached the end of the test sting while the consition that test and str must match, test is contained in match
 			return true;
 		}
@@ -179,7 +167,7 @@ int strlen_visible(const char* charstring) {
 		//don't count them at all
 		if (c == '\e' && s[idx + 1] == '[') {
 
-			idx += 2;//advance over \e[to test for the rest
+			idx += 2; //advance over \e[to test for the rest
 			//walk until valid 'final byte (0x40-0x7e)' or NULL found
 			while (s[idx] != 0x00 && !(s[idx] >= 0x40 && s[idx] <= 0x7E)) {
 				idx++;
@@ -192,14 +180,14 @@ int strlen_visible(const char* charstring) {
 			//begins with 11... -> UTF8
 			count++;
 			idx++;
-			bool haveAtLeastOneFollowUp=false;
+			bool haveAtLeastOneFollowUp = false;
 			while (s[idx] != 0x00 && (s[idx] & 0b11000000) == 0b10000000) {
 				//in utf-8 the first byte is 11------ while all following bytes are 10------
 				idx++;
-				haveAtLeastOneFollowUp=true;
+				haveAtLeastOneFollowUp = true;
 			}
-			if(!haveAtLeastOneFollowUp){
-				fprintf(stderr,"[SHELLTOOLS: WARNING] a byte starting with 11... indicating start of an UTF-8 character has been encountered, but no follow-up bytes were present => unknown/unexpected byte 0x%x\n",c);
+			if (!haveAtLeastOneFollowUp) {
+				fprintf(stderr, "[SHELLTOOLS: WARNING] a byte starting with 11... indicating start of an UTF-8 character has been encountered, but no follow-up bytes were present => unknown/unexpected byte 0x%x\n", c);
 			}
 			continue;
 		}
@@ -239,14 +227,13 @@ int strlen_visible(const char* charstring) {
 		if (s[idx] >= 0x20 && s[idx] <= 0x7e) {
 			count++;
 			idx++;
-		}
-		else{
+		} else {
 			//I have NOT continue'd out of here but have found a non-basic ascii I cannot explain.
 			//The expectation is to be in a UTF-8 context so there should not be any high characters.
 			//of course the UTF-8 start marker 0b11...... is expected, but handled above.
 			//there also are UTF-8 continuation bytes, but those are also handled above (provided thex are at an expected position)
 			//this consequently means I have encountered
-			fprintf(stderr,"[SHELLTOOLS: WARNING] unexpected byte 0x%x\n",s[idx]);
+			fprintf(stderr, "[SHELLTOOLS: WARNING] unexpected byte 0x%x\n", s[idx]);
 		}
 	}
 	return count;
@@ -282,26 +269,18 @@ int cpyString(char* dest, const char* src, int maxCount) {
 	return i;
 }
 
-inline char ToLowerCase(const char c)
-{
-	if (c >= 'A' && c <= 'Z')
-	{
+inline char ToLowerCase(const char c) {
+	if (c >= 'A' && c <= 'Z') {
 		return c + 0x20; // A=0x41, a=0x61
-	}
-	else
-	{
+	} else {
 		return c;
 	}
 }
 
-inline char ToUpperCase(const char c)
-{
-	if (c >= 'a' && c <= 'z')
-	{
+inline char ToUpperCase(const char c) {
+	if (c >= 'a' && c <= 'z') {
 		return c - 0x20;
-	}
-	else
-	{
+	} else {
 		return c;
 	}
 }
@@ -311,13 +290,10 @@ char* ExecuteProcess_alloc(const char* command) {
 	char* result = malloc(sizeof(char) * size);
 	if (result == NULL) ABORT_NO_MEMORY;
 	FILE* fp = popen(command, "r");
-	if (fp == NULL)
-	{
+	if (fp == NULL) {
 		fprintf(stderr, "failed running process %s\n", command);
-	}
-	else {
-		if (fgets(result, size - 1, fp) == NULL)
-		{
+	} else {
+		if (fgets(result, size - 1, fp) == NULL) {
 			/*
 			RETURN VALUE
 				fgetc(), getc(), and getchar() return the character read as an unsigned char cast to an int or EOF on end of file or error.
@@ -360,7 +336,7 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 	}
 	char lastChar = 0x00;
 	uint16_t newLen = 0;
-	for (int i = 0;i < len;i++) {
+	for (int i = 0; i < len; i++) {
 		//copy path into workpath, but skip any consecutive / (at any point in the string)
 		if (!(path[i] == lastChar && lastChar == '/')) {
 			Workpath[newLen] = path[i];
@@ -380,19 +356,17 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 	if (newLen <= KeepAllIfShorterThan) {
 		//text is so short, it won't be shortened anymore -> done
 		if (asprintf(ret, "%s", Workpath) == -1) ABORT_NO_MEMORY;
-	}
-	else if (DesiredKeepElementsBack == 0 && DesiredKeepElementsFront == 0) {
+	} else if (DesiredKeepElementsBack == 0 && DesiredKeepElementsFront == 0) {
 		//dumb truncation but from the back, NOTE: when calling via AbbreviatePathAuto this can never happen, since AbbreviatePathAuto ensures DesiredKeepElementsBack is at least 1
 		(*ret) = malloc((sizeof(char) * KeepAllIfShorterThan) + 1);
 		if ((*ret) == NULL) ABORT_NO_MEMORY;
 		(*ret)[KeepAllIfShorterThan] = 0x00;
 		if (KeepAllIfShorterThan < 5) {
 			//requested dumb truncation, but the truncation indicator doesn't fit -> just print an error char
-			for (int i = 0;i < KeepAllIfShorterThan;i++) {
+			for (int i = 0; i < KeepAllIfShorterThan; i++) {
 				(*ret)[i] = '!';
 			}
-		}
-		else {
+		} else {
 			//the entire text doesn't fit in the specified size (checked earlier) and there is at least enought space for the truncation marker
 			//print the truncation marker and as many chars from the end of the string as will fit
 			(*ret)[0] = '[';
@@ -400,12 +374,11 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 			(*ret)[2] = '.';
 			(*ret)[3] = '.';
 			(*ret)[4] = ']';
-			for (int i = (newLen - (KeepAllIfShorterThan - 5)), j = 5;j < KeepAllIfShorterThan;i++, j++) {
+			for (int i = (newLen - (KeepAllIfShorterThan - 5)), j = 5; j < KeepAllIfShorterThan; i++, j++) {
 				(*ret)[j] = Workpath[i];
 			}
 		}
-	}
-	else {
+	} else {
 		//element-based smart truncation
 		//if (asprintf(&Workpath, "%s", path) == -1) ABORT_NO_MEMORY;
 		char* FromBack = Workpath + newLen - 1;
@@ -415,7 +388,7 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 		uint8_t foundFront = 0;
 		uint8_t foundBack = 0;
 		//walk backwards over the string until I identified DesiredKeepElementsBack elements (while NOT overruning the start of the string if there's fewer)
-		while (foundBack<DesiredKeepElementsBack && FromBack>FromFront) {
+		while (foundBack < DesiredKeepElementsBack && FromBack > FromFront) {
 			FromBack--;
 			backLen++;
 			if (*FromBack == '/' || *FromBack == '\\') {
@@ -428,9 +401,8 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 			frontLen++;
 			if (*FromFront == '/' || *FromFront == '\\') {
 				if (frontLen == 4 && *(FromFront + 2) == '/' && StartsWith(Workpath, "/mnt/")) {
-					;//this is a special case: I want to count "/mnt/*/" as a single element, since just /mnt alone is kinda worthless -> skip over a single / if the conditions are right; this is mostly relevant for WSL where windows's Drive letters are assigned that way. C:\ becomes /mnt/c/
-				}
-				else {
+					; //this is a special case: I want to count "/mnt/*/" as a single element, since just /mnt alone is kinda worthless -> skip over a single / if the conditions are right; this is mostly relevant for WSL where windows's Drive letters are assigned that way. C:\ becomes /mnt/c/
+				} else {
 					foundFront++;
 				}
 			}
@@ -456,10 +428,9 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 #endif
 			//if the front segment doesn't exist, only print the back segment WITHOUT clobbering a seperator in front
 			if (asprintf(ret, "%s", FromBack + 1) == -1) ABORT_NO_MEMORY;
-		}
-		else {
-			*(Workpath + frontLen) = 0x00;//truncate the work text to only contain the front segment
-			if (asprintf(ret, "%s/[...]/%s", Workpath, FromBack + 1) == -1)ABORT_NO_MEMORY;
+		} else {
+			*(Workpath + frontLen) = 0x00; //truncate the work text to only contain the front segment
+			if (asprintf(ret, "%s/[...]/%s", Workpath, FromBack + 1) == -1) ABORT_NO_MEMORY;
 		}
 		//printf("%s & %s (%i + %i)\n", Workpath, FromBack + 1, frontLen, backLen);
 	}
@@ -480,9 +451,8 @@ uint32_t determinePossibleCombinations(int* availableLength, int NumElements, ..
 	assert(NumElements > 0 && NumElements <= 32);
 	uint32_t res = 0;
 	va_list ELEMENTS;
-	va_start(ELEMENTS, NumElements);//start variadic function param handling, NumElements is the Identifier of the LAST NON-VARIADIC parameter passed to this function
-	for (int i = 0; i < NumElements; i++)
-	{
+	va_start(ELEMENTS, NumElements); //start variadic function param handling, NumElements is the Identifier of the LAST NON-VARIADIC parameter passed to this function
+	for (int i = 0; i < NumElements; i++) {
 		//va_arg returns the next of the variadic emlements, assuming it's type is compatible with the provided one (here int)
 		//if it's not compatible, it's undefined behaviour
 		int nextElem = va_arg(ELEMENTS, int);
@@ -492,7 +462,7 @@ uint32_t determinePossibleCombinations(int* availableLength, int NumElements, ..
 			*availableLength -= nextElem;
 		}
 	}
-	va_end(ELEMENTS);//a bit like malloc/free there has to be a va_end for each va_start
+	va_end(ELEMENTS); //a bit like malloc/free there has to be a va_end for each va_start
 
 	return res;
 }
@@ -521,8 +491,7 @@ static bool ParseUnicodeCPToUTF8String(const char* CodePoint, char UTF8DestBuf[]
 			UTF8DestBuf[0] = (char)integercp;
 			UTF8DestBuf[1] = 0;
 			return true;
-		}
-		else if (integercp <= 0x07FF) {
+		} else if (integercp <= 0x07FF) {
 			// above or equal to 0x80 but below or equal to 0x7FF -> Will fit in two-byte UTF-8
 			//the second byte can contain 6 bits of 'payload', therfore the number is right shifted by 6
 			//integer promotion means the right shift may shift-in logical 1 instad of 0 to preserve the sign bit
@@ -534,8 +503,7 @@ static bool ParseUnicodeCPToUTF8String(const char* CodePoint, char UTF8DestBuf[]
 			UTF8DestBuf[1] = (char)((integercp & 0b00111111) | 0b10000000);
 			UTF8DestBuf[2] = 0;
 			return true;
-		}
-		else if (integercp <= 0xFFFF) {
+		} else if (integercp <= 0xFFFF) {
 			// above or equal to 0x800 but below or equal to 0xFFFF -> Will fit in three-byte UTF-8
 			//this works analogous to the block 0x80 to 0x7ff
 			//UTF8DestBuf[0] = (char)(((integercp >> 12) & 0x0F) | 0xE0);
@@ -546,8 +514,7 @@ static bool ParseUnicodeCPToUTF8String(const char* CodePoint, char UTF8DestBuf[]
 			UTF8DestBuf[2] = (char)((integercp & 0b00111111) | 0b10000000);
 			UTF8DestBuf[3] = 0;
 			return true;
-		}
-		else if (integercp <= 0x10FFFF) {
+		} else if (integercp <= 0x10FFFF) {
 			// above or equal to 0x10000 but below or equal to 10FFFF -> Will fit in four byte UTF-8
 			//this works analogous to the block 0x80 to 0x7ff
 			UTF8DestBuf[0] = (char)(((integercp >> 18) & 0b00000111) | 0b11110000);
@@ -556,14 +523,12 @@ static bool ParseUnicodeCPToUTF8String(const char* CodePoint, char UTF8DestBuf[]
 			UTF8DestBuf[3] = (char)((integercp & 0b00111111) | 0b10000000);
 			UTF8DestBuf[4] = 0;
 			return true;
-		}
-		else {
+		} else {
 			// above or equal to 0x110000 -> guaranteed invalid -> error
 			CopyErrorByteToBuffer(UTF8DestBuf, CodePoint);
 			return false;
 		}
-	}
-	else {
+	} else {
 		//not supported format (doesn't start  with U+)
 
 		CopyErrorByteToBuffer(UTF8DestBuf, CodePoint);
@@ -577,8 +542,7 @@ bool ParseCharOrCodePoint(const char* Input, char DestBuf[]) {
 		DestBuf[0] = Input[1];
 		DestBuf[1] = 0x00;
 		return true;
-	}
-	else {
+	} else {
 		return ParseUnicodeCPToUTF8String(Input, DestBuf);
 	}
 }

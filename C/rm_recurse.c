@@ -20,22 +20,20 @@ I should mention a simple rm -rf from WSL didn't fix the problem, I assume since
 */
 
 #include "commons.h"
+
 #include <dirent.h>
 
 static void func(const char* dir) {
 	printf("start recursive rm on %s\n", dir);
 	DIR* directoryPointer;
 	directoryPointer = opendir(dir);
-	if (directoryPointer != NULL)
-	{
+	if (directoryPointer != NULL) {
 		const struct dirent* direntptr;
-		while ((direntptr = readdir(directoryPointer)))
-		{
+		while ((direntptr = readdir(directoryPointer))) {
 			//printf("testing: %s (directory: %s)\n", direntptr->d_name, (direntptr->d_type == DT_DIR ? "TRUE" : "NO"));
 			if (Compare(direntptr->d_name, ".") || Compare(direntptr->d_name, "..")) {
 				continue;
-			}
-			else {
+			} else {
 				char* next;
 				if (asprintf(&next, "%s/%s", dir, direntptr->d_name) == -1) {
 					fprintf(stderr, "Out of memory\n");
@@ -43,8 +41,7 @@ static void func(const char* dir) {
 				}
 				if (direntptr->d_type == DT_DIR) {
 					func(next);
-				}
-				else {
+				} else {
 					printf("deleting sub-element: %s\n", next);
 					remove(next);
 				}
@@ -53,9 +50,7 @@ static void func(const char* dir) {
 		closedir(directoryPointer);
 		printf("deleting parentfolder: %s\n", dir);
 		remove(dir);
-	}
-	else
-	{
+	} else {
 		fprintf(stderr, "failed on directory: %s\n", dir);
 		perror("Couldn't open the directory\n");
 	}
@@ -65,8 +60,7 @@ int main(int argc, char** argv) {
 	if (argc == 2) {
 		func(argv[1]);
 		return 0;
-	}
-	else {
+	} else {
 		fprintf(stderr, "you must supply exactly one argument\n");
 		return 1;
 	}

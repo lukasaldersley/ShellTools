@@ -3,19 +3,19 @@
 
 #include "commons.h"
 
-#define COLOUR_GIT_BARE "\e[38;5;006m"
-#define COLOUR_GIT_INDICATOR "\e[38;5;002m"
-#define COLOUR_GIT_PARENT "\e[38;5;004m"
-#define COLOUR_GIT_NAME "\e[38;5;009m"
-#define COLOUR_GIT_BRANCH "\e[38;5;001m"
-#define COLOUR_GIT_ORIGIN "\e[38;5;005m"
-#define COLOUR_GIT_COMMITS "\e[38;5;208m"
-#define COLOUR_GIT_MERGES "\e[38;5;009m"
-#define COLOUR_GIT_STAGED "\e[38;5;010m"
-#define COLOUR_GIT_MODIFIED "\e[38;5;226m"
+#define COLOUR_GIT_BARE				 "\e[38;5;006m"
+#define COLOUR_GIT_INDICATOR		 "\e[38;5;002m"
+#define COLOUR_GIT_PARENT			 "\e[38;5;004m"
+#define COLOUR_GIT_NAME				 "\e[38;5;009m"
+#define COLOUR_GIT_BRANCH			 "\e[38;5;001m"
+#define COLOUR_GIT_ORIGIN			 "\e[38;5;005m"
+#define COLOUR_GIT_COMMITS			 "\e[38;5;208m"
+#define COLOUR_GIT_MERGES			 "\e[38;5;009m"
+#define COLOUR_GIT_STAGED			 "\e[38;5;010m"
+#define COLOUR_GIT_MODIFIED			 "\e[38;5;226m"
 #define COLOUR_GIT_BRANCH_REMOTEONLY "\e[0m"
-#define COLOUR_GIT_BRANCH_LOCALONLY "\e[38;5;220m"
-#define COLOUR_GIT_BRANCH_UNEQUAL "\e[38;5;009m"
+#define COLOUR_GIT_BRANCH_LOCALONLY	 "\e[38;5;220m"
+#define COLOUR_GIT_BRANCH_UNEQUAL	 "\e[38;5;009m"
 
 typedef struct {
 	char* BranchName;
@@ -45,8 +45,8 @@ struct RepoInfo_t {
 	RepoInfo* ParentDirectory;
 	RepoList* SubDirectories;
 	char* DirectoryName;
-	char* DirectoryPath;//path+name
-	char* RepositoryName;//the name of the repo itself
+	char* DirectoryPath; //path+name
+	char* RepositoryName; //the name of the repo itself
 	char* RepositoryDisplayedOrigin;
 	char* RepositoryUnprocessedOrigin;
 	char* RepositoryUnprocessedOrigin_PREVIOUS;

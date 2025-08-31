@@ -2,20 +2,20 @@
 #define __BVBS_ZSH_COMMONS__
 
 #define _GNU_SOURCE
-#include <stdio.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <inttypes.h>
-#include <stdlib.h>
-#include <string.h>
 #include <assert.h>
+#include <bits/wordsize.h>
+#include <errno.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdbool.h>
-#include <errno.h>
-#include <bits/wordsize.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #define COLOUR_GREYOUT "\e[38;5;240m"
-#define COLOUR_CLEAR "\e[0m"
-#define MODIFIER_BOLD "\e[1m"
+#define COLOUR_CLEAR   "\e[0m"
+#define MODIFIER_BOLD  "\e[1m"
 #ifndef true
 #define true 1
 #endif
@@ -23,12 +23,15 @@
 #define false 0
 #endif
 
-
 #define DEFAULT_TERMINATORS "\r\n\a"
 
 #define ABORT_NO_MEMORY {abortNomem();exit(1);}
 
-typedef enum { ALPHA_BEFORE, ALPHA_EQUAL, ALPHA_AFTER } StringRelations;
+typedef enum {
+	ALPHA_BEFORE,
+	ALPHA_EQUAL,
+	ALPHA_AFTER,
+} StringRelations;
 
 void abortNomem();
 void abortMessage(const char* message);

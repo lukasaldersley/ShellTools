@@ -10,7 +10,9 @@ gcc -O3 -std=c2x -Wall "$(realpath "$(dirname "$0")")"/commons.c "$0" -o "$Targe
 printf " -> \e[32mDONE\e[0m(%s)\n" $?
 exit
 */
+
 #include "commons.h"
+
 #include <stdio.h>
 
 int main(int argc, char** argv) {
@@ -19,7 +21,7 @@ int main(int argc, char** argv) {
 	printf("PWD: %s\n", result);
 	free(result);
 	printf("argc: %i\n", argc);
-	for (int i = 0;i < argc;i++) {
+	for (int i = 0; i < argc; i++) {
 		printf("arg %i:\t>%s<\n", i, *(argv + i));
 	}
 	printf("\n");

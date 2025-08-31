@@ -30,8 +30,9 @@ fi
 
 //add option to have chars be treated as equal such as --equal=" v" therfore 0x20 and v are to be the same (to allow matching up v3.17 with " 3.17.0")
 #include "commons.h"
-#include <string.h>
+
 #include <getopt.h>
+#include <string.h>
 
 static bool in_list(char c, char* eqlist) {
 	if (eqlist == NULL) {
@@ -51,7 +52,7 @@ static bool checkEquality(char a, char b, bool caseIndependant, char** eqlists, 
 	if (a == b || (caseIndependant && ToUpperCase(a) == ToUpperCase(b))) {
 		return true;
 	}
-	for (int i = 0;i < numEQList;i++) {
+	for (int i = 0; i < numEQList; i++) {
 		char* clist = *(eqlists + i);
 		if (in_list(a, clist) && in_list(b, clist)) {
 			return true;
@@ -71,12 +72,10 @@ static int assemble(char* targetBuffer, int targetBufferLength, int alreadyFixed
 	//realistically this could be a while(true) construct, since the return should happen inside this loop, it only isn't a while(true) to avoid the possibility of infinite loops
 	while (startOffset <= alreadyFixedChars) {
 		int testIndexOffset = 0;
-		while (
-			startOffset + testIndexOffset <= alreadyFixedChars && /**/
-			startOffset + testIndexOffset < targetBufferLength &&
-			testIndexOffset < newSegmentBufferLength &&
-			checkEquality(*(targetBuffer + startOffset + testIndexOffset), *(newSegmentBuffer + testIndexOffset), caseIndependant, equalityLists, numEqualityLists))
-		{
+		while (startOffset + testIndexOffset <= alreadyFixedChars &&
+			   startOffset + testIndexOffset < targetBufferLength &&
+			   testIndexOffset < newSegmentBufferLength &&
+			   checkEquality(*(targetBuffer + startOffset + testIndexOffset), *(newSegmentBuffer + testIndexOffset), caseIndependant, equalityLists, numEqualityLists)) {
 			//while I havn't overrun any array- or sense-boundaries, advance the test index as long as the two strings still match
 			testIndexOffset++;
 		}
@@ -105,7 +104,7 @@ int main(int argc, char** argv) {
 	char** eqlists = (char**)malloc(sizeof(char*) * argc);
 	if (eqlists == NULL) ABORT_NO_MEMORY;
 	//null-initialize array to cause obvious errors if something goes wrong
-	for (int i = 0;i < argc;i++) {
+	for (int i = 0; i < argc; i++) {
 		*(eqlists + i) = NULL;
 	}
 
@@ -120,9 +119,9 @@ int main(int argc, char** argv) {
 		int option_index = 0;
 
 		const static struct option long_options[] = {
-			{"equal", required_argument, 0, 'e' },
+			{"equal", required_argument, 0, 'e'},
 			{"ignore-case", no_argument, 0, 'i'},
-			{0, 0, 0, 0 }
+			{0, 0, 0, 0},
 		};
 
 		getopt_currentChar = getopt_long(argc, argv, "ie:", long_options, &option_index);
@@ -131,8 +130,7 @@ int main(int argc, char** argv) {
 		}
 
 		switch (getopt_currentChar) {
-		case 0:
-			{
+			case 0: {
 				printf("long option %s", long_options[option_index].name);
 				if (optarg) {
 					printf(" with arg %s", optarg);
@@ -140,24 +138,20 @@ int main(int argc, char** argv) {
 				printf("\n");
 				break;
 			}
-		case 'i':
-			{
+			case 'i': {
 				ignoreCase = true;
 				break;
 			}
-		case 'e':
-			{
-				if (asprintf((eqlists + numeqlists), "%s", optarg) == -1)abortNomem();
+			case 'e': {
+				if (asprintf((eqlists + numeqlists), "%s", optarg) == -1) abortNomem();
 				numeqlists++;
 				break;
 			}
-		case '?':
-			{
+			case '?': {
 				printf("option %c: >%s< is not a recognized option\n", getopt_currentChar, optarg);
 				break;
 			}
-		default:
-			{
+			default: {
 				printf("?? getopt returned character code 0%o (char: %c) with option %s ??\n", getopt_currentChar, getopt_currentChar, optarg);
 				exit(1);
 			}
@@ -165,13 +159,13 @@ int main(int argc, char** argv) {
 	}
 
 #ifdef DEBUG
-	for (int i = 0;i < argc;i++) {
+	for (int i = 0; i < argc; i++) {
 		printf("%soption-arg %i:\t>%s<\n", (i >= optind ? "non-" : "\t"), i, argv[i]);
 	}
 #endif
 
 	int maxSize = 1;
-	for (int i = optind;i < argc;i++) {
+	for (int i = optind; i < argc; i++) {
 		int tl = strlen(*(argv + i));
 		maxSize += tl;
 #ifdef DEBUG
@@ -180,19 +174,19 @@ int main(int argc, char** argv) {
 	}
 	char* base = (char*)malloc(sizeof(char) * maxSize);
 	if (base == NULL) ABORT_NO_MEMORY;
-	for (int i = 0;i < maxSize;i++) {
+	for (int i = 0; i < maxSize; i++) {
 		*(base + i) = 0x00;
 	}
 	int knownlen = 0;
 
 #ifdef DEBUG
-	for (int i = 0;i < numeqlists;i++) {
+	for (int i = 0; i < numeqlists; i++) {
 		const char* clist = *(eqlists + i);
 		printf("%i. equality list: >%s<\n", i, clist);
 	}
 #endif
 
-	for (int i = optind; i < argc;i++) {
+	for (int i = optind; i < argc; i++) {
 #ifdef DEBUG
 		printf("{[%s] + [%s] -> ", base, *(argv + i));
 #endif

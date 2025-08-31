@@ -49,8 +49,9 @@ fi
 */
 
 #include "commons.h"
-#include <stdio.h>
+
 #include <assert.h>
+#include <stdio.h>
 
 #pragma region AutomatedTests
 static bool TestCommonsCompare() {
@@ -58,17 +59,53 @@ static bool TestCommonsCompare() {
 	if (asprintf(&ForceNoSamePointer, "Hello World!") == -1) ABORT_NO_MEMORY;
 	int TestNo = 0;
 	bool testPass = true;
-	if (!Compare("Hello World!", "Hello") == false) { testPass = false;printf("TestCompare Number %i failed\n", TestNo); }TestNo++;
+	if (!Compare("Hello World!", "Hello") == false) {
+		testPass = false;
+		printf("TestCompare Number %i failed\n", TestNo);
+	}
+	TestNo++;
 	//Attention: the line below may be optimized to pass the same pointer into the function, since the strings are const and thus a single string in .bss
-	if (!Compare("Hello World!", "Hello World!") == true) { testPass = false;printf("TestCompare Number %i failed\n", TestNo); }TestNo++;
-	if (!Compare("Hello World!", ForceNoSamePointer) == true) { testPass = false;printf("TestCompare Number %i failed\n", TestNo); }TestNo++;
-	if (!Compare("Hello World!", "Hello World! (of Testing)") == false) { testPass = false;printf("TestCompare Number %i failed\n", TestNo); }TestNo++;
-	if (!Compare("Hello World!", "He.lo World!") == false) { testPass = false;printf("TestCompare Number %i failed\n", TestNo); }TestNo++;
-	if (!Compare(NULL, "Hello World!") == false) { testPass = false;printf("TestCompare Number %i failed\n", TestNo); }TestNo++;
-	if (!Compare("Hello World!", NULL) == false) { testPass = false;printf("TestCompare Number %i failed\n", TestNo); }TestNo++;
-	if (!Compare(NULL, NULL) == true) { testPass = false;printf("TestCompare Number %i failed\n", TestNo); }TestNo++;
+	if (!Compare("Hello World!", "Hello World!") == true) {
+		testPass = false;
+		printf("TestCompare Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!Compare("Hello World!", ForceNoSamePointer) == true) {
+		testPass = false;
+		printf("TestCompare Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!Compare("Hello World!", "Hello World! (of Testing)") == false) {
+		testPass = false;
+		printf("TestCompare Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!Compare("Hello World!", "He.lo World!") == false) {
+		testPass = false;
+		printf("TestCompare Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!Compare(NULL, "Hello World!") == false) {
+		testPass = false;
+		printf("TestCompare Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!Compare("Hello World!", NULL) == false) {
+		testPass = false;
+		printf("TestCompare Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!Compare(NULL, NULL) == true) {
+		testPass = false;
+		printf("TestCompare Number %i failed\n", TestNo);
+	}
+	TestNo++;
 	//if the pointers are the same, the result is true, no matter what the pointers are, here I just misuse TestNo and treat it's pointer as char since it'll never be dereferenced
-	if (!Compare((char*)&TestNo, (char*)&TestNo) == true) { testPass = false;printf("TestCompare Number %i failed\n", TestNo); }TestNo++;
+	if (!Compare((char*)&TestNo, (char*)&TestNo) == true) {
+		testPass = false;
+		printf("TestCompare Number %i failed\n", TestNo);
+	}
+	TestNo++;
 	free(ForceNoSamePointer);
 	ForceNoSamePointer = NULL;
 	return testPass;
@@ -83,17 +120,53 @@ static bool TestCommonsStartsWith() {
 	if (asprintf(&ForceNoSamePointer, "Hello World!") == -1) ABORT_NO_MEMORY;
 	int TestNo = 0;
 	bool testPass = true;
-	if (!StartsWith("Hello World!", "Hello") == true) { testPass = false;printf("TestStartsWith Number %i failed\n", TestNo); }TestNo++;
+	if (!StartsWith("Hello World!", "Hello") == true) {
+		testPass = false;
+		printf("TestStartsWith Number %i failed\n", TestNo);
+	}
+	TestNo++;
 	//Attention: the line below may be optimized to pass the same pointer into the function, since the strings are const and thus a single string in .bss
-	if (!StartsWith("Hello World!", "Hello World!") == true) { testPass = false;printf("TestStartsWith Number %i failed\n", TestNo); }TestNo++;
-	if (!StartsWith("Hello World!", ForceNoSamePointer) == true) { testPass = false;printf("TestStartsWith Number %i failed\n", TestNo); }TestNo++;
-	if (!StartsWith("Hello World!", "Hello World! (of Testing)") == false) { testPass = false;printf("TestStartsWith Number %i failed\n", TestNo); }TestNo++;
-	if (!StartsWith("Hello World!", "He.lo World!") == false) { testPass = false;printf("TestStartsWith Number %i failed\n", TestNo); }TestNo++;
-	if (!StartsWith(NULL, "Hello World!") == false) { testPass = false;printf("TestStartsWith Number %i failed\n", TestNo); }TestNo++;
-	if (!StartsWith("Hello World!", NULL) == false) { testPass = false;printf("TestStartsWith Number %i failed\n", TestNo); }TestNo++;
-	if (!StartsWith(NULL, NULL) == true) { testPass = false;printf("TestStartsWith Number %i failed\n", TestNo); }TestNo++;
+	if (!StartsWith("Hello World!", "Hello World!") == true) {
+		testPass = false;
+		printf("TestStartsWith Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!StartsWith("Hello World!", ForceNoSamePointer) == true) {
+		testPass = false;
+		printf("TestStartsWith Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!StartsWith("Hello World!", "Hello World! (of Testing)") == false) {
+		testPass = false;
+		printf("TestStartsWith Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!StartsWith("Hello World!", "He.lo World!") == false) {
+		testPass = false;
+		printf("TestStartsWith Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!StartsWith(NULL, "Hello World!") == false) {
+		testPass = false;
+		printf("TestStartsWith Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!StartsWith("Hello World!", NULL) == false) {
+		testPass = false;
+		printf("TestStartsWith Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!StartsWith(NULL, NULL) == true) {
+		testPass = false;
+		printf("TestStartsWith Number %i failed\n", TestNo);
+	}
+	TestNo++;
 	//if the pointers are the same, the result is true, no matter what the pointers are, here I just misuse TestNo and treat it's pointer as char since it'll never be dereferenced
-	if (!StartsWith((char*)&TestNo, (char*)&TestNo) == true) { testPass = false;printf("TestStartsWith Number %i failed\n", TestNo); }TestNo++;
+	if (!StartsWith((char*)&TestNo, (char*)&TestNo) == true) {
+		testPass = false;
+		printf("TestStartsWith Number %i failed\n", TestNo);
+	}
+	TestNo++;
 	free(ForceNoSamePointer);
 	ForceNoSamePointer = NULL;
 	return testPass;
@@ -107,13 +180,41 @@ static bool TestCommonsLastIndexOf() {
 	const char* teststring = "/some/string/0/~string~/";
 	int TestNo = 0;
 	bool testPass = true;
-	if (!(LastIndexOf(teststring, '/') == 23)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(LastIndexOf(teststring, 'e') == 4)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(LastIndexOf(teststring, 'z') == -1)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(LastIndexOf(teststring, 0) == 24)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(LastIndexOf(teststring, 0) == (int)strlen(teststring))) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(LastIndexOf(NULL, 0) == -2)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(LastIndexOf(NULL, 'a') == -2)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
+	if (!(LastIndexOf(teststring, '/') == 23)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(LastIndexOf(teststring, 'e') == 4)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(LastIndexOf(teststring, 'z') == -1)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(LastIndexOf(teststring, 0) == 24)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(LastIndexOf(teststring, 0) == (int)strlen(teststring))) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(LastIndexOf(NULL, 0) == -2)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(LastIndexOf(NULL, 'a') == -2)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
 	return testPass;
 }
 
@@ -121,16 +222,56 @@ static bool TestCommonsNextIndexOf() {
 	const char* teststring = "/some/string/0/~string~/";
 	int TestNo = 0;
 	bool testPass = true;
-	if (!(NextIndexOf(teststring, '/', 0) == 0)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(NextIndexOf(teststring, '/', 1) == 5)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(NextIndexOf(teststring, 'z', 0) == -1)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(NextIndexOf(teststring, '/', 100) == -2)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(NextIndexOf(teststring, 'z', 100) == -2)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(NextIndexOf(teststring, '0', 0) == 13)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(NextIndexOf(teststring, '0', 13) == 13)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(NextIndexOf(teststring, '0', 14) == -1)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(NextIndexOf(teststring, '/', -1) == -2)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
-	if (!(NextIndexOf(NULL, 0, 0) == -2)) { testPass = false;printf("TestLastIndexOf Number %i failed\n", TestNo); }TestNo++;
+	if (!(NextIndexOf(teststring, '/', 0) == 0)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(NextIndexOf(teststring, '/', 1) == 5)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(NextIndexOf(teststring, 'z', 0) == -1)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(NextIndexOf(teststring, '/', 100) == -2)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(NextIndexOf(teststring, 'z', 100) == -2)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(NextIndexOf(teststring, '0', 0) == 13)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(NextIndexOf(teststring, '0', 13) == 13)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(NextIndexOf(teststring, '0', 14) == -1)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(NextIndexOf(teststring, '/', -1) == -2)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
+	if (!(NextIndexOf(NULL, 0, 0) == -2)) {
+		testPass = false;
+		printf("TestLastIndexOf Number %i failed\n", TestNo);
+	}
+	TestNo++;
 	return testPass;
 }
 
@@ -144,24 +285,24 @@ static bool TestCommonsTerminateStrOn() {
 
 static bool TestCommonsToLowerCase() {
 	bool testPass = true;
-	for (char i = 0;i < 'A';i++) {
+	for (char i = 0; i < 'A'; i++) {
 		if (i != ToLowerCase(i)) {
 			testPass = false;
 			printf("TestToLowerCase Number %i failed\n", i);
 		}
 	}
-	for (char i = 'A';i <= 'Z';i++) {
+	for (char i = 'A'; i <= 'Z'; i++) {
 		if ((i + 0x20) != ToLowerCase(i)) {
 			testPass = false;
 			printf("TestToLowerCase Number %i failed\n", i);
 		}
 	}
-	for (char i = ('Z' + 1);i <= 0x7f;i++) {
+	for (char i = ('Z' + 1); i <= 0x7f; i++) {
 		if (i != ToLowerCase(i)) {
 			testPass = false;
 			printf("TestToLowerCase Number %i failed [%c/%c]\n", i, i, ToLowerCase(i));
 		}
-		if (i == 0x7f)break;//to allow the full range to be tested
+		if (i == 0x7f) break; //to allow the full range to be tested
 	}
 	return testPass;
 }
@@ -181,265 +322,309 @@ static bool TestCommonsAbbreviatePath() {
 	int rc = 0;
 	rc = AbbreviatePath(&res, NULL, 0, 0, 0);
 	if (!(Compare(res, "") && rc == 1)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, NULL, 0, 0, 1);
 	if (!(Compare(res, "") && rc == 1)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, NULL, 0, 1, 0);
 	if (!(Compare(res, "") && rc == 1)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, NULL, 1, 0, 0);
 	if (!(Compare(res, "") && rc == 1)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/", 0, 0, 0);
 	if (!(Compare(res, "") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/", 0, 1, 0);
 	if (!(Compare(res, "/test") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/", 0, 1, 1);
 	if (!(Compare(res, "/test") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/", 0, 0, 1);
 	if (!(Compare(res, "/test") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/", 1, 0, 0);
 	if (!(Compare(res, "!") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/", 2, 0, 0);
 	if (!(Compare(res, "!!") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/", 3, 0, 0);
 	if (!(Compare(res, "!!!") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/", 4, 0, 0);
 	if (!(Compare(res, "!!!!") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/", 5, 0, 0);
 	if (!(Compare(res, "/test") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test1/", 5, 0, 0);
 	if (!(Compare(res, "[...]") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test1/", 6, 0, 0);
 	if (!(Compare(res, "/test1") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/testx1/", 6, 0, 0);
 	if (!(Compare(res, "[...]1") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/", 6, 0, 0);
 	if (!(Compare(res, "/test") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test", 5, 0, 0);
 	if (!(Compare(res, "/test") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "A_Reeeeaaallly_long_name_without_parent", 5, 0, 0);
 	if (!(Compare(res, "[...]") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "A_Reeeeaaallly_long_name_without_parent", 6, 0, 0);
 	if (!(Compare(res, "[...]t") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "A_Reeeeaaallly_long_name_without_parent", 5, 0, 1);
 	if (!(Compare(res, "A_Reeeeaaallly_long_name_without_parent") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "A_Reeeeaaallly_long_name_without_parent", 5, 1, 0);
 	if (!(Compare(res, "A_Reeeeaaallly_long_name_without_parent") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "A_Reeeeaaallly_long_name_without_parent", 5, 1, 1);
 	if (!(Compare(res, "A_Reeeeaaallly_long_name_without_parent") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "A_Reeeeaaallly_long_name_without_parent/but/with/child", 10, 1, 1);
 	if (!(Compare(res, "A_Reeeeaaallly_long_name_without_parent/[...]/child") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "A_Reeeeaaallly_long_name_without_parent/but/with_child", 10, 1, 1);
 	if (!(Compare(res, "A_Reeeeaaallly_long_name_without_parent/but/with_child") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/", 1, 0, 0);
 	if (!(Compare(res, "/") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "////", 1, 0, 0);
 	if (!(Compare(res, "/") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "////", 10, 0, 0);
 	if (!(Compare(res, "/") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/now", 10, 0, 0);
 	if (!(Compare(res, "/test/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/now1", 10, 0, 0);
 	if (!(Compare(res, "/test/now1") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/test/now12", 10, 0, 0);
 	if (!(Compare(res, "[...]now12") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to/test/now", 10, 0, 0);
 	if (!(Compare(res, "[...]t/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to/test/now", 10, 1, 1);
 	if (!(Compare(res, "/some/[...]/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to/test/now", 10, 2, 1);
 	if (!(Compare(res, "/some/path/[...]/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to/test/now", 10, 1, 2);
 	if (!(Compare(res, "/some/[...]/test/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "some/path/to/test/now", 10, 2, 1);
 	if (!(Compare(res, "some/path/[...]/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to/test/now", 10, 2, 2);
 	if (!(Compare(res, "/some/path/to/test/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to3/test/now", 10, 2, 2);
 	if (!(Compare(res, "/some/path/to3/test/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to34/test/now", 10, 2, 2);
 	if (!(Compare(res, "/some/path/to34/test/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to345/test/now", 10, 2, 2);
 	if (!(Compare(res, "/some/path/to345/test/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to3456/test/now", 10, 2, 2);
 	if (!(Compare(res, "/some/path/[...]/test/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to34567/test/now", 10, 2, 2);
 	if (!(Compare(res, "/some/path/[...]/test/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to34567/test/now", 100, 2, 2);
 	if (!(Compare(res, "/some/path/to34567/test/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
 	rc = AbbreviatePath(&res, "/some/path/to34567/test/now", 1, 2, 2);
 	if (!(Compare(res, "/some/path/[...]/test/now") && rc == 0)) {
-		testPass = false;printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
+		testPass = false;
+		printf("TestCommonsAbbreviatePath Number %i failed\n", TestNo);
 	}
 	TestNo++;
 	free(res);
@@ -474,8 +659,7 @@ int main() {
 	if (TestPass) {
 		printf("\e[32mPASS\e[0m\n");
 		return 0;
-	}
-	else {
+	} else {
 		printf("\e[31mFAIL\e[0m\n");
 		return 1;
 	}

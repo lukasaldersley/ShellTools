@@ -3,8 +3,10 @@ echo "$0 is library file -> skip"
 exit
 */
 
-#include "gitfunc.h"
+#include "commons.h"
 #include "config.h"
+#include "gitfunc.h"
+
 #include <dirent.h>
 #include <regex.h>
 
@@ -19,13 +21,10 @@ static bool IsMergeCommit(const char* repoPath, const char* commitHash) {
 	//therefore if a commit has 2 parents it's a merge commit
 	if (asprintf(&cmd, "git -C \"%s\" cat-file -p %s |grep parent|wc -l", repoPath, commitHash) == -1) ABORT_NO_MEMORY;
 	FILE* fp = popen(cmd, "r");
-	if (fp == NULL)
-	{
+	if (fp == NULL) {
 		fprintf(stderr, "failed running process %s\n", cmd);
-	}
-	else {
-		while (fgets(result, size - 1, fp) != NULL)
-		{
+	} else {
+		while (fgets(result, size - 1, fp) != NULL) {
 			TerminateStrOn(result, DEFAULT_TERMINATORS);
 			if (Compare(result, "2")) {
 				RES = true;
@@ -57,18 +56,14 @@ bool IsMerged(const char* repopath, const char* commithash) {
 	bool RES = false;
 	if (I_HAVE_ANCIENT_GIT) {
 		if (asprintf(&cmd, "git -C \"%s\" rev-list --children --all | grep ^%s | cut -c42- | tr ' ' '\n'", repopath, commithash) == -1) ABORT_NO_MEMORY;
-	}
-	else {
+	} else {
 		if (asprintf(&cmd, "git -C \"%1$s\" rev-list --children --all --ancestry-path=%2$s | grep ^%2$s | cut -c42- | tr ' ' '\n'", repopath, commithash) == -1) ABORT_NO_MEMORY;
 	}
 	FILE* fp = popen(cmd, "r");
-	if (fp == NULL)
-	{
+	if (fp == NULL) {
 		fprintf(stderr, "failed running process %s\n", cmd);
-	}
-	else {
-		while (fgets(result, size - 1, fp) != NULL)
-		{
+	} else {
+		while (fgets(result, size - 1, fp) != NULL) {
 			TerminateStrOn(result, DEFAULT_TERMINATORS);
 			if (result[0] == 0x00) {
 				//if the line is empty -> no need to check if it's a merge commit if it's not even a commit at all
@@ -88,7 +83,6 @@ bool IsMerged(const char* repopath, const char* commithash) {
 	free(cmd);
 	return RES;
 }
-
 
 RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName) {
 	RepoInfo* ri = (RepoInfo*)malloc(sizeof(RepoInfo));
@@ -133,25 +127,57 @@ RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName) {
 }
 
 void DeallocRepoInfoStrings(RepoInfo* ri) {
-	if (ri->DirectoryName != NULL) { free(ri->DirectoryName); }
-	if (ri->DirectoryPath != NULL) { free(ri->DirectoryPath); }
-	if (ri->RepositoryName != NULL) { free(ri->RepositoryName); }
-	if (ri->RepositoryDisplayedOrigin != NULL) { free(ri->RepositoryDisplayedOrigin); }
-	if (ri->RepositoryUnprocessedOrigin != NULL) { free(ri->RepositoryUnprocessedOrigin); }
-	if (ri->RepositoryUnprocessedOrigin_PREVIOUS != NULL) { free(ri->RepositoryUnprocessedOrigin_PREVIOUS); }
-	if (ri->branch != NULL) { free(ri->branch); }
-	if (ri->parentRepo != NULL) { free(ri->parentRepo); }
+	if (ri->DirectoryName != NULL) free(ri->DirectoryName);
+	if (ri->DirectoryPath != NULL) free(ri->DirectoryPath);
+	if (ri->RepositoryName != NULL) free(ri->RepositoryName);
+	if (ri->RepositoryDisplayedOrigin != NULL) free(ri->RepositoryDisplayedOrigin);
+	if (ri->RepositoryUnprocessedOrigin != NULL) free(ri->RepositoryUnprocessedOrigin);
+	if (ri->RepositoryUnprocessedOrigin_PREVIOUS != NULL) free(ri->RepositoryUnprocessedOrigin_PREVIOUS);
+	if (ri->branch != NULL) free(ri->branch);
+	if (ri->parentRepo != NULL) free(ri->parentRepo);
 }
 
 void AllocUnsetStringsToEmpty(RepoInfo* ri) {
-	if (ri->DirectoryName == NULL) { ri->DirectoryName = (char*)malloc(sizeof(char)); if (ri->DirectoryName == NULL) { ABORT_NO_MEMORY; } ri->DirectoryName[0] = 0x00; }
-	if (ri->DirectoryPath == NULL) { ri->DirectoryPath = (char*)malloc(sizeof(char)); if (ri->DirectoryPath == NULL) { ABORT_NO_MEMORY; } ri->DirectoryPath[0] = 0x00; }
-	if (ri->RepositoryName == NULL) { ri->RepositoryName = (char*)malloc(sizeof(char)); if (ri->RepositoryName == NULL) { ABORT_NO_MEMORY; } ri->RepositoryName[0] = 0x00; }
-	if (ri->RepositoryDisplayedOrigin == NULL) { ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char)); if (ri->RepositoryDisplayedOrigin == NULL) { ABORT_NO_MEMORY; } ri->RepositoryDisplayedOrigin[0] = 0x00; }
-	if (ri->RepositoryUnprocessedOrigin == NULL) { ri->RepositoryUnprocessedOrigin = (char*)malloc(sizeof(char)); if (ri->RepositoryUnprocessedOrigin == NULL) { ABORT_NO_MEMORY; } ri->RepositoryUnprocessedOrigin[0] = 0x00; }
-	if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { ri->RepositoryUnprocessedOrigin_PREVIOUS = (char*)malloc(sizeof(char)); if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) { ABORT_NO_MEMORY; } ri->RepositoryUnprocessedOrigin_PREVIOUS[0] = 0x00; }
-	if (ri->branch == NULL) { ri->branch = (char*)malloc(sizeof(char)); if (ri->branch == NULL) { ABORT_NO_MEMORY; } ri->branch[0] = 0x00; }
-	if (ri->parentRepo == NULL) { ri->parentRepo = (char*)malloc(sizeof(char)); if (ri->parentRepo == NULL) { ABORT_NO_MEMORY; } ri->parentRepo[0] = 0x00; }
+	if (ri->DirectoryName == NULL) {
+		ri->DirectoryName = (char*)malloc(sizeof(char));
+		if (ri->DirectoryName == NULL) ABORT_NO_MEMORY;
+		ri->DirectoryName[0] = 0x00;
+	}
+	if (ri->DirectoryPath == NULL) {
+		ri->DirectoryPath = (char*)malloc(sizeof(char));
+		if (ri->DirectoryPath == NULL) ABORT_NO_MEMORY;
+		ri->DirectoryPath[0] = 0x00;
+	}
+	if (ri->RepositoryName == NULL) {
+		ri->RepositoryName = (char*)malloc(sizeof(char));
+		if (ri->RepositoryName == NULL) ABORT_NO_MEMORY;
+		ri->RepositoryName[0] = 0x00;
+	}
+	if (ri->RepositoryDisplayedOrigin == NULL) {
+		ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char));
+		if (ri->RepositoryDisplayedOrigin == NULL) ABORT_NO_MEMORY;
+		ri->RepositoryDisplayedOrigin[0] = 0x00;
+	}
+	if (ri->RepositoryUnprocessedOrigin == NULL) {
+		ri->RepositoryUnprocessedOrigin = (char*)malloc(sizeof(char));
+		if (ri->RepositoryUnprocessedOrigin == NULL) ABORT_NO_MEMORY;
+		ri->RepositoryUnprocessedOrigin[0] = 0x00;
+	}
+	if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) {
+		ri->RepositoryUnprocessedOrigin_PREVIOUS = (char*)malloc(sizeof(char));
+		if (ri->RepositoryUnprocessedOrigin_PREVIOUS == NULL) ABORT_NO_MEMORY;
+		ri->RepositoryUnprocessedOrigin_PREVIOUS[0] = 0x00;
+	}
+	if (ri->branch == NULL) {
+		ri->branch = (char*)malloc(sizeof(char));
+		if (ri->branch == NULL) ABORT_NO_MEMORY;
+		ri->branch[0] = 0x00;
+	}
+	if (ri->parentRepo == NULL) {
+		ri->parentRepo = (char*)malloc(sizeof(char));
+		if (ri->parentRepo == NULL) ABORT_NO_MEMORY;
+		ri->parentRepo[0] = 0x00;
+	}
 }
 
 static BranchListSorted* InitBranchListSortedElement() {
@@ -175,23 +201,19 @@ BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char* branc
 		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1) ABORT_NO_MEMORY;
 		if (remote) {
 			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		else {
+		} else {
 			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		return n;
-	}
-	else if (Compare(head->branchinfo.BranchName, branchname)) {
+	} else if (Compare(head->branchinfo.BranchName, branchname)) {
 		//Branch Name matches, this means I know of the local copy and am adding the remote one or vice versa
 		if (remote) {
 			if (asprintf(&(head->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		else {
+		} else {
 			if (asprintf(&(head->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		return head;
-	}
-	else if (CompareStrings(head->branchinfo.BranchName, branchname) == ALPHA_AFTER) {
+	} else if (CompareStrings(head->branchinfo.BranchName, branchname) == ALPHA_AFTER) {
 		//The new Element is Alphabetically befory myself -> insert new element before myself
 		BranchListSorted* n = InitBranchListSortedElement();
 		n->next = head;
@@ -201,13 +223,11 @@ BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char* branc
 		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1) ABORT_NO_MEMORY;
 		if (remote) {
 			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		else {
+		} else {
 			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		return n;
-	}
-	else if (head->next == NULL) {
+	} else if (head->next == NULL) {
 		//The New Element is NOT Equal to myself and is NOT alphabetically before myself (as per the earlier checks)
 		//on top of that, I AM the LAST element, so I can simply create a new last element
 		BranchListSorted* n = InitBranchListSortedElement();
@@ -217,13 +237,11 @@ BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char* branc
 		if (asprintf(&(n->branchinfo.BranchName), "%s", branchname) == -1) ABORT_NO_MEMORY;
 		if (remote) {
 			if (asprintf(&(n->branchinfo.CommitHashRemote), "%s", hash) == -1) ABORT_NO_MEMORY;
-		}
-		else {
+		} else {
 			if (asprintf(&(n->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		return head;
-	}
-	else {
+	} else {
 		//The New Element is NOT Equal to myslef and is NOT alphabetically before myself (as per the earlier checks)
 		//This time there IS another element after myself -> defer to it.
 		head->next = InsertIntoBranchListSorted(head->next, branchname, hash, remote);
@@ -239,15 +257,12 @@ bool CheckExtendedGitStatus(RepoInfo* ri) {
 	if (asprintf(&command, "git -C \"%s\" status --ignore-submodules=dirty --porcelain=v2 -b --show-stash", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
 	FILE* fp = popen(command, "r");
 	//printf("have opened git status\r");
-	if (fp == NULL)
-	{
+	if (fp == NULL) {
 		size = 0;
 		fprintf(stderr, "failed running process `%s`\n", command);
-	}
-	else {
-		while (fgets(result, size - 1, fp) != NULL)
-		{
-			if (result[0] == '1' || result[1] == '2') {//standard changes(add/modify/delete/...) and rename/copy
+	} else {
+		while (fgets(result, size - 1, fp) != NULL) {
+			if (result[0] == '1' || result[1] == '2') { //standard changes(add/modify/delete/...) and rename/copy
 				if (result[2] != '.') {
 					//staged change
 					ri->StagedChanges++;
@@ -256,15 +271,12 @@ bool CheckExtendedGitStatus(RepoInfo* ri) {
 					//not staged change
 					ri->ModifiedFiles++;
 				}
-			}
-			else if (result[0] == '?') {
+			} else if (result[0] == '?') {
 				//untracked file
 				ri->UntrackedFiles++;
-			}
-			else if (result[0] == 'u') {//merge in progress
+			} else if (result[0] == 'u') { //merge in progress
 				ri->ActiveMergeFiles++;
-			}
-			else if (StartsWith(result, "# branch.ab ")) {
+			} else if (StartsWith(result, "# branch.ab ")) {
 				//local/remote commits
 				int offset = 13;
 				int i = 0;
@@ -275,8 +287,7 @@ bool CheckExtendedGitStatus(RepoInfo* ri) {
 				ri->LocalCommits = atoi(result + offset);
 				ri->RemoteCommits = atoi(result + offset + i + 2);
 
-			}
-			else if (StartsWith(result, "# stash ")) {
+			} else if (StartsWith(result, "# stash ")) {
 				const char* num = result + 8;
 				ri->stashes = atoi(num);
 			}
@@ -285,7 +296,7 @@ bool CheckExtendedGitStatus(RepoInfo* ri) {
 	}
 	free(result);
 	free(command);
-	return size != 0;//if I set size to 0 when erroring out, return false/0; else 1
+	return size != 0; //if I set size to 0 when erroring out, return false/0; else 1
 }
 
 void AddChild(RepoInfo* parent, RepoInfo* child) {
@@ -300,8 +311,7 @@ void AddChild(RepoInfo* parent, RepoInfo* child) {
 	//the ParentDirectory already has a child -> find the end of the list and insert it there
 	else {
 		RepoList* current = parent->SubDirectories;
-		while (current->next != NULL)
-		{
+		while (current->next != NULL) {
 			current = current->next;
 		}
 		current->next = (RepoList*)malloc(sizeof(RepoList));
@@ -314,11 +324,9 @@ void AddChild(RepoInfo* parent, RepoInfo* child) {
 	parent->SubDirectoryCount++;
 }
 
-char* FixImplicitProtocol(const char* input)
-{
+char* FixImplicitProtocol(const char* input) {
 	char* reply;
-	if (ContainsString(input, "@") && !ContainsString(input, "://"))
-	{
+	if (ContainsString(input, "@") && !ContainsString(input, "://")) {
 		// repo contains @ but not :// ie it is a ssh://, but ssh:// is implicit
 		//if ^(.*@[-a-zA-Z_\.0-9]+)(:[0-9]+){0,1}:([^0-9]*/.*)$ matches, the string contains one of github's idiosyncracies where they have git urls of git@github.com:username/repo.git, which do not work if you prepend ssh:// to it as ssh would treat :username as part of the host (more specifically it'd see username as port spec), if the sequence is host:port/whatever or even host:/whatever I can prepend ssh:// for clarity. in that case, replace the : with / and prepend ssh://
 		//if so, replace it with ssh://$1$2/$3  group 2 in there is to support if someone has a different ssh port assigned
@@ -326,13 +334,12 @@ char* FixImplicitProtocol(const char* input)
 		regmatch_t ghFixRegexGroups[ghFixRegexGroupCount];
 		regex_t ghFixRegex;
 		const char* ghFixRegexString = "^(.*@[-a-zA-Z_\\.0-9]+)(:[0-9]+){0,1}:([^0-9]*(/.*){0,1})$"; //the last bit with (/.*){0,1} is to allow, but not require anything after the user name on github (relevant for origin definitions)
-#define GitHubFixHost 1
-#define GitHubFixPort 2
+#define GitHubFixHost	  1
+#define GitHubFixPort	  2
 #define GitHubFixRestRepo 3
 		int ghFixRegexReturnCode;
 		ghFixRegexReturnCode = regcomp(&ghFixRegex, ghFixRegexString, REG_EXTENDED | REG_NEWLINE);
-		if (ghFixRegexReturnCode)
-		{
+		if (ghFixRegexReturnCode) {
 			char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
 			if (regErrorBuf == NULL) ABORT_NO_MEMORY;
 			regerror(ghFixRegexReturnCode, &ghFixRegex, regErrorBuf, 1024);
@@ -350,7 +357,7 @@ char* FixImplicitProtocol(const char* input)
 				uint8_t used_reply_len = 0;
 				int tlen = (len + 1 + 6); //total max length is 6 for ssh:// plus the existing string length plus 1 for terminating zero
 				reply = malloc(sizeof(char) * tlen);
-				if (reply == NULL)ABORT_NO_MEMORY;
+				if (reply == NULL) ABORT_NO_MEMORY;
 				reply[0] = 0x00;
 				used_reply_len += snprintf(reply, tlen - (used_reply_len + 1), "ssh://");
 
@@ -375,15 +382,12 @@ char* FixImplicitProtocol(const char* input)
 				}
 				reply[used_reply_len] = 0x00;
 			}
-		}
-		else {
+		} else {
 			//no need to fix github's weirdness -> just simply prepend ssh://
 			if (asprintf(&reply, "ssh://%s", input) == -1) ABORT_NO_MEMORY;
 		}
 		regfree(&ghFixRegex);
-	}
-	else
-	{
+	} else {
 		if (asprintf(&reply, "%s", input) == -1) ABORT_NO_MEMORY;
 	}
 	return reply;
@@ -398,35 +402,35 @@ char* ConstructGitBranchInfoString(const RepoInfo* ri) {
 	if (ri->HasRemote) { //if the repo doesn't have a remote, it doesn't make sense to count the branch differences betwen remote and local since ther is no remote
 		if (ri->CountRemoteOnlyBranches > 0 || ri->CountLocalOnlyBranches > 0 || ri->CountUnequalBranches > 0) {
 			int temp = snprintf(rb + rbLen, MALEN - rbLen, " ⟨");
-			if (temp < MALEN && temp>0) {
+			if (temp < MALEN && temp > 0) {
 				rbLen += temp;
 			}
 
 			if (ri->CountRemoteOnlyBranches > 0) {
 				temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_REMOTEONLY "%d⇣ ", ri->CountRemoteOnlyBranches);
-				if (temp < MALEN && temp>0) {
+				if (temp < MALEN && temp > 0) {
 					rbLen += temp;
 				}
 			}
 
 			if (ri->CountLocalOnlyBranches > 0) {
 				temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_LOCALONLY "%d⇡ ", ri->CountLocalOnlyBranches);
-				if (temp < MALEN && temp>0) {
+				if (temp < MALEN && temp > 0) {
 					rbLen += temp;
 				}
 			}
 
 			if (ri->CountUnequalBranches > 0) {
 				temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GIT_BRANCH_UNEQUAL "%d⇕ ", ri->CountUnequalBranches);
-				if (temp < MALEN && temp>0) {
+				if (temp < MALEN && temp > 0) {
 					rbLen += temp;
 				}
 			}
 
-			rb[--rbLen] = 0x00;//bin a space (after the file listings)
+			rb[--rbLen] = 0x00; //bin a space (after the file listings)
 
 			temp = snprintf(rb + rbLen, MALEN - rbLen, COLOUR_GREYOUT "⟩");
-			if (temp < MALEN && temp>0) {
+			if (temp < MALEN && temp > 0) {
 				rbLen += temp;
 			}
 		}
@@ -444,21 +448,20 @@ char* ConstructCommitStatusString(const RepoInfo* ri) {
 	int temp;
 	if (ri->LocalCommits > 0 || ri->RemoteCommits > 0 || ri->stashes > 0) {
 		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " {" COLOUR_GIT_COMMITS "%i\u21e3 %i\u21e1" COLOUR_CLEAR, ri->RemoteCommits, ri->LocalCommits);
-		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
+		if (temp < GIT_SEG_5_MAX_LEN && temp > 0) {
 			rbLen += temp;
 		}
 		if (ri->stashes > 0) {
 			temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " %i#", ri->stashes);
-			if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
+			if (temp < GIT_SEG_5_MAX_LEN && temp > 0) {
 				rbLen += temp;
 			}
 		}
 		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, "}");
-		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
+		if (temp < GIT_SEG_5_MAX_LEN && temp > 0) {
 			rbLen += temp;
 		}
-	}
-	else if (ri->CheckedOutBranchIsNotInRemote && ri->HasRemote) { //only display if there even is a remote
+	} else if (ri->CheckedOutBranchIsNotInRemote && ri->HasRemote) { //only display if there even is a remote
 		//Initially I wanted not {NEW BRANCH} but {1⇡+}, where 1 is the number of commits since branching.
 		//to do that I would have to start at the branch tip, look at it's parent and see how many children that has.
 		//I would need to continue this chain until I find a commit with more than one child (the latest branching point) or I run out of commits (nothing on remote at all, no branches whatsoever)
@@ -508,7 +511,7 @@ char* ConstructCommitStatusString(const RepoInfo* ri) {
 		//////	printf("%s/%s has %i new commits\n", ri->RepositoryName, ri->branch, numCommitsOnBranch);
 		//////}
 		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " {" COLOUR_GIT_COMMITS "NEW BRANCH" COLOUR_CLEAR "}");
-		if (temp < GIT_SEG_5_MAX_LEN && temp>0) {
+		if (temp < GIT_SEG_5_MAX_LEN && temp > 0) {
 			rbLen += temp;
 		}
 	}
@@ -527,42 +530,42 @@ char* ConstructGitStatusString(const RepoInfo* ri) {
 	if (ri->StagedChanges > 0 || ri->ModifiedFiles > 0 || ri->UntrackedFiles > 0 || ri->ActiveMergeFiles > 0) {
 		int temp;
 		temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, " <");
-		if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
+		if (temp < GIT_SEG_6_MAX_LEN && temp > 0) {
 			rbLen += temp;
 		}
 
 		if (ri->ActiveMergeFiles > 0) {
 			temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, COLOUR_GIT_MERGES "%d!" COLOUR_CLEAR " ", ri->ActiveMergeFiles);
-			if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
+			if (temp < GIT_SEG_6_MAX_LEN && temp > 0) {
 				rbLen += temp;
 			}
 		}
 
 		if (ri->StagedChanges > 0) {
 			temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, COLOUR_GIT_STAGED "%d+" COLOUR_CLEAR " ", ri->StagedChanges);
-			if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
+			if (temp < GIT_SEG_6_MAX_LEN && temp > 0) {
 				rbLen += temp;
 			}
 		}
 
 		if (ri->ModifiedFiles > 0) {
 			temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, COLOUR_GIT_MODIFIED "%d*" COLOUR_CLEAR " ", ri->ModifiedFiles);
-			if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
+			if (temp < GIT_SEG_6_MAX_LEN && temp > 0) {
 				rbLen += temp;
 			}
 		}
 
 		if (ri->UntrackedFiles > 0) {
 			temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, "%d? ", ri->UntrackedFiles);
-			if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
+			if (temp < GIT_SEG_6_MAX_LEN && temp > 0) {
 				rbLen += temp;
 			}
 		}
 
-		rb[--rbLen] = 0x00;//bin a space (after the file listings)
+		rb[--rbLen] = 0x00; //bin a space (after the file listings)
 
 		temp = snprintf(rb + rbLen, GIT_SEG_6_MAX_LEN - rbLen, ">");
-		if (temp < GIT_SEG_6_MAX_LEN && temp>0) {
+		if (temp < GIT_SEG_6_MAX_LEN && temp > 0) {
 			rbLen += temp;
 		}
 	}
@@ -571,24 +574,19 @@ char* ConstructGitStatusString(const RepoInfo* ri) {
 	return rb;
 }
 
-
-
 bool pruneTreeForGit(RepoInfo* ri) {
 	bool hasGitInTree = false;
 	if (ri->SubDirectories != NULL) {
 		RepoList* current = ri->SubDirectories;
 		RepoList* next = NULL;
-		while (current != NULL)
-		{
+		while (current != NULL) {
 			next = current->next;
 			if (pruneTreeForGit(current->self)) {
 				hasGitInTree = true;
-			}
-			else {
+			} else {
 				if (current->prev != NULL) {
 					current->prev->next = current->next;
-				}
-				else {
+				} else {
 					//it was the first->ri pointed to this initially
 					ri->SubDirectories = current->next;
 				}
@@ -631,17 +629,15 @@ static void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anot
 		if (CONFIG_GIT_BRANCHNAME) {
 			printf(" on " COLOUR_GIT_BRANCH "%s", ri->branch);
 			if (CONFIG_GIT_BRANCH_OVERVIEW) {
-				printf(COLOUR_GREYOUT "/%i+%i",
-					ri->CountActiveBranches,
-					ri->CountFullyMergedBranches);
+				printf(COLOUR_GREYOUT "/%i+%i", ri->CountActiveBranches, ri->CountFullyMergedBranches);
 			}
 		}
 		if (!ri->isBare && CONFIG_GIT_BRANCHSTATUS) {
 			char* gitBranchInfo = ConstructGitBranchInfoString(ri);
 			printf("%s%s%s",
-				(CONFIG_GIT_BRANCHNAME || CONFIG_GIT_REPONAME) ? ":" : "",
-				(CONFIG_GIT_BRANCH_OVERVIEW) ? "" : COLOUR_GREYOUT,
-				gitBranchInfo);
+				   (CONFIG_GIT_BRANCHNAME || CONFIG_GIT_REPONAME) ? ":" : "",
+				   (CONFIG_GIT_BRANCH_OVERVIEW) ? "" : COLOUR_GREYOUT,
+				   gitBranchInfo);
 			free(gitBranchInfo);
 			gitBranchInfo = NULL;
 		}
@@ -667,8 +663,7 @@ static void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anot
 				printf(COLOUR_GREYOUT " (%s -> %s)" COLOUR_CLEAR, ri->RepositoryUnprocessedOrigin_PREVIOUS, ri->RepositoryUnprocessedOrigin);
 			}
 			putc('\n', stdout);
-		}
-		else {
+		} else {
 			if (CONFIG_GIT_REMOTE) {
 				printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR, ri->RepositoryDisplayedOrigin);
 			}
@@ -690,8 +685,7 @@ static void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anot
 		GitStatStrTemp = NULL;
 		GitComStrTemp = NULL;
 
-	}
-	else {
+	} else {
 		printf(COLOUR_GREYOUT "%s" COLOUR_CLEAR "\n", ri->DirectoryName);
 		//this prints the name of intermediate folders that are not git repos, but contain a repo somewhere within
 		//-> those are less important->print greyed out
@@ -701,8 +695,7 @@ static void printTree_internal(RepoInfo* ri, const char* parentPrefix, bool anot
 	int procedSubDirs = 0;
 	char* temp;
 	if (asprintf(&temp, "%s%s", parentPrefix, (ri->ParentDirectory != NULL) ? (anotherSameLevelEntryFollows ? "\u2502   " : "    ") : "") == -1) ABORT_NO_MEMORY;
-	while (current != NULL)
-	{
+	while (current != NULL) {
 		procedSubDirs++;
 		printTree_internal(current->self, temp, procedSubDirs < ri->SubDirectoryCount, fullOut);
 		current = current->next;
