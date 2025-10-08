@@ -1,7 +1,7 @@
 #ifndef __BVBS_ZSH_GITFUNC__
 #define __BVBS_ZSH_GITFUNC__
 
-#include "commons.h"
+#include <stdbool.h> // for bool
 
 #define COLOUR_GIT_BARE				 "\e[38;5;006m"
 #define COLOUR_GIT_INDICATOR		 "\e[38;5;002m"
@@ -17,20 +17,7 @@
 #define COLOUR_GIT_BRANCH_LOCALONLY	 "\e[38;5;220m"
 #define COLOUR_GIT_BRANCH_UNEQUAL	 "\e[38;5;009m"
 
-typedef struct {
-	char* BranchName;
-	bool IsMergedLocal;
-	char* CommitHashLocal;
-	bool IsMergedRemote;
-	char* CommitHashRemote;
-} BranchInfo;
-
-typedef struct BranchListSorted_t BranchListSorted;
-struct BranchListSorted_t {
-	BranchInfo branchinfo;
-	BranchListSorted* next;
-	BranchListSorted* prev;
-};
+#define maxGroups 10
 
 typedef struct RepoInfo_t RepoInfo;
 typedef struct RepoList_t RepoList;
@@ -77,9 +64,10 @@ struct RepoInfo_t {
 	bool CheckedOutBranchIsNotInRemote;
 };
 
-bool IsMerged(const char* repopath, const char* commithash);
+void gitfunc_init();
+void gitfunc_deinit();
+
 void DeallocRepoInfoStrings(RepoInfo* ri);
-BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char* branchname, char* hash, bool remote);
 bool pruneTreeForGit(RepoInfo* ri);
 RepoInfo* AllocRepoInfo(const char* directoryPath, const char* directoryName);
 void AllocUnsetStringsToEmpty(RepoInfo* ri);
@@ -88,7 +76,8 @@ char* ConstructGitStatusString(const RepoInfo* ri);
 char* ConstructCommitStatusString(const RepoInfo* ri);
 char* FixImplicitProtocol(const char* input);
 void AddChild(RepoInfo* parent, RepoInfo* child);
-bool CheckExtendedGitStatus(RepoInfo* ri);
 
 void printTree(RepoInfo* ri, bool Detailed);
+
+bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoProcessWorktree, bool BeThorough);
 #endif

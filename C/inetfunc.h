@@ -1,8 +1,8 @@
 #ifndef __BVBS_ZSH_INETFUNC__
 #define __BVBS_ZSH_INETFUNC__
 
-#include "commons.h"
-#include "config.h"
+#include <stdbool.h> // for bool
+#include <stdint.h> // for uint32_t, uint8_t
 
 typedef struct {
 	char* ipv4;

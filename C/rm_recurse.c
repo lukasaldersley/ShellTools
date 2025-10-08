@@ -19,9 +19,11 @@ Since this is really annoying if you're dealing with hundreds of subfolders with
 I should mention a simple rm -rf from WSL didn't fix the problem, I assume since rm is optimized and expects a base level of sanity from the underlying filesystem, which Microsoft does not exhibit.
 */
 
-#include "commons.h"
+#include "commons.h" // for Compare
 
-#include <dirent.h>
+#include <dirent.h> // for dirent, closedir, opendir, readdir, DIR, DT_DIR
+#include <stdio.h> // for fprintf, printf, remove, stderr, asprintf, perror, NULL
+#include <stdlib.h> // for exit
 
 static void func(const char* dir) {
 	printf("start recursive rm on %s\n", dir);

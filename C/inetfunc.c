@@ -3,9 +3,15 @@ echo "$0 is library file -> skip"
 exit
 */
 
+#include "commons.h" // for ABORT_NO_MEMORY, Compare, TerminateStrOn, DEFAULT_TERMINATORS, abortMessage
+#include "config.h" // for CONFIG_PROMPT_NET_IFACE, CONFIG_PROMPT_NET_ADDITIONAL, CONFIG_PROMPT_NET_ROUTE, CONFIG_PROMPT_NETWORK, CONFIG_PROMPT_NET_LINKSPEED, DIPFALSCHEISSER_WARNINGS
 #include "inetfunc.h"
 
-#include <regex.h>
+#include <assert.h> // for assert
+#include <regex.h> // for regcomp, regerror, regexec, regfree, REG_EXTENDED, REG_NEWLINE, regex_t, regmatch_t
+#include <stdio.h> // for NULL, asprintf, snprintf, fflush, fgets, fprintf, pclose, popen, printf, stderr, FILE, fclose, fopen, stdout
+#include <stdlib.h> // for free, malloc, atoi, exit
+#include <string.h> // for strncpy
 
 static NetList* InitNetListElement() {
 	NetList* a = (NetList*)malloc(sizeof(NetList));
@@ -159,27 +165,52 @@ static bool DecodeIfaceSpeed(char* result, char** ret) {
 	}
 }
 
-static char* GetIfaceSpeed_int(const char* iface, bool IsBackup) {
+typedef enum {
+	NET_SPEED_MODE_NMCLI,
+	NET_SPEED_MODE_ETHTOOL,
+	NET_SPEED_MODE_SYSCLASS
+} LinkspeedMode;
+
+static char* GetIfaceSpeed_int(const char* iface, LinkspeedMode BackupLevel) {
 	char* ret = NULL;
 	int size = 32;
 	char* result = (char*)malloc(sizeof(char) * size);
 	if (result == NULL) ABORT_NO_MEMORY;
 	char* command;
-	if (IsBackup) {
-		if (asprintf(&command, "ethtool %s 2>/dev/null | sed -nE 's~\tSpeed: ([0-9]+)([kMG])b/s~\\1\\2~p'", iface) == -1) ABORT_NO_MEMORY;
+	FILE* fp;
+	if (BackupLevel == NET_SPEED_MODE_SYSCLASS) {
+		if (asprintf(&command, "/sys/class/net/%s/speed", iface) == -1) ABORT_NO_MEMORY;
+		fp = fopen(command, "r");
 	} else {
-		if (asprintf(&command, "nmcli -g CAPABILITIES.SPEED device show %s 2>/dev/null | sed -E 's~([0-9]+) (.).+~\\1\\2~'", iface) == -1) ABORT_NO_MEMORY;
+		if (BackupLevel == NET_SPEED_MODE_ETHTOOL) {
+			if (asprintf(&command, "ethtool %s 2>/dev/null | sed -nE 's~\tSpeed: ([0-9]+)([kMG])b/s~\\1\\2~p'", iface) == -1) ABORT_NO_MEMORY;
+		} else {
+			if (asprintf(&command, "nmcli -g CAPABILITIES.SPEED device show %s 2>/dev/null | sed -E 's~([0-9]+) (.).+~\\1\\2~'", iface) == -1) ABORT_NO_MEMORY;
+		}
+		fp = popen(command, "r");
 	}
-	FILE* fp = popen(command, "r");
 	if (fp == NULL) {
-		fprintf(stderr, "failed running process %s\n", command);
+		fprintf(stderr, "failed running process/opening file %s\n", command);
 	} else {
 		while (fgets(result, size - 1, fp) != NULL) {
+			if (BackupLevel == NET_SPEED_MODE_SYSCLASS) {
+				//all modes read as 1000M or something like that, sysclass reads as a blank number
+				//if there is enough space in the buffer simply add the M and a new terminating NULL, but only if it returned anything at all
+				int len = strlen(result);
+				if (len <= size - 1 && len > 1) { //strlen already includes a nullbyte -> only one extra space needed
+					result[len - 1] = 'M';
+					result[len] = 0x00;
+				}
+			}
 			if (DecodeIfaceSpeed(result, &ret)) {
 				break;
 			}
 		}
-		pclose(fp);
+		if (BackupLevel == NET_SPEED_MODE_SYSCLASS) {
+			fclose(fp);
+		} else {
+			pclose(fp);
+		}
 		fp = NULL;
 	}
 	free(command);
@@ -190,9 +221,12 @@ static char* GetIfaceSpeed_int(const char* iface, bool IsBackup) {
 }
 
 static char* GetIfaceSpeed(const char* iface) {
-	char* val = GetIfaceSpeed_int(iface, false);
+	char* val = GetIfaceSpeed_int(iface, NET_SPEED_MODE_SYSCLASS);
 	if (val == NULL) {
-		val = GetIfaceSpeed_int(iface, true);
+		val = GetIfaceSpeed_int(iface, NET_SPEED_MODE_NMCLI);
+	}
+	if (val == NULL) {
+		val = GetIfaceSpeed_int(iface, NET_SPEED_MODE_ETHTOOL);
 	}
 	return val;
 }

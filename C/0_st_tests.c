@@ -6,6 +6,16 @@ fi
 TargetName="$(basename "$0" .c).elf"
 ThisFolder="$(realpath "$(dirname "$0")")"
 
+if command -v include-what-you-use > /dev/null 2>&1; then
+	ST_IWYU_PATH="$ST_SRC/C/"
+	printf "Running iwyu for %s" "$ST_IWYU_PATH*"
+	find "$ST_IWYU_PATH" -type f -a \( -name "*.c" -o -name "*.cpp" -o -name "*.cc" \) -exec sh -c 'include-what-you-use -Xiwyu --verbose=1 -Xiwyu --error=1 "$1" 2> /dev/null; ST_CHK_TEMP_RES="$?"; if [ "$ST_CHK_TEMP_RES" -ne 0 ] ; then printf "\n\n\e[38;5;001mIWYU MESSAGES FOR %s\e[0m\n\e[3m" "$1" ; include-what-you-use -Xiwyu --max_line_length=512 -Xiwyu --update_comments -Xiwyu --quoted_includes_first -Xiwyu --verbose=1 "$1" ; printf "\e[0m\e[38;5;130mEND IWYU MESSAGES FOR %s\n" "$1"; fi' _ {} \;
+	printf " -> DONE\n"
+	unset ST_IWYU_PATH
+else
+	echo "iwyu (include-what-you-use) unavailable, skipping"
+fi
+
 if command -v shellcheck > /dev/null 2>&1; then
 	ST_Test_ShellCheck_Base="$ST_SRC"
 	if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ]; then
@@ -19,6 +29,7 @@ if command -v shellcheck > /dev/null 2>&1; then
 else
 	echo "shellcheck unavailable, skipping"
 fi
+
 if [ $# -eq 0 ] && command -v cppcheck > /dev/null 2>&1; then
 	#if this is called without arguments, run cppcheck on the entire folder as an additional release check
 	printf "Running cppcheck on %s*" "$ThisFolder/"
@@ -48,10 +59,12 @@ else
 fi
 */
 
-#include "commons.h"
+#include "commons.h" // for Compare, AbbreviatePath, NextIndexOf, StartsWith, LastIndexOf, ToLowerCase, ABORT_NO_MEMORY
 
-#include <assert.h>
-#include <stdio.h>
+#include <stdbool.h> // for false, true, bool
+#include <stdio.h> // for printf, NULL, asprintf
+#include <stdlib.h> // for free
+#include <string.h> // for strlen
 
 #pragma region AutomatedTests
 static bool TestCommonsCompare() {

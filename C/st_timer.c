@@ -18,12 +18,12 @@ exit
 
 //the numbers this is using are UTC time (1/10 seconds), so UTC millis, but with the last two digits chopped off
 
-#include "commons.h"
+#include "commons.h" // for Compare
 
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
+#include <stdint.h> // for uint32_t, uint64_t, INT32_MAX, int8_t
+#include <stdio.h> // for printf, fprintf, stderr
+#include <stdlib.h> // for atoi, strtoull
+#include <time.h> // for tm, timespec, timespec_get, TIME_UTC, mktime, NULL, time_t
 
 static void stopTimer(unsigned long long start) {
 	struct timespec ts;
@@ -60,7 +60,7 @@ static void stopTimer(unsigned long long start) {
 	printf("%.1fs", seconds);
 }
 
-int main(int argc, char** argv) {
+inline static int8_t functionalmain(uint32_t argc, char** argv) {
 	if (!(argc == 2 || argc == 3 || argc == 8)) {
 		/*cppcheck completely looses it's mind over this.
 		const char* txt = "Some String";
@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
 		//therefore I will agree with gcc and in-line suppress cppcheck
 		*/
 		// cppcheck-suppress invalidPrintfArgType_s
-		printf("usage: '%1$s START' OR '%1$s STOP x' where x is the output this program gave when called with START\nYou supplied %2$i arguments but only 1, 2 or 7 are valid", argv[0], argc);
+		printf("usage: '%1$s START' OR '%1$s STOP x' where x is the output this program gave when called with START\nYou supplied %2$u arguments but only 1, 2 or 7 are valid", argv[0], argc);
 		return 1;
 	}
 	if (Compare(argv[1], "START") && argc == 2) {
@@ -95,8 +95,18 @@ int main(int argc, char** argv) {
 		time_t ut = mktime(&t);
 		stopTimer(ut * 10ULL);
 	} else {
-		fprintf(stderr, "invalid argument %s or invalid argument count %i", argv[1], argc - 1);
+		fprintf(stderr, "invalid argument %s or invalid argument count %u", argv[1], argc - 1);
 		return 1;
 	}
 	return 0;
+}
+
+//as the calling convention demands the use of the variably sized 'int', this is a wrapper, to enable my application logic to use fixed size integers
+int main(int argc, char** argv) {
+	uint32_t fixedSizeArgc = (uint32_t)argc;
+	if (fixedSizeArgc >= INT32_MAX) {
+		fprintf(stderr, "you somehow managed to get an invalid value of argc: %i\nABORTING.", argc);
+		return 1;
+	}
+	return functionalmain(fixedSizeArgc, argv);
 }

@@ -1,8 +1,8 @@
 #ifndef __BVBS_ZSH_CONFIG__
 #define __BVBS_ZSH_CONFIG__
 
-#include <inttypes.h>
-#include <stdbool.h>
+#include <inttypes.h> // for uint8_t, int8_t
+#include <stdbool.h> // for bool
 
 void Cleanup();
 void DoSetup();
@@ -21,6 +21,7 @@ extern uint8_t numGitExclusions;
 
 extern bool CONFIG_GIT_AUTO_RESTORE_EXCLUSION;
 
+extern bool CONFIG_LOWPROMPT_INDICATE_VENV;
 extern bool CONFIG_LOWPROMPT_PATH_LIMIT;
 extern int CONFIG_LOWPROMPT_PATH_MAXLEN;
 extern bool CONFIG_LOWPROMPT_RETCODE;

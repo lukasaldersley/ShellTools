@@ -29,10 +29,15 @@ fi
 */
 
 //add option to have chars be treated as equal such as --equal=" v" therfore 0x20 and v are to be the same (to allow matching up v3.17 with " 3.17.0")
-#include "commons.h"
 
-#include <getopt.h>
-#include <string.h>
+#include "commons.h" // for ToUpperCase, ABORT_NO_MEMORY, abortNomem
+
+#include <getopt.h> // for option, getopt_long, no_argument, required_argument
+#include <stdbool.h> // for bool, false, true
+#include <stdio.h> // for printf, asprintf, fprintf, stderr
+#include <stdlib.h> // for malloc, exit
+#include <string.h> // for strlen
+#include <unistd.h> // for optarg, NULL, optind
 
 static bool in_list(char c, char* eqlist) {
 	if (eqlist == NULL) {

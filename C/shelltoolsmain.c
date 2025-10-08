@@ -12,29 +12,30 @@ printf " -> \e[32mDONE\e[0m(%s)\n" $?
 exit
 */
 
-#include "commons.h"
-#include "config.h"
-#include "gitfunc.h"
-#include "inetfunc.h"
+#include "commons.h" // for ABORT_NO_MEMORY, strlen_visible, Compare, TerminateStrOn, DEFAULT_TERMINATORS, COLOUR_CLEAR, ExecuteProcess_alloc, AbbreviatePathAuto, StartsWith, determinePossibleCombinations, COLOUR_GREYOUT
+#include "config.h" // for CONFIG_PROMPT_FILLER_CHAR, CONFIG_GIT_BRANCHNAME, CONFIG_PROMPT_HOST, CONFIG_GIT_BRANCHSTATUS, CONFIG_GIT_REPONAME, CONFIG_GIT_REPOTYPE, CONFIG_LOWPROMPT_PATH_MAXLEN, CONFIG_LOWPROMPT_RETCODE, CONFIG_PROMPT_NETWORK, CONFIG_PROMPT_USER, CONFIG_GIT_BRANCH_OVERVIEW, CONFIG_GIT_COMMIT_OVERVIEW, CONFIG_GIT_LOCALCHANGES, CONFIG_GIT_REMOTE, CONFIG_GIT_REPOTYPE_PARENT, CONFIG_LOWPROMPT_TIMER, CONFIG_PROMPT_GIT, CONFIG_PROMPT_TERMINAL_DEVICE, Cleanup, DoSetup, CONFIG_GIT_AUTO_RESTO...
+#include "gitfunc.h" // for AllocRepoInfo, AllocUnsetStringsToEmpty, ConstructCommitStatusString, ConstructGitBranchInfoString, ConstructGitStatusString, DeallocRepoInfoStrings, TestPathForRepoAndParseIfExists, gitfunc_deinit, gitfunc_init, COLOUR_GIT_BARE, COLOUR_GIT_BRANCH, COLOUR_GIT_INDICATOR, COLOUR_GIT_NAME, COLOUR_GIT_ORIGIN, COLOUR_GIT_PARENT, RepoInfo
+#include "inetfunc.h" // for GetBaseIPString, IpTransportStruct
 
-#include <dirent.h>
-#include <getopt.h>
-#include <regex.h>
-#include <signal.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <time.h>
-#include <unistd.h>
+#include <assert.h> // for assert
+#include <dirent.h> // for dirent, closedir, opendir, readdir, DIR
+#include <getopt.h> // for option, getopt_long, no_argument
+#include <regex.h> // for regcomp, regerror, regexec, regfree, REG_EXTENDED, REG_NEWLINE, regex_t, regmatch_t
+#include <signal.h> // for SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGKILL, SIGPIPE, SIGPOLL, SIGPROF, SIGPWR, SIGQUIT, SIGSEGV, SIGSTKFLT, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU, SIGXFSZ
+#include <stdbool.h> // for bool, false, true
+#include <stdint.h> // for uint8_t, UINT8_MAX, uint32_t
+#include <stdio.h> // for printf, NULL, snprintf, asprintf, fclose, fflush, fgets, fopen, stdout, fprintf, putc, stderr, fileno, perror, remove, FILE, stdin
+#include <stdlib.h> // for free, malloc, secure_getenv, exit, atoi, strtol
+#include <string.h> // for strncpy
+#include <sys/ioctl.h> // for ioctl, winsize, TIOCGWINSZ
+#include <time.h> // for strftime, localtime, time, time_t
+#include <unistd.h> // for NULL, optarg, access, optind, F_OK
 
 #define COLOUR_TERMINAL_DEVICE "\e[38;5;242m"
 #define COLOUR_SHLVL		   "\e[0m"
 #define COLOUR_USER			   "\e[38;5;010m"
 #define COLOUR_USER_AT_HOST	   "\e[38;5;007m"
 #define COLOUR_HOST			   "\e[38;5;033m"
-
-#define maxGroups 10
-regmatch_t CapturedResults[maxGroups];
-regex_t branchParsingRegex;
 
 typedef enum {
 	IP_MODE_NONE,
@@ -263,7 +264,7 @@ static char* GetSystemPowerState() {
 	uint8_t currentLen = 0;
 
 	PowerBitField field;
-	field.IsWSL = getenv("WSL_VERSION") != NULL;
+	field.IsWSL = secure_getenv("WSL_VERSION") != NULL;
 	field.IsMains = false;
 	field.IsUSB = false;
 	DIR* directoryPointer;
@@ -305,496 +306,6 @@ static char* GetSystemPowerState() {
 	return powerString;
 }
 
-static bool CheckBranching(RepoInfo* ri) {
-	//this method checks the status of all branches on a given repo
-	//and then computes how many differ, how many up to date, how many branches local-only, how many branches remote-only
-	BranchListSorted* ListBase = NULL;
-
-	int size = 1024;
-	char* result = (char*)malloc(sizeof(char) * size);
-	if (result == NULL) ABORT_NO_MEMORY;
-	char* command;
-	if (asprintf(&command, "git -C \"%s\" branch -vva", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-	FILE* fp = popen(command, "r");
-	if (fp == NULL) {
-		fprintf(stderr, "failed running process %s\n", command);
-	} else {
-		int branchcount = 0;
-		while (fgets(result, size - 1, fp) != NULL) {
-			//iterating over list of branches (remote and local seperatly)
-			TerminateStrOn(result, DEFAULT_TERMINATORS);
-			branchcount++;
-			if (CONFIG_GIT_MAXBRANCHES != -1 && branchcount > CONFIG_GIT_MAXBRANCHES) {
-				free(result);
-				pclose(fp);
-				free(command);
-				if (CONFIG_GIT_WARN_BRANCH_LIMIT) {
-					fprintf(stderr, "more than %i branches for repo %s -> aborting branchhandling\n", CONFIG_GIT_MAXBRANCHES, ri->DirectoryPath);
-				}
-				while (ListBase != NULL) {
-					BranchListSorted* temp = ListBase;
-					ListBase = ListBase->next;
-					free(temp);
-				}
-				//printf("BRANCHING: ABORT\r");
-				//fflush(stdout);
-				return false;
-			}
-			//printf("\n\n%s\n", result);
-			fflush(stdout);
-			int RegexReturnCode = regexec(&branchParsingRegex, result, maxGroups, CapturedResults, 0);
-			//man regex (3): regexec() returns zero for a successful match or REG_NOMATCH for failure.
-			if (RegexReturnCode == 0) {
-				char* bname = NULL;
-				char* hash = NULL;
-				bool rm = false;
-				for (unsigned int GroupID = 0; GroupID < maxGroups; GroupID++) {
-					if (CapturedResults[GroupID].rm_so == (size_t)-1) {
-						break; // No more groups
-					}
-					regoff_t start, end;
-					start = CapturedResults[GroupID].rm_so;
-					end = CapturedResults[GroupID].rm_eo;
-					int len = end - start;
-
-					char* x = malloc(sizeof(char) * (len + 1));
-					if (x == NULL) ABORT_NO_MEMORY;
-					strncpy(x, result + start, len);
-					x[len] = 0x00;
-					if (GroupID == 1) {
-						int offs = 0;
-						if (StartsWith(x, "remotes/")) {
-							//offs = LastIndexOf(x, '/') + 1; //if the branch name contains / such as feature/SOMETHING that would fail.
-							//now I check not the text after the last / but the text after remotes/***/ to allow remotes other than origin
-							offs = NextIndexOf(x, '/', 8) + 1;
-							rm = true;
-						}
-						bname = malloc(sizeof(char) * ((len - offs) + 1));
-						if (bname == NULL) ABORT_NO_MEMORY;
-						strncpy(bname, result + start + offs, len - offs);
-						bname[len - offs] = 0x00;
-					} else if (GroupID == 2) {
-						hash = malloc(sizeof(char) * (len + 1));
-						if (hash == NULL) ABORT_NO_MEMORY;
-						strncpy(hash, result + start, len);
-						hash[len] = 0x00;
-					}
-					free(x);
-				}
-				if (bname != NULL && hash != NULL) {
-					ListBase = InsertIntoBranchListSorted(ListBase, bname, hash, rm);
-					free(bname);
-					free(hash);
-				} else {
-					printf("found something non matching\n");
-					fflush(stdout);
-				}
-			}
-		}
-	}
-
-#ifdef PROFILING
-	if (ALLOW_PROFILING_TESTPATH)
-		timespec_get(&(profiling_timestamp[PROFILE_BRANCHING_HAVE_BRANCHES]), TIME_UTC);
-#endif
-	BranchListSorted* ptr = ListBase;
-	BranchListSorted* LastKnown = NULL;
-	while (ptr != NULL) {
-		LastKnown = ListBase;
-		if (ptr->branchinfo.CommitHashRemote != NULL) {
-			ptr->branchinfo.IsMergedRemote = IsMerged(ri->DirectoryPath, ptr->branchinfo.CommitHashRemote);
-		} else {
-			//If the branch only exists in one place, the other shall be counted as fully merged
-			//the reason is: if BOTH are fully merged I consider the branch legacy,
-			//but only if BOTH are, so to make a remote - only fully merged branch count as such, the non - existing local branch must count as merged
-			ptr->branchinfo.IsMergedRemote = true;
-		}
-		if (ptr->branchinfo.CommitHashLocal != NULL) {
-			ptr->branchinfo.IsMergedLocal = IsMerged(ri->DirectoryPath, ptr->branchinfo.CommitHashLocal);
-		} else {
-			ptr->branchinfo.IsMergedLocal = true;
-		}
-
-		//printf("{%s: %s%c|%s%c}\n",
-		//	(ptr->branchinfo.BranchName != NULL ? ptr->branchinfo.BranchName : "????"),
-		//	(ptr->branchinfo.CommitHashLocal != NULL ? ptr->branchinfo.CommitHashLocal : "---"),
-		//	ptr->branchinfo.IsMergedLocal ? 'M' : '!',
-		//	(ptr->branchinfo.CommitHashRemote != NULL ? ptr->branchinfo.CommitHashRemote : "---"),
-		//	ptr->branchinfo.IsMergedRemote ? 'M' : '!');
-
-		if (ptr->branchinfo.CommitHashLocal == NULL && ptr->branchinfo.CommitHashRemote != NULL && !ptr->branchinfo.IsMergedRemote) { //remote-only, non-merged
-			ri->CountRemoteOnlyBranches++;
-		}
-
-		if (ptr->branchinfo.CommitHashLocal != NULL && ptr->branchinfo.CommitHashRemote == NULL) {
-			ri->CountLocalOnlyBranches++;
-			//If I CURRENTLY am ON THIS branch, indicate it as {NEW}
-			if (Compare(ptr->branchinfo.BranchName, ri->branch)) {
-				ri->CheckedOutBranchIsNotInRemote = true;
-			}
-		}
-
-		if (ptr->branchinfo.IsMergedLocal && ptr->branchinfo.IsMergedRemote) {
-			ri->CountFullyMergedBranches++;
-		} else {
-			ri->CountActiveBranches++;
-		}
-
-		if (ptr->branchinfo.CommitHashLocal != NULL && ptr->branchinfo.CommitHashRemote != NULL) {
-			if (!Compare(ptr->branchinfo.CommitHashLocal, ptr->branchinfo.CommitHashRemote)) {
-				ri->CountUnequalBranches++;
-			}
-		}
-		ptr = ptr->next;
-	}
-	//free from the back forward
-	while (LastKnown != NULL) {
-		BranchListSorted* temporary = LastKnown->prev;
-		free(LastKnown);
-		LastKnown = temporary;
-	}
-	ListBase = NULL;
-
-	//printf("/%i+%i: (%i⇣ %i⇡ %i⇵)\n", ri->CountActiveBranches, ri->CountFullyMergedBranches, ri->CountRemoteOnlyBranches, ri->CountLocalOnlyBranches, ri->CountUnequalBranches);
-	free(result);
-	pclose(fp);
-	free(command);
-	return true;
-}
-
-/*
-	I can get the list of all submodules by using
-	git -C *TARGET_FOLDER* submodule status --recursive | sed -n 's|.[0-9a-fA-F]\+ \([^ ]\+\)\( .*\)\?|\1|p'
-	This would give me a list of submodules of the current repo. I could then compare the output to when I come across them.
-	This method provides me with a list of relative paths
-	*/
-
-static bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoProcessWorktree, bool BeThorough) {
-	//the return value is just: has this successfully executed
-
-	char* cmd;
-	if (BeThorough || DoProcessWorktree) {
-		if (asprintf(&cmd, "git -C \"%s\" rev-parse --is-bare-repository 2>/dev/null", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-		char* bareRes = ExecuteProcess_alloc(cmd);
-		free(cmd);
-		if (bareRes == NULL) {
-			//Encountered error -> quit
-			DeallocRepoInfoStrings(ri);
-			free(ri);
-			return false;
-		}
-		TerminateStrOn(bareRes, DEFAULT_TERMINATORS);
-		ri->isBare = Compare(bareRes, "true");
-		free(bareRes);
-		bareRes = NULL;
-		ri->isGit = ri->isBare; //initial value
-
-		if (!ri->isBare) {
-			if (asprintf(&cmd, "git -C \"%s\" rev-parse --show-toplevel 2>/dev/null", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-			char* tlres = ExecuteProcess_alloc(cmd);
-			TerminateStrOn(tlres, DEFAULT_TERMINATORS);
-			free(cmd);
-			ri->isGit = Compare(ri->DirectoryPath, tlres);
-			//printf("dir %s tl: %s (%i) dpw: %i\n", ri->DirectoryPath, tlres, ri->isGit, DoProcessWorktree);
-			free(tlres);
-			if (DoProcessWorktree && !(ri->isGit)) {
-				//usually we are done at this stage (only treat as git if in toplevel, but this is for the prompt substitution where it needs to work anywhere in git)
-				if (asprintf(&cmd, "git -C \"%s\" rev-parse --is-inside-work-tree 2>/dev/null", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-				char* wtres = ExecuteProcess_alloc(cmd);
-				TerminateStrOn(wtres, DEFAULT_TERMINATORS);
-				free(cmd);
-				ri->isGit = Compare(wtres, "true");
-				free(wtres);
-			}
-		}
-	}
-
-#ifdef PROFILING
-	if (ALLOW_PROFILING_TESTPATH)
-		timespec_get(&(profiling_timestamp[PROFILE_TESTPATH_BASIC_CHECKS]), TIME_UTC);
-#endif
-
-	//if ri->isGit isn't set here it's not a repo -> I don't need to continue in this case
-	if (!ri->isGit) {
-		return true;
-	}
-
-	//as of here it's guaranteed that the current folder IS a git directory OF SOME TYPE (if it wasn't I would have exited above)
-
-	//this tries to obtain the branch, or if that fails tag and if both fail the commit hash
-	if (asprintf(&cmd, "git -C  \"%1$s\" symbolic-ref --short HEAD 2>/dev/null || git -C \"%1$s\" describe --tags --exact-match HEAD 2>/dev/null || git -C \"%1$s\" rev-parse --short HEAD", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-	ri->branch = ExecuteProcess_alloc(cmd);
-	TerminateStrOn(ri->branch, DEFAULT_TERMINATORS);
-	free(cmd);
-	cmd = NULL;
-
-	//if 'git rev-parse --show-superproject-working-tree' outputs NOTHING, a repo is standalone, if there is output it will point to the parent repo
-	if (asprintf(&cmd, "git -C \"%s\" rev-parse --show-superproject-working-tree", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-	char* temp = ExecuteProcess_alloc(cmd);
-	AbbreviatePath(&(ri->parentRepo), temp, 15, 1, 2);
-	free(temp);
-	temp = NULL;
-	TerminateStrOn(ri->parentRepo, DEFAULT_TERMINATORS);
-	ri->isSubModule = !((ri->parentRepo)[0] == 0x00);
-	free(cmd);
-
-#ifdef PROFILING
-	if (ALLOW_PROFILING_TESTPATH)
-		timespec_get(&(profiling_timestamp[PROFILE_TESTPATH_WorktreeChecks]), TIME_UTC);
-#endif
-	if ((CONFIG_GIT_BRANCHSTATUS || CONFIG_GIT_BRANCH_OVERVIEW) && CONFIG_GIT_MAXBRANCHES > 0) {
-		CheckBranching(ri);
-	}
-#ifdef PROFILING
-	if (ALLOW_PROFILING_TESTPATH)
-		timespec_get(&(profiling_timestamp[PROFILE_TESTPATH_BranchChecked]), TIME_UTC);
-#endif
-
-	if (!ri->isBare && (CONFIG_GIT_LOCALCHANGES || CONFIG_GIT_COMMIT_OVERVIEW)) {
-		//if I need neither the overview over commits nor local changes, I can skip this thereby significantly speeding up the whole process
-		CheckExtendedGitStatus(ri);
-		ri->DirtyWorktree = !(ri->ActiveMergeFiles == 0 && ri->ModifiedFiles == 0 && ri->StagedChanges == 0);
-	}
-#ifdef PROFILING
-	if (ALLOW_PROFILING_TESTPATH)
-		timespec_get(&(profiling_timestamp[PROFILE_TESTPATH_ExtendedGitStatus]), TIME_UTC);
-#endif
-
-	if (desiredorigin != -1 || CONFIG_GIT_REMOTE || CONFIG_GIT_REPONAME) {
-		//I only need to concern myself with the remote and reponame If they are either directly requested or implicitly needed for setGitBase
-		if (asprintf(&cmd, "git -C \"%s\" ls-remote --get-url origin", ri->DirectoryPath) == -1) ABORT_NO_MEMORY;
-		ri->RepositoryUnprocessedOrigin = ExecuteProcess_alloc(cmd);
-		free(cmd);
-		if (ri->RepositoryUnprocessedOrigin == NULL) {
-			DeallocRepoInfoStrings(ri);
-			free(ri);
-			return false;
-		}
-		cmd = NULL;
-		TerminateStrOn(ri->RepositoryUnprocessedOrigin, DEFAULT_TERMINATORS);
-		if (Compare(ri->RepositoryUnprocessedOrigin, "origin")) {
-			//if git ls-remote --get-url origin returns 'origin' it means either the folder is not a git repository OR it's a repository without remote (local only)
-			//in this case since I already checked this IS a repo, it MUST be a repo without remote
-			ri->HasRemote = false;
-			if (asprintf(&ri->RepositoryDisplayedOrigin, "NO_REMOTE") == -1) ABORT_NO_MEMORY;
-			int i = 0;
-			const char* tempPtr = ri->DirectoryPath;
-			while (ri->DirectoryPath[i] != 0x00) {
-				if (ri->DirectoryPath[i] == '/') {
-					tempPtr = ri->DirectoryPath + i + 1;
-				}
-				i++;
-			}
-			if (asprintf(&ri->RepositoryName, "%s", tempPtr) == -1) ABORT_NO_MEMORY;
-			return true;
-		} else {
-			//has some form of remote
-			ri->HasRemote = true;
-			char* FixedProtoOrigin = FixImplicitProtocol(ri->RepositoryUnprocessedOrigin);
-
-			// input: repoToTest, the path of a repo. if it is one of the defined repos, return that, if it's not, produce the short notation
-			// basically this should produce the displayed name for the repo in the output buffer and additionally indicate if it's a known one
-			ri->RepositoryOriginID = -1;
-			for (int i = 0; i < numLOCS; i++) {
-				//fprintf(stderr, "%s > %s testing against %s(%s)\n", ri->RepositoryUnprocessedOrigin, FixedProtoOrigin, LOCS[i], NAMES[i]);
-				if (StartsWith(FixedProtoOrigin, LOCS[i])) {
-					//fprintf(stderr, "\tSUCCESS\n");
-					ri->RepositoryOriginID = i;
-					if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", NAMES[i]) == -1) ABORT_NO_MEMORY;
-					break;
-				}
-			}
-
-			char* sedCmd;
-			//this regex is basically:
-			//^(?<proto>[-\w+])://(?:(?<user>[-\w]+)@)?(?<host>[-\.\w]+)(?::(?<port>\d+))?(?:[:/](?<remotePath_GitHubUser>[-\w]+))?.*/(?<reponame>[-\w]+)(?:\.git/?)?$ //this is the debuggin version for regex101.com (PCRE<7.3, delimiter ~)
-			//^(?<proto>[-a-zA-Z0-9_]+)://(?:(?<user>[-a-zA-Z0-9_]+)@){0,1}(?<host>[-0-9a-zA-Z_\\.]+)(?::(?<port>[0-9]+)){0,1}(?:[:/](?<remotePath_GitHubUser>[-0-9a-zA-Z_]+)){0,1}.*/(?<reponame>[-0-9a-zA-Z_]+)(?:\\.git/{0,1}){0,1}$
-			//sed does not have non-capturing groups, so all non-capturing groups are included in the group count
-			//the mapping of sed-groups to the regex101 groups is as follows:
-			//1->protoc
-			//2->Non-capturing
-			//3->user
-			//4->host
-			//5->Non-capturing(:port)
-			//6->port
-			//7->Non-capturing (:remotepath or /gitHubUser)
-			//8->remotePath_GitHubUser (if not GitHub, it's the path on remote)
-			//9->reponame
-			//10->Non-Capturing(.git)
-			//DO NOT CHANGE THIS REGEX WITHOUT UPDATING THE Regex101 VARIANT, THE GROUP DEFINITIONS AND THE DESCRIPTION
-			if (asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin) == -1) ABORT_NO_MEMORY;
-			//I take the capturing groups and paste them into a | seperated sting. There's 6 words (5 |), so I'll need 6 pointers into this memory area to resolve the six words
-			const int REPO_ORIGIN_WORDS_IN_STRING = 6;
-			const int REPO_ORIGIN_GROUP_PROTOCOL = 0;
-			const int REPO_ORIGIN_GROUP_USER = 1;
-			const int REPO_ORIGIN_GROUP_Host = 2;
-			const int REPO_ORIGIN_GROUP_PORT = 3;
-			const int REPO_ORIGIN_GROUP_GitHubUser = 4; /*(if not GitHub, it's the path on remote)*/
-			const int REPO_ORIGIN_GROUP_RepoName = 5;
-			char* sedRes = ExecuteProcess_alloc(sedCmd);
-			TerminateStrOn(sedRes, DEFAULT_TERMINATORS);
-			if (sedRes[0] == 0x00) { //sed output was empty -> it must be a local repo, just parse the last folder as repo name and the rest as parentrepopath
-				// local repo
-				if (ri->RepositoryOriginID == -1) {
-					AbbreviatePath(&(ri->RepositoryDisplayedOrigin), FixedProtoOrigin, 15, 2, 2);
-					//if (asprintf(&ri->RepositoryDisplayedOrigin, "%s", FixedProtoOrigin) == -1)ABORT_NO_MEMORY;
-				}
-				const char* tempptr = FixedProtoOrigin;
-				char* walker = FixedProtoOrigin;
-				while (*walker != 0x00) {
-					if (*walker == '/') {
-						tempptr = walker + 1;
-					}
-					walker++;
-				}
-				if (asprintf(&ri->RepositoryName, "%s", tempptr) == -1) ABORT_NO_MEMORY;
-
-				// in the .sh implementation I had used realpath relative to pwd to "shorten" the path, but I think it'd be better if I properly regex this up or something.
-				// like /folder/folder/[...]/folder/NAME or /folder/[...]/NAME, though if the path is short enough, I'd like the full path
-				// local repos $(realpath -q -s --relative-to="argv[2]" "$( echo "$fulltextremote" | grep -v ".\+://")" "")
-				//this has the issue of always producing a relative path, though if the path is defined as absolute that should be reflected. Therefore see the implementation of AbbreviatePath in commons.c
-
-				// for locals: realpath -q -s --relative-to="argv[2]" "Input"
-				//local repo
-			} else {
-				//the sed command was not empty therefore it matched as a remote thing and needs to be parsed
-				char* ptrs[REPO_ORIGIN_WORDS_IN_STRING];
-				ptrs[0] = sedRes;
-				char* workingPointer = sedRes;
-				int NextWordPointer = 0;
-				while (*workingPointer != 0x00 && NextWordPointer < (REPO_ORIGIN_WORDS_IN_STRING - 1)) { //since I set NextWordPointer+1^I need to stop at WORDS-2=== 'x < (Words-1)'
-					if (*workingPointer == '|') {
-						//I found a seperator -> set string terminator for current string
-						*workingPointer = 0x00;
-						//if there's anything after the seperator, set the start point for the next string
-						if (*(workingPointer + 1) != 0x00) {
-							NextWordPointer++;
-							ptrs[NextWordPointer] = (workingPointer + 1);
-						}
-					}
-					workingPointer++;
-				}
-
-				//I take the base name of the remote rep from this parsed string regardless of the fact if it is a LOCLANET/GLOBAL or a known GitHub derivative something unknown
-				if (*ptrs[REPO_ORIGIN_GROUP_RepoName] != 0x00) { //repo name
-					if (asprintf(&ri->RepositoryName, "%s", ptrs[REPO_ORIGIN_GROUP_RepoName]) == -1) ABORT_NO_MEMORY;
-				}
-
-				//the rest of this only makes sense for stuff that's NOT LOCALNET/GLOBAL etc.
-				if (ri->RepositoryOriginID == -1) //not a known repo origin (ie not from LOCALNET, NONE etc)
-				{
-					const int OriginLen = 255;
-					ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char) * OriginLen + 1);
-					if (ri->RepositoryDisplayedOrigin == NULL) ABORT_NO_MEMORY;
-					int currlen = 0;
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PROTOCOL], OriginLen - currlen); //proto
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen); //:
-					if (!Compare(ptrs[REPO_ORIGIN_GROUP_USER], "git") && Compare(ptrs[REPO_ORIGIN_GROUP_PROTOCOL], "ssh")) { //if name is NOT git then print it but only print if it was ssh
-						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_USER], OriginLen - currlen); //username
-						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, "@", OriginLen - currlen); //@
-					}
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_Host], OriginLen - currlen); //host
-					if (*ptrs[3] != 0x00) { //if port is given print it
-						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen); //:
-						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PORT], OriginLen - currlen); //username
-					}
-					if (*ptrs[4] != 0x00) { //host is github or gitlab and I can parse a github username also add it
-						bool knownServer = false;
-						int i = 0;
-						while (i < numGitHubs && knownServer == false) {
-							knownServer = Compare(ptrs[REPO_ORIGIN_GROUP_Host], GitHubs[i]);
-							i++;
-						}
-						if (knownServer) {
-							currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen); //:
-							currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], OriginLen - currlen); //service username
-						}
-					}
-					*(ri->RepositoryDisplayedOrigin + (currlen < OriginLen ? currlen : OriginLen)) = 0x00; //ensure nullbyte
-				}
-				for (int i = 0; i < REPO_ORIGIN_WORDS_IN_STRING; i++) {
-					ptrs[i] = NULL; //to prevent UseAfterFree vulns
-				}
-			}
-			free(sedRes);
-			sedRes = NULL;
-
-#ifdef PROFILING
-			if (ALLOW_PROFILING_TESTPATH)
-				timespec_get(&(profiling_timestamp[PROFILE_TESTPATH_remote_and_reponame]), TIME_UTC);
-#endif
-			//once I have the current and new repo origin IDs perform the change
-			//printf("INFO: desiredorigin:%i\tri->RepositoryOriginID:%i\tGROUPS[desiredorigin]:%i\tGROUPS[ri->RepositoryOriginID]:%i\n", desiredorigin, ri->RepositoryOriginID, GROUPS[desiredorigin], GROUPS[ri->RepositoryOriginID]);
-			if (desiredorigin != -1 && ri->RepositoryOriginID != -1 && ri->RepositoryOriginID != desiredorigin /*all involved origins are assigned to an ORIGIN_ALIAS and new and old actually differ*/ &&
-				((GROUPS[ri->RepositoryOriginID] == GROUPS[desiredorigin] && GROUPS[desiredorigin != -1]) /*GROUP CONDITION I: New and old are in the SAME group AND that group IS NOT -1*/
-				 || ((GROUPS[ri->RepositoryOriginID] == 0) || GROUPS[desiredorigin] == 0))) /*OR GROUP CONDITION II: if EITHER is in the wildcard group 0, allow anyway*/
-			{
-				//change
-				ri->RepositoryOriginID_PREVIOUS = ri->RepositoryOriginID;
-				if (ri->RepositoryUnprocessedOrigin_PREVIOUS != NULL) {
-					free(ri->RepositoryUnprocessedOrigin_PREVIOUS);
-				}
-				ri->RepositoryUnprocessedOrigin_PREVIOUS = ri->RepositoryUnprocessedOrigin;
-				ri->RepositoryOriginID = desiredorigin;
-				if (asprintf(&ri->RepositoryUnprocessedOrigin, "%s/%s", LOCS[ri->RepositoryOriginID], ri->RepositoryName) == -1) ABORT_NO_MEMORY;
-				char* changeCmd;
-				if (asprintf(&changeCmd, "git -C \"%s\" remote set-url origin %s", ri->DirectoryPath, ri->RepositoryUnprocessedOrigin) == -1) ABORT_NO_MEMORY;
-				printf("%s\n", changeCmd);
-				char* preventMemLeak = ExecuteProcess_alloc(changeCmd);
-				if (preventMemLeak != NULL) free(preventMemLeak);
-				preventMemLeak = NULL;
-				free(changeCmd);
-			}
-		}
-	}
-
-	return true;
-}
-
-static RepoInfo* CreateDirStruct(const char* directoryPath, const char* directoryName, int newRepoSpec, bool BeThorough) {
-	RepoInfo* ri = AllocRepoInfo(directoryPath, directoryName);
-	if (BeThorough) {
-		//If I am searching thorough I need to know if I encountered a bare repo, so I need to check the current folder first.
-		//however if I am quick searching I need to know if the current folder contains a file/folder named .git, therefore in that case I need to process the subfolders first
-		//so this call is conditioned on BeThorough being true while at the end of this function I have basically the same call conditionend to BeThorough being false
-		TestPathForRepoAndParseIfExists(ri, newRepoSpec, false, true);
-	}
-
-	DIR* directoryPointer;
-	//On success, readdir() returns a pointer to a dirent structure.  (This structure may be statically allocated; do not attempt to free(3) it.)
-	const struct dirent* direntptr;
-	directoryPointer = opendir(ri->DirectoryPath);
-	if (directoryPointer != NULL) {
-		while ((direntptr = readdir(directoryPointer))) {
-			//printf("testing: %s (directory: %s)\n", direntptr->d_name, (direntptr->d_type == DT_DIR ? "TRUE" : "NO"));
-			if (!BeThorough && Compare(direntptr->d_name, ".git")) {
-				ri->isGit = true;
-			}
-			if (direntptr->d_type != DT_DIR || Compare(direntptr->d_name, ".") || Compare(direntptr->d_name, "..")) {
-				//if the current file isn't a directory I needn't check for subdirectories
-				continue;
-			} else if (direntptr->d_type == DT_DIR && !ri->isBare) {
-				AddChild(ri, CreateDirStruct(ri->DirectoryPath, direntptr->d_name, newRepoSpec, BeThorough));
-			}
-		}
-		closedir(directoryPointer);
-	} else {
-		fprintf(stderr, "failed on directory: %s\n", directoryName);
-		perror("Couldn't open the directory");
-	}
-	if (!BeThorough) {
-		//for an explanation to this call see the top of this function where another TestPathForRepoAndParseIfExists call exists
-		TestPathForRepoAndParseIfExists(ri, newRepoSpec, false, false);
-	}
-	return ri;
-}
-
-static void ListAvailableRemotes() {
-	for (int i = 0; i < numLOCS; i++) {
-		printf(COLOUR_GIT_ORIGIN "%s" COLOUR_CLEAR " (-> %s), Group: %i\n", NAMES[i], LOCS[i], GROUPS[i]);
-	}
-}
-
 int main(int argc, char** argv) {
 	printf("...\r");
 	fflush(stdout);
@@ -807,27 +318,17 @@ int main(int argc, char** argv) {
 #endif
 	int main_retcode = 0;
 
-	const char* RegexString = "^[ *]+([-_/0-9a-zA-Z]*) +([0-9a-fA-F]+) (\\[([-/_0-9a-zA-Z]+)\\])?.*$";
-	int RegexReturnCode;
-	RegexReturnCode = regcomp(&branchParsingRegex, RegexString, REG_EXTENDED | REG_NEWLINE);
-	if (RegexReturnCode) {
-		char* regErrorBuf = (char*)malloc(sizeof(char) * 1024);
-		if (regErrorBuf == NULL) ABORT_NO_MEMORY;
-		int elen = regerror(RegexReturnCode, &branchParsingRegex, regErrorBuf, 1024);
-		printf("Could not compile regular expression '%s'. [%i(%s) {len:%i}]\n", RegexString, RegexReturnCode, regErrorBuf, elen);
-		free(regErrorBuf);
-		exit(1);
-	};
+	gitfunc_init();
 
 	//stuff to obtain the time/date/calendarweek for prompt
 	time_t tm;
 	tm = time(NULL);
 	const struct tm* localtm = localtime(&tm);
 
-	bool IsPrompt = 0, IsSet = 0, IsShow = 0, IsList = 0, IsLowPrompt = 0;
+	bool IsPrompt = 0, IsLowPrompt = 0;
 
-	bool IsThoroughSearch = 0;
 	int PromptRetCode = 0;
+	//the whole song and dance with windowProps, ioctl, magic constants etc is to obtain the current terminal width in a reliable and portable fashion
 	struct winsize windowProps;
 	//note: stdout did NOT work for LOWPROMPT and returns bogus data (I have seen 0 or mid 4 digits), stdin seems to work reliably
 	ioctl(fileno(stdin), TIOCGWINSZ, &windowProps);
@@ -835,7 +336,6 @@ int main(int argc, char** argv) {
 #ifdef DEBUG
 	printf("ScreenWidth: %i\n", Arg_TotalPromptWidth);
 #endif
-	const char* Arg_NewRemote = NULL;
 
 	const char* Arg_CmdTime = NULL;
 
@@ -886,24 +386,17 @@ int main(int argc, char** argv) {
 	IP_MODE ipMode = IP_MODE_STANDALONE;
 
 	int getopt_currentChar; //the char for getop switch
+	int option_index = 0;
+
+	const static struct option long_options[] = {
+		{"lowprompt", no_argument, 0, '4'},
+		{"prompt", no_argument, 0, '0'},
+		{0, 0, 0, 0},
+	};
 
 	while (1) {
-		int option_index = 0;
 
-		const static struct option long_options[] = {
-			{"branchlimit", required_argument, 0, 'b'},
-			{"help", no_argument, 0, 'h'},
-			{"list", no_argument, 0, '3'},
-			{"lowprompt", no_argument, 0, '4'},
-			{"prompt", no_argument, 0, '0'},
-			{"quick", no_argument, 0, 'q'},
-			{"set", no_argument, 0, '2'},
-			{"show", no_argument, 0, '1'},
-			{"thorough", no_argument, 0, 'f'},
-			{0, 0, 0, 0},
-		};
-
-		getopt_currentChar = getopt_long(argc, argv, "b:fhi:j:n:p:qr:t:", long_options, &option_index);
+		getopt_currentChar = getopt_long(argc, argv, "i:j:p:r:t:", long_options, &option_index);
 		if (getopt_currentChar == -1)
 			break;
 
@@ -916,56 +409,19 @@ int main(int argc, char** argv) {
 				break;
 			}
 			case '0': {
-				if (IsSet || IsShow || IsList) {
-					printf("prompt is mutex with set|show|list|lowprompt\n");
+				if (IsLowPrompt) {
+					printf("prompt is mutex with lowprompt\n");
 					break;
 				}
 				IsPrompt = 1;
 				break;
 			}
-			case '1': {
-				if (IsSet || IsPrompt || IsList) {
-					printf("show is mutex with set|prompt|list|lowprompt\n");
-					break;
-				}
-				IsShow = 1;
-				break;
-			}
-			case '2': {
-				if (IsPrompt || IsShow || IsList) {
-					printf("set is mutex with prompt|show|list|lowprompt\n");
-					break;
-				}
-				IsSet = 1;
-				break;
-			}
-			case '3': {
-				if (IsPrompt || IsShow || IsSet) {
-					printf("list is mutex with prompt|show|set|lowprompt\n");
-					break;
-				}
-				IsList = 1;
-				break;
-			}
 			case '4': {
-				if (IsPrompt || IsShow || IsSet || IsList) {
-					printf("list is mutex with prompt|show|set|list\n");
+				if (IsPrompt) {
+					printf("lowprompt is mutex with prompt\n");
 					break;
 				}
 				IsLowPrompt = 1;
-				break;
-			}
-			case 'b': {
-				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
-				CONFIG_GIT_MAXBRANCHES = atoi(optarg);
-				break;
-			}
-			case 'f': {
-				IsThoroughSearch = 1;
-				break;
-			}
-			case 'h': {
-				printf("TODO: create a help utility\n");
 				break;
 			}
 			case 'i': {
@@ -1009,20 +465,10 @@ int main(int argc, char** argv) {
 				Arg_BackgroundJobs_len = strlen_visible(Arg_BackgroundJobs);
 				break;
 			}
-			case 'n': {
-				//printf("option n: %s", optarg);fflush(stdout);
-				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
-				Arg_NewRemote = optarg;
-				break;
-			}
 			case 'p': {
 				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_ProxyInfo = optarg;
 				Arg_ProxyInfo_len = strlen_visible(Arg_ProxyInfo);
-				break;
-			}
-			case 'q': {
-				IsThoroughSearch = false;
 				break;
 			}
 			case 'r': {
@@ -1045,13 +491,13 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	if (!(IsPrompt || IsShow || IsSet || IsList || IsLowPrompt)) {
-		printf("you must specify EITHER --prompt --set --show --list or --lowprompt\n");
+	if (!(IsPrompt || IsLowPrompt)) {
+		printf("you must specify EITHER --prompt or --lowprompt\n");
 		exit(1);
 	}
 
-	if (!IsList && !(optind < argc)) {
-		printf("You must supply one non-option parameter (if not in --list mode)");
+	if (!(optind < argc)) {
+		printf("You must supply one non-option parameter (the path)");
 	}
 	const char* path = argv[optind];
 
@@ -1059,9 +505,7 @@ int main(int argc, char** argv) {
 	timespec_get(&(profiling_timestamp[PROFILE_MAIN_ARGS]), TIME_UTC);
 #endif
 
-	if (IsSet || IsShow || IsPrompt || IsLowPrompt) {
-		DoSetup(); //this reads the config file -> as of hereI can expect to have current options
-	}
+	DoSetup(); //this reads the config file -> as of hereI can expect to have current options
 
 #ifdef PROFILING
 	timespec_get(&(profiling_timestamp[PROFILE_CONFIG_READ]), TIME_UTC);
@@ -1097,7 +541,7 @@ int main(int argc, char** argv) {
 		}
 
 		if (CONFIG_PROMPT_SSH) {
-			char* ssh = getenv("SSH_CLIENT");
+			char* ssh = secure_getenv("SSH_CLIENT");
 			if (ssh != NULL) {
 				//echo "$SSH_CONNECTION" | sed -nE 's~^([-0-9a-zA-Z_\.:]+) ([0-9]+) ([-0-9a-zA-Z_\.:]+) ([0-9]+)$~<SSH: \1:\2 -> \3:\4> ~p'
 				uint8_t SSHRegexGroupCount = 6;
@@ -1172,7 +616,7 @@ int main(int argc, char** argv) {
 		}
 		fflush(stdout);
 
-		const char* lvl = getenv("SHLVL");
+		const char* lvl = secure_getenv("SHLVL");
 		if (!Compare("1", lvl)) {
 			if (asprintf(&Arg_SHLVL, " [%s]", lvl) == -1) ABORT_NO_MEMORY;
 			Arg_SHLVL_len = strlen_visible(Arg_SHLVL);
@@ -1220,22 +664,19 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	if (CONFIG_GIT_MAXBRANCHES == -2) {
-		//if IsPrompt, default 25; if IsSet, default 50; else default -1
-		CONFIG_GIT_MAXBRANCHES = (IsPrompt ? CONFIG_PROMPT_GIT_BRANCHLIMIT : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_BRANCHLIMIT : CONFIG_LSGIT_QUICK_BRANCHLIMIT));
-	}
-
-	CONFIG_GIT_WARN_BRANCH_LIMIT = IsPrompt ? CONFIG_PROMPT_GIT_WARN_BRANCHLIMIT : CONFIG_LSGIT_WARN_BRANCHLIMIT;
-
-	CONFIG_GIT_REPOTYPE = IsPrompt ? CONFIG_PROMPT_GIT_REPOTYPE : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_REPOTYPE : CONFIG_LSGIT_QUICK_REPOTYPE);
-	CONFIG_GIT_REPOTYPE_PARENT = IsPrompt ? CONFIG_PROMPT_GIT_REPOTYPE_PARENT : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT : CONFIG_LSGIT_QUICK_REPOTYPE_PARENT);
-	CONFIG_GIT_REPONAME = IsPrompt ? CONFIG_PROMPT_GIT_REPONAME : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_REPONAME : CONFIG_LSGIT_QUICK_REPONAME);
-	CONFIG_GIT_BRANCHNAME = IsPrompt ? CONFIG_PROMPT_GIT_BRANCHNAME : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_BRANCHNAME : CONFIG_LSGIT_QUICK_BRANCHNAME);
-	CONFIG_GIT_BRANCH_OVERVIEW = IsPrompt ? CONFIG_PROMPT_GIT_BRANCHINFO : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_BRANCHINFO : CONFIG_LSGIT_QUICK_BRANCHINFO);
-	CONFIG_GIT_BRANCHSTATUS = IsPrompt ? CONFIG_PROMPT_GIT_BRANCHSTATUS : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_BRANCHSTATUS : CONFIG_LSGIT_QUICK_BRANCHSTATUS);
-	CONFIG_GIT_REMOTE = IsPrompt ? CONFIG_PROMPT_GIT_REMOTE : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_REMOTE : CONFIG_LSGIT_QUICK_REMOTE);
-	CONFIG_GIT_COMMIT_OVERVIEW = IsPrompt ? CONFIG_PROMPT_GIT_COMMITS : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_COMMITS : CONFIG_LSGIT_QUICK_COMMITS);
-	CONFIG_GIT_LOCALCHANGES = IsPrompt ? CONFIG_PROMPT_GIT_GITSTATUS : (IsThoroughSearch ? CONFIG_LSGIT_THOROUGH_GITSTATUS : CONFIG_LSGIT_QUICK_GITSTATUS);
+	//this whole block may seem nonsensical, but these values are used in various git functions defined in a library used by several different applications
+	//this then sets the general values to what PROMPT needs (the XOR of this is in repotree.c)
+	CONFIG_GIT_MAXBRANCHES = CONFIG_PROMPT_GIT_BRANCHLIMIT;
+	CONFIG_GIT_WARN_BRANCH_LIMIT = CONFIG_PROMPT_GIT_WARN_BRANCHLIMIT;
+	CONFIG_GIT_REPOTYPE = CONFIG_PROMPT_GIT_REPOTYPE;
+	CONFIG_GIT_REPOTYPE_PARENT = CONFIG_PROMPT_GIT_REPOTYPE_PARENT;
+	CONFIG_GIT_REPONAME = CONFIG_PROMPT_GIT_REPONAME;
+	CONFIG_GIT_BRANCHNAME = CONFIG_PROMPT_GIT_BRANCHNAME;
+	CONFIG_GIT_BRANCH_OVERVIEW = CONFIG_PROMPT_GIT_BRANCHINFO;
+	CONFIG_GIT_BRANCHSTATUS = CONFIG_PROMPT_GIT_BRANCHSTATUS;
+	CONFIG_GIT_REMOTE = CONFIG_PROMPT_GIT_REMOTE;
+	CONFIG_GIT_COMMIT_OVERVIEW = CONFIG_PROMPT_GIT_COMMITS;
+	CONFIG_GIT_LOCALCHANGES = CONFIG_PROMPT_GIT_GITSTATUS;
 
 #ifdef DEBUG
 	for (int i = 0; i < argc; i++) {
@@ -1345,7 +786,7 @@ int main(int argc, char** argv) {
 			//only test git if git is enabled at all
 			if (CONFIG_PROMPT_GIT) {
 				char* overridefile;
-				if (asprintf(&overridefile, "%s/forcegit", getenv("ST_CFG")) == -1) ABORT_NO_MEMORY;
+				if (asprintf(&overridefile, "%s/forcegit", secure_getenv("ST_CFG")) == -1) ABORT_NO_MEMORY;
 
 				bool hasOverride = (access(overridefile, F_OK) != -1);
 				bool allowTesting = true;
@@ -1670,7 +1111,7 @@ int main(int argc, char** argv) {
 			printf("%s", Arg_PowerState);
 
 			//the last two chars on screen were intentionally empty, I am now printing  ' !' there if ANY additional element had to be omitted
-			printf("%s\n", ~AdditionalElementAvailabilityPackedBool & ~(~0 << AdditionalElementCount) ? " !" : "");
+			printf("%s\n", ~AdditionalElementAvailabilityPackedBool & ~(~0U << AdditionalElementCount) ? " !" : "");
 
 #ifdef PROFILING
 			timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_PRINTING_DONE]), TIME_UTC);
@@ -1716,50 +1157,18 @@ int main(int argc, char** argv) {
 			free(CalendarWeek);
 			CalendarWeek = NULL;
 		}
-	} else if (IsSet || IsShow) {
-		int RequestedNewOriginID = -1;
-		if (IsSet) { //a change was requested
-			for (int i = 0; i < numLOCS; i++) {
-				if (Compare(Arg_NewRemote, NAMES[i])) { //found requested new origin
-					RequestedNewOriginID = i;
-					break;
-				}
-			}
-			if (RequestedNewOriginID == -1) {
-				printf("new origin specification " COLOUR_GIT_ORIGIN "'%s'" COLOUR_CLEAR " is unknown. available origin specifications are:\n", Arg_NewRemote);
-				ListAvailableRemotes();
-				return -1;
-			}
-		}
-		printf("Performing %s search for repos on %s", IsThoroughSearch ? "thorough" : "quick", path);
-		if (RequestedNewOriginID != -1) {
-			printf(" and setting my repos to %s", NAMES[RequestedNewOriginID]);
-		}
-		printf("\n\n");
-
-#ifdef PROFILING
-		timespec_get(&(profiling_timestamp[PROFILE_MAIN_SETSHOW_SETUP]), TIME_UTC);
-#endif
-
-		RepoInfo* treeroot = CreateDirStruct("", path, RequestedNewOriginID, IsThoroughSearch);
-		pruneTreeForGit(treeroot);
-		if (RequestedNewOriginID != -1) {
-			printf("\n");
-		}
-
-#ifdef PROFILING
-		timespec_get(&(profiling_timestamp[PROFILE_MAIN_SETSHOW_COMPLETE]), TIME_UTC);
-#endif
-		printTree(treeroot, IsThoroughSearch);
-		printf("\n");
-	} else if (IsList) {
-		ListAvailableRemotes();
-		return 0;
 	} else if (IsLowPrompt) {
 		//once again a single unicode char and escape sequence -> mark as escape sequence for ZSH with %{...%} and add %G to signify glitch (the unicode char)
-		printf("%%{%%G%s%%}%%{\e[36m\e[1m %%}", CONFIG_LOWPROMPT_START_CHAR);
+		printf("%%{%%G%s %%}", CONFIG_LOWPROMPT_START_CHAR);
+		if (CONFIG_LOWPROMPT_INDICATE_VENV) {
+			const char* venvPrompt = secure_getenv("VIRTUAL_ENV_PROMPT");
+			if (venvPrompt != NULL) {
+				printf("%%{\e[35m%%}%s", venvPrompt);
+			}
+		}
+		printf("%%{\e[36m\e[1m%%}");
 		if (CONFIG_LOWPROMPT_PATH_LIMIT) {
-			int chars = 0;
+			int chars = 0; //With max length preset -1 (half available space) a terminal would need to be less than 512 chars wide. on a very large and wide screen 512 chars is within what I consider realistically possible -> I need more bits -> uint16
 			switch (CONFIG_LOWPROMPT_PATH_MAXLEN) {
 				case -1: {
 					chars = Arg_TotalPromptWidth / 2;
@@ -1927,10 +1336,10 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	if (IsSet || IsShow || IsPrompt || IsLowPrompt) {
+	if (IsPrompt || IsLowPrompt) {
 		Cleanup();
 	}
-	regfree(&branchParsingRegex);
+	gitfunc_deinit();
 
 #ifdef PROFILING
 	timespec_get(&(profiling_timestamp[PROFILE_MAIN_END]), TIME_UTC);

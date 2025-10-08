@@ -3,11 +3,15 @@ echo "$0 is library file -> skip"
 exit
 */
 
-#include "commons.h"
+#include "commons.h" // for StartsWith, Compare, ABORT_NO_MEMORY, ParseCharOrCodePoint, TerminateStrOn, DEFAULT_TERMINATORS
 #include "config.h"
-#include "gitfunc.h"
+#include "gitfunc.h" // for FixImplicitProtocol
 
-#include <regex.h>
+#include <errno.h> // for errno
+#include <regex.h> // for regcomp, regerror, regexec, regfree, REG_EXTENDED, REG_NEWLINE, regex_t, regmatch_t
+#include <stdio.h> // for fprintf, NULL, stderr, printf, asprintf, fclose, fopen, fflush, fgets, FILE, rewind, stdout
+#include <stdlib.h> // for free, malloc, atoi, getenv, exit, strtol
+#include <string.h> // for strerror, strlen, strncpy, strcat, strcpy
 
 char* NAMES[MaxLocations];
 char* LOCS[MaxLocations];
@@ -22,6 +26,7 @@ uint8_t numGitExclusions;
 
 bool CONFIG_GIT_AUTO_RESTORE_EXCLUSION = true;
 
+bool CONFIG_LOWPROMPT_INDICATE_VENV = true;
 bool CONFIG_LOWPROMPT_PATH_LIMIT = true;
 int CONFIG_LOWPROMPT_PATH_MAXLEN = -3;
 bool CONFIG_LOWPROMPT_RETCODE = true;
@@ -52,6 +57,10 @@ bool CONFIG_PROMPT_NET_ADDITIONAL = true;
 bool CONFIG_PROMPT_NET_ROUTE = true;
 bool CONFIG_PROMPT_NET_LINKSPEED = true;
 
+//this is designed to serve as a marker to indicate no value has been read from command-line.
+//all of the options in this block are the common ones that get populated at runtime either with the set of options for prompt,
+//or those for one of the lsgit-flavors. -> the -2 will never actually land at execution as if it's -2 it will always be overwritten.
+//shelltoolsmain doesn't actually check for that and blindly overwrites it since at that point arguments make no sense.
 int CONFIG_GIT_MAXBRANCHES = -2;
 bool CONFIG_GIT_WARN_BRANCH_LIMIT = true;
 bool CONFIG_GIT_REPOTYPE = true;
@@ -299,6 +308,11 @@ void DoSetup() {
 				CONFIG_LSGIT_WARN_BRANCHLIMIT = Compare("true", buf + 36);
 #ifdef DEBUG
 				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_LSGIT_WARN_BRANCHLIMIT);
+#endif
+			} else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.VENV.ENABLE:	")) {
+				CONFIG_LOWPROMPT_INDICATE_VENV = Compare("true", buf + 34);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_LOWPROMPT_INDICATE_VENV);
 #endif
 			} else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.PATH.LIMIT_DISPLAY_LENGTH.ENABLE:	")) {
 				CONFIG_LOWPROMPT_PATH_LIMIT = Compare("true", buf + 55);

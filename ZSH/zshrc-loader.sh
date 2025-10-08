@@ -58,8 +58,7 @@ ST_CoreUpdate (){
 		echo " without pulling git"
 	fi
 	#compile all .c or .cpp files in the folders ZSH and C using the self-compile trick
-	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.c" -exec sh -c '"$1"' _ {} \;
-	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -name "*.cpp" -exec sh -c '"$1"' _ {} \;
+	find "$ST_SRC/ZSH" "$ST_SRC/C" -type f -a \( -name "*.c" -o -name "*.cpp" -o -name "*.cc" \) -exec sh -c '"$1"' _ {} \;
 	if [ -w "$ZSH/custom/themes/" ]; then #if file exists and write permission is granted
 		if [ -e "$ZSH/custom/themes/lukasaldersley.zsh-theme" ]; then
 			rm "$ZSH/custom/themes/lukasaldersley.zsh-theme"
@@ -143,6 +142,8 @@ alias   gitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%
 alias  egitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as/%C(auto)%ar]%d %C(brightblack)%ae(%an):%C(auto) %s\" HEAD"
 alias  xgitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae|%ce:%C(auto) %s\" HEAD"
 alias exgitlog="git log --branches --remotes --tags --graph --notes --pretty=\"%C(auto)%h [%C(brightblack)%as|%cs/%C(auto)%ar|%cr]%d %C(brightblack)%ae(%an)|%ce(%cn):%C(auto) %s\" HEAD"
+alias gitpwd='git --no-pager log -n 1 --pretty="%C(auto)%H (%h)%d%n[%C(brightblack)%as%C(auto)/%ar%C(brightblack)|%cs%C(auto)/%cr] %s"'
+alias githash=gitpwd
 alias procowners="sudo ps axo user:64 |sort|uniq"
 alias gitupdate='git submodule foreach --recursive '\''{ if git symbolic-ref --short HEAD >/dev/null 2>&1 ; then git pull --ff-only --prune ; else printf "%s is not on a branch -> fetch only\n" "$(pwd)" ; git fetch --prune ; fi }'\'' ; git pull --ff-only --prune'
 alias ff='STBREF="$(git symbolic-ref --short HEAD 2>/dev/null)" ; if [ -n "$STBREF" ]; then ; git pull --ff-only ; else ; echo "cannot determine branch -> no action" ; fi ; unset STBREF'
@@ -188,7 +189,7 @@ alias lsrepo=lsRepo
 alias lsGit=lsRepo
 alias lsgit=lsrepo
 alias gitls=lsrepo
-alias lsorigin='$ST_CFG/shelltoolsmain.elf --list'
+alias lsorigin='$ST_CFG/repotree.elf --list'
 
 #legacy alias definitions for old names, or old functionality
 alias UpdateZSH=UpdateShellTools
@@ -247,12 +248,12 @@ sortFile(){
 }
 
 SetGitBase(){
-	"$ST_CFG/shelltoolsmain.elf" --set -n"${1:-"NONE"}" "${2:?}" "${3:-"-q"}"
+	"$ST_CFG/repotree.elf" --set -n"${1:-"NONE"}" "${2:?}" "${3:-"-q"}"
 }
 alias sgb=SetGitBase
 
 lsRepo(){
-	"$ST_CFG/shelltoolsmain.elf" --show "${1:-"$(pwd)"}" "${2:-"-q"}"
+	"$ST_CFG/repotree.elf" --show "${1:-"$(pwd)"}" "${2:-"-q"}"
 }
 
 compare(){

@@ -5,6 +5,12 @@ exit
 
 #include "commons.h"
 
+#include <assert.h> // for assert
+#include <limits.h> // for __WORDSIZE
+#include <stdarg.h> // for va_arg, va_end, va_list, va_start
+#include <stdio.h> // for NULL, asprintf, fprintf, stderr, fflush, printf, fgets, pclose, popen, FILE, stdout
+#include <string.h> // for strlen
+
 void abortNomem() {
 	abortMessage("Out of memory\n");
 }
@@ -245,7 +251,7 @@ uint32_t TerminateStrOn(char* str, const char* terminators) {
 	}
 	uint32_t i = 0;
 	while (i < UINT32_MAX && str[i] != 0x00) {
-		int8_t t = 0;
+		uint8_t t = 0;
 		while (t < UINT8_MAX && terminators[t] != 0x00) {
 			if (str[i] == terminators[t]) {
 				str[i] = 0x00;

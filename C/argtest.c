@@ -11,9 +11,10 @@ printf " -> \e[32mDONE\e[0m(%s)\n" $?
 exit
 */
 
-#include "commons.h"
+#include "commons.h" // for ExecuteProcess_alloc, TerminateStrOn
 
-#include <stdio.h>
+#include <stdio.h> // for printf
+#include <stdlib.h> // for free
 
 int main(int argc, char** argv) {
 	char* result = ExecuteProcess_alloc("pwd");
