@@ -99,16 +99,16 @@ static double calcProfilingTime(uint8_t startIndex, uint8_t stopIndex) {
 }
 #endif
 
-#define POWER_CHARGE		" \e[38;5;157m▲ "
-#define POWER_DISCHARGE		" \e[38;5;217m▽ "
-#define POWER_FULL			" \e[38;5;157m≻ "
-#define POWER_NOCHARGE_HIGH " \e[38;5;172m◊ "
-#define POWER_NOCHARGE_LOW	" \e[38;5;009m◊ "
-#define POWER_UNKNOWN		" \e[38;5;9m!⌧? "
+#define POWER_CHARGE		"\e[38;5;157m▲ "
+#define POWER_DISCHARGE		"\e[38;5;217m▽ "
+#define POWER_FULL			"\e[38;5;157m≻ "
+#define POWER_NOCHARGE_HIGH "\e[38;5;172m◊ "
+#define POWER_NOCHARGE_LOW	"\e[38;5;009m◊ "
+#define POWER_UNKNOWN		"\e[38;5;9m!⌧? "
 #define CHARGE_AC			"≈"
 #define CHARGE_USB			"≛"
 #define CHARGE_BOTH			"⩰"
-#define CHARGER_CONNECTED	"↯"
+#define CHARGER_CONNECTED	"↯ "
 
 typedef enum {
 	CHARGING,
@@ -203,27 +203,27 @@ static uint8_t ParsePowerSupplyEntry(const char* directory, const char* dir, Pow
 		} else {
 			switch (state) {
 				case CHARGING: {
-					len += snprintf(obuf, avlen - len, POWER_CHARGE "%li%%\e[0m", percent);
+					len += snprintf(obuf, avlen - len, POWER_CHARGE "%li%%\e[0m ", percent);
 					break;
 				}
 				case DISCHARGING: {
-					len += snprintf(obuf, avlen - len, POWER_DISCHARGE "%li%%\e[0m", percent);
+					len += snprintf(obuf, avlen - len, POWER_DISCHARGE "%li%%\e[0m ", percent);
 					break;
 				}
 				case FULL: {
-					len += snprintf(obuf, avlen - len, POWER_FULL "%li%%\e[0m", percent);
+					len += snprintf(obuf, avlen - len, POWER_FULL "%li%%\e[0m ", percent);
 					break;
 				}
 				case NOT_CHARGING: {
 					if (percent >= 95) {
-						len += snprintf(obuf, avlen - len, POWER_NOCHARGE_HIGH "%li%%\e[0m", percent);
+						len += snprintf(obuf, avlen - len, POWER_NOCHARGE_HIGH "%li%%\e[0m ", percent);
 					} else {
-						len += snprintf(obuf, avlen - len, POWER_NOCHARGE_LOW "%li%%\e[0m", percent);
+						len += snprintf(obuf, avlen - len, POWER_NOCHARGE_LOW "%li%%\e[0m ", percent);
 					}
 					break;
 				}
 				case UNKNOWN: {
-					len += snprintf(obuf, avlen - len, POWER_UNKNOWN "%li%%\e[0m", percent);
+					len += snprintf(obuf, avlen - len, POWER_UNKNOWN "%li%%\e[0m ", percent);
 					break;
 				}
 			}
@@ -284,19 +284,18 @@ static char* GetSystemPowerState() {
 		perror("Couldn't open the directory");
 	}
 	if (field.IsMains || field.IsUSB) {
-		if (field.IsWSL) {
-			currentLen += snprintf(powerString + currentLen, powerMaxLen - currentLen, " ");
-		} else {
-			//WSL only ever reports as usb -> only report details if not WSL
+		//WSL only ever reports as usb -> only report details if not WSL
+		if (!field.IsWSL) {
+
 			if (field.IsMains && field.IsUSB) {
 				//both
-				currentLen += snprintf(powerString + currentLen, powerMaxLen - currentLen, " " CHARGE_BOTH);
+				currentLen += snprintf(powerString + currentLen, powerMaxLen - currentLen, "%s", CHARGE_BOTH);
 			} else if (field.IsMains) {
 				//only mains
-				currentLen += snprintf(powerString + currentLen, powerMaxLen - currentLen, " " CHARGE_AC);
+				currentLen += snprintf(powerString + currentLen, powerMaxLen - currentLen, "%s", CHARGE_AC);
 			} else {
 				//only USB
-				currentLen += snprintf(powerString + currentLen, powerMaxLen - currentLen, " " CHARGE_USB);
+				currentLen += snprintf(powerString + currentLen, powerMaxLen - currentLen, "%s", CHARGE_USB);
 			}
 		}
 		snprintf(powerString + currentLen, powerMaxLen - currentLen, CHARGER_CONNECTED);
@@ -630,16 +629,21 @@ int main(int argc, char** argv) {
 		Time = malloc(sizeof(char) * 16);
 		if (Time == NULL) ABORT_NO_MEMORY;
 		if (CONFIG_PROMPT_TIME) {
-			Time_len = strftime(Time, 16, "%T", localtm);
+			Time_len = strftime(Time, 16, "%T ", localtm);
 		} else {
 			Time_len = 0;
 			Time[0] = 0x00;
 		}
 
-		TimeZone = malloc(sizeof(char) * 17);
+		int TimezoneStringMaxSize = 17; //" UTC+dddd (ABCD)",->16 chars+nullbyte=17 both snprintf and strftime include the nullbyte in their count
+		TimeZone = malloc(sizeof(char) * (TimezoneStringMaxSize));
 		if (TimeZone == NULL) ABORT_NO_MEMORY;
 		if (CONFIG_PROMPT_TIMEZONE) {
-			TimeZone_len = strftime(TimeZone, 17, " UTC%z (%Z)", localtm);
+			if (localtm->tm_gmtoff == 0) {
+				TimeZone_len = snprintf(TimeZone, TimezoneStringMaxSize, "UTC "); //snprintf's max size param includes nullbyte
+			} else {
+				TimeZone_len = strftime(TimeZone, TimezoneStringMaxSize, "UTC%z (%Z) ", localtm);
+			}
 		} else {
 			TimeZone_len = 0;
 			TimeZone[0] = 0x00;
@@ -648,7 +652,7 @@ int main(int argc, char** argv) {
 		DateInfo = malloc(sizeof(char) * 16);
 		if (DateInfo == NULL) ABORT_NO_MEMORY;
 		if (CONFIG_PROMPT_DATE) {
-			DateInfo_len = strftime(DateInfo, 16, " %a %d.%m.%Y", localtm);
+			DateInfo_len = strftime(DateInfo, 16, "%a %d.%m.%Y ", localtm);
 		} else {
 			DateInfo_len = 0;
 			DateInfo[0] = 0x00;
@@ -657,7 +661,7 @@ int main(int argc, char** argv) {
 		CalendarWeek = malloc(sizeof(char) * 8);
 		if (CalendarWeek == NULL) ABORT_NO_MEMORY;
 		if (CONFIG_PROMPT_CALENDARWEEK) {
-			CalendarWeek_len = strftime(CalendarWeek, 8, " KW%V", localtm);
+			CalendarWeek_len = strftime(CalendarWeek, 8, "KW%V ", localtm);
 		} else {
 			CalendarWeek_len = 0;
 			CalendarWeek[0] = 0x00;
@@ -761,7 +765,7 @@ int main(int argc, char** argv) {
 			if (Arg_BackgroundJobs_len > 0) {
 				int i = 0;
 				while (Arg_BackgroundJobs[i] != 0x00) {
-					if (Arg_BackgroundJobs[i] == ' ') {
+					if (Arg_BackgroundJobs[i] == ' ' && Arg_BackgroundJobs[i + 1] != 0x00) {
 						numBgJobs++;
 					}
 					i++;
@@ -769,12 +773,24 @@ int main(int argc, char** argv) {
 			}
 
 			char* numBgJobsStr;
+			int numBgJobsStr_len;
 			if (numBgJobs != 0) {
-				if (asprintf(&numBgJobsStr, "  %i Jobs", numBgJobs) == -1) ABORT_NO_MEMORY;
+				if (asprintf(&numBgJobsStr, " %i Job%s", numBgJobs, numBgJobs != 1 ? "s" : "") == -1) ABORT_NO_MEMORY;
+				numBgJobsStr_len = strlen_visible(numBgJobsStr);
+				//transfer one byte of space over to the always there display, needed to maintain spacing in case the details do not fit.
+				numBgJobsStr_len++;
+				Arg_BackgroundJobs_len--;
+
+				if (!CONFIG_PROMPT_JOB_DETAILS) {
+					//if details are not desired, blank them out, but do keep the space resevation transfer (still needed for prompt spacing)
+					Arg_BackgroundJobs[0] = 0x00;
+					Arg_BackgroundJobs_len = 0;
+				}
 			} else {
 				numBgJobsStr = (char*)malloc(sizeof(char));
 				if (numBgJobsStr == NULL) ABORT_NO_MEMORY;
 				numBgJobsStr[0] = 0x00;
+				numBgJobsStr_len = 0;
 			}
 
 #ifdef PROFILING
@@ -955,8 +971,8 @@ int main(int argc, char** argv) {
 															   gitSegment6_gitStatus_len +
 															   Time_len +
 															   Arg_ProxyInfo_len +
-															   strlen_visible(numBgJobsStr) +
-															   Arg_PowerState_len + 2);
+															   numBgJobsStr_len +
+															   Arg_PowerState_len + 1);
 
 #define AdditionalElementCount 11
 			uint32_t AdditionalElementAvailabilityPackedBool =
@@ -1105,13 +1121,20 @@ int main(int argc, char** argv) {
 			//if the sixth-prioritized element (background tasks) has space, print it " {1S-  2S+}"
 			if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityBackgroundJobDetail))) {
 				printf("%s", Arg_BackgroundJobs);
+				if (CONFIG_PROMPT_JOBS && !CONFIG_PROMPT_JOB_DETAILS) {
+					putc(' ', stdout);
+				}
+			} else {
+				if (numBgJobs != 0) {
+					putc(' ', stdout); //if the job details don't fit, use the transferred byte of space to ensure spacing
+				}
 			}
 
 			//print the battery state (the first unicode char can be any of ▲,≻,▽ or ◊[for not charging,but not discharging]), while the second unicode char indicates the presence of AC power "≻ 100% ↯"
 			printf("%s", Arg_PowerState);
 
-			//the last two chars on screen were intentionally empty, I am now printing  ' !' there if ANY additional element had to be omitted
-			printf("%s\n", ~AdditionalElementAvailabilityPackedBool & ~(~0U << AdditionalElementCount) ? " !" : "");
+			//the last char on screen (after any spaces contained in something) was intentionally empty(achieved by the last +1 in the calculation for RemainingPromptWidth just before the call to determinePossibleCombinations), I am now printing  ' !' there if ANY additional element had to be omitted
+			printf("%s\n", ~AdditionalElementAvailabilityPackedBool & ~(~0U << AdditionalElementCount) ? "!" : "");
 
 #ifdef PROFILING
 			timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_PRINTING_DONE]), TIME_UTC);

@@ -67,7 +67,7 @@ function GetBackgroundTaskInfo (){
 	if [ -z "${background_task_info}" ]; then
 		echo ""
 	else
-		echo ": {$background_task_info}"
+		echo ": {$background_task_info} "
 	fi
 }
 
@@ -84,12 +84,12 @@ function GetLocalIP (){
 		#the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
 		isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
 		if [ "$isupstate" ]; then
-			IpAddrList="$IpAddrList $i:$isupstate"
+			IpAddrList="${IpAddrList}$i:$isupstate "
 		fi
 	done
 
 	if [ ! "$IpAddrList" ]; then
-		IpAddrList=" NC"
+		IpAddrList="NC "
 	fi
 	echo "$IpAddrList"
 }
@@ -134,7 +134,7 @@ GetProxyInfo(){
 	fi
 
 	if [ "$PROXY_STATE_RES" ]; then
-		echo " [$PROXY_STATE_RES]"
+		echo "[$PROXY_STATE_RES] "
 	else
 		echo ""
 	fi

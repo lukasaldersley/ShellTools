@@ -46,6 +46,7 @@ bool CONFIG_PROMPT_CALENDARWEEK = true;
 bool CONFIG_PROMPT_PROXY = true;
 bool CONFIG_PROMPT_NETWORK = true;
 bool CONFIG_PROMPT_JOBS = true;
+bool CONFIG_PROMPT_JOB_DETAILS = true;
 bool CONFIG_PROMPT_POWER = true;
 bool CONFIG_PROMPT_GIT = true;
 bool CONFIG_PROMPT_USER = true;
@@ -393,6 +394,11 @@ void DoSetup() {
 				CONFIG_PROMPT_JOBS = Compare("true", buf + 41);
 #ifdef DEBUG
 				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_PROMPT_JOBS);
+#endif
+			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.BACKGROUNDJOBS.DETAILS.ENABLE:	")) {
+				CONFIG_PROMPT_JOB_DETAILS = Compare("true", buf + 49);
+#ifdef DEBUG
+				printf("CONFIG:%s : %s -> %i\n", buf, buf + 49, CONFIG_PROMPT_JOB_DETAILS);
 #endif
 			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.POWER.ENABLE:	")) {
 				CONFIG_PROMPT_POWER = Compare("true", buf + 32);

@@ -80,23 +80,30 @@ UpdateShellTools(){
 	ST_CoreUpdate "$@"
 }
 
-#Notify about updates if the currently checked out branch is behind origin
-ST_NUM_UPDATE_COMMITS="$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | sed -nE 's~# branch.ab.*-([0-9]+)~\1~p')"
-if [ "$ST_NUM_UPDATE_COMMITS" -gt 0 ]; then
-#if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | grep branch.ab)" != "# branch.ab +0 -0" ]; then
-	printf "There are ShellTools Updates available on the current branch (%s, %s commit(s)).\nDo you wish to update now [Y/n] " "$(git -C "$ST_SRC" symbolic-ref --short HEAD)" "$ST_NUM_UPDATE_COMMITS"
-	read -r -k 1 versionconfirm
-	printf '\n'
-	case $versionconfirm in
-		[Yy][Ee][Ss] | [Yy] )
-			UpdateShellTools
-			;;
-		* )
-			echo "not updating. You can manually update by running 'uz' or 'UpdateShellTools'"
-			;;
-	esac
+TryAutoUpdate(){
+	#Notify about updates if the currently checked out branch is behind origin
+	ST_NUM_UPDATE_COMMITS="$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | sed -nE 's~# branch.ab.*-([0-9]+)~\1~p')"
+	if [ "$ST_NUM_UPDATE_COMMITS" -gt 0 ]; then
+	#if [ "$(git -C "$ST_SRC" status -uno --ignore-submodules=all -b --porcelain=v2 | grep branch.ab)" != "# branch.ab 	+0 -0" ]; then
+		printf "There are ShellTools Updates available on the current branch (%s, %s commit(s)).\nDo you wish to update now [Y/n] " "$(git -C "$ST_SRC" symbolic-ref --short HEAD)" "$ST_NUM_UPDATE_COMMITS"
+		read -r -k 1 versionconfirm
+		printf '\n'
+		case $versionconfirm in
+			[Yy][Ee][Ss] | [Yy] )
+				UpdateShellTools
+				;;
+			* )
+				echo "not updating. You can manually update by running 'uz' or 'UpdateShellTools'"
+				;;
+		esac
+	fi
+	unset ST_NUM_UPDATE_COMMITS
+}
+
+if [ ! -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ]; then
+	#If there is no extensions, check for updates now (to save time)
+	TryAutoUpdate
 fi
-unset ST_NUM_UPDATE_COMMITS
 
 #Ensure the config directory and at the basic elfs exist
 if [ ! -e "$ST_CFG" ] || [ ! -e "$ST_CFG/shelltoolsmain.elf" ]; then
@@ -236,13 +243,28 @@ searchapt(){
 
 cleanFile(){
 	#the reason I use a temp file is to avoid the same file on both ends of the pipe.
+	#It'd probably work on some systems but I'm scared it'll just fail randomly and might loose data
+	local ___tempfile_local
+	local retcode
 	___tempfile_local=$(mktemp)
+	retcode=$?
+	if [ "$retcode" -ne 0 ]; then
+		printf "could not create temp file -> aborting"
+		return "$retcode"
+	fi
 	LC_ALL=C LANG=C LC_COLLATE=C sort -Vu < "$1" > "$___tempfile_local"
 	mv "$___tempfile_local" "$1"
 }
 
 sortFile(){
+	local ___tempfile_local
+	local retcode
 	___tempfile_local=$(mktemp)
+	retcode=$?
+	if [ "$retcode" -ne 0 ]; then
+		printf "could not create temp file -> aborting"
+		return "$retcode"
+	fi
 	LC_ALL=C LANG=C LC_COLLATE=C sort -V < "$1" > "$___tempfile_local"
 	mv "$___tempfile_local" "$1"
 }
@@ -459,6 +481,11 @@ if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ]; then
 fi
 
 unset IsWSL
+
+if [ -e "$ST_SRC/../ShellToolsExtensionLoader.sh" ]; then
+	#if an extension loader existed auto update was not attempted earlier due to extensions not being loaded -> try now
+	TryAutoUpdate
+fi
 
 
 printf "done loading utility scripts\n\n"
