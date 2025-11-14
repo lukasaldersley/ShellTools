@@ -169,6 +169,13 @@ int main(int argc, char** argv) {
 	}
 	const char* path = argv[optind];
 
+#ifdef DEBUG
+	printf("Arg_NewRemote: >%s< (n/a)\n", Arg_NewRemote);
+	fflush(stdout);
+	printf("Workpath: >%s<\n", path);
+	fflush(stdout);
+#endif
+
 	DoSetup(); //this reads the config file -> as of hereI can expect to have current options
 
 	//same as in shelltoolsmain this sets common/general settings flags to what the current instance needs (shelltoolsmain sets what is required for prompt, this sets for tree-based ops)

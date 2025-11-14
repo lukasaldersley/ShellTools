@@ -12,7 +12,7 @@ printf " -> \e[32mDONE\e[0m(%s)\n" $?
 exit
 */
 
-#include "commons.h" // for ABORT_NO_MEMORY, strlen_visible, Compare, TerminateStrOn, DEFAULT_TERMINATORS, COLOUR_CLEAR, ExecuteProcess_alloc, AbbreviatePathAuto, StartsWith, determinePossibleCombinations, COLOUR_GREYOUT
+#include "commons.h" // for ABORT_NO_MEMORY, strlen_visible_width, Compare, TerminateStrOn, DEFAULT_TERMINATORS, COLOUR_CLEAR, ExecuteProcess_alloc, AbbreviatePathAuto, StartsWith, determinePossibleCombinations, COLOUR_GREYOUT
 #include "config.h" // for CONFIG_PROMPT_FILLER_CHAR, CONFIG_GIT_BRANCHNAME, CONFIG_PROMPT_HOST, CONFIG_GIT_BRANCHSTATUS, CONFIG_GIT_REPONAME, CONFIG_GIT_REPOTYPE, CONFIG_LOWPROMPT_PATH_MAXLEN, CONFIG_LOWPROMPT_RETCODE, CONFIG_PROMPT_NETWORK, CONFIG_PROMPT_USER, CONFIG_GIT_BRANCH_OVERVIEW, CONFIG_GIT_COMMIT_OVERVIEW, CONFIG_GIT_LOCALCHANGES, CONFIG_GIT_REMOTE, CONFIG_GIT_REPOTYPE_PARENT, CONFIG_LOWPROMPT_TIMER, CONFIG_PROMPT_GIT, CONFIG_PROMPT_TERMINAL_DEVICE, Cleanup, DoSetup, CONFIG_GIT_AUTO_RESTO...
 #include "gitfunc.h" // for AllocRepoInfo, AllocUnsetStringsToEmpty, ConstructCommitStatusString, ConstructGitBranchInfoString, ConstructGitStatusString, DeallocRepoInfoStrings, TestPathForRepoAndParseIfExists, gitfunc_deinit, gitfunc_init, COLOUR_GIT_BARE, COLOUR_GIT_BRANCH, COLOUR_GIT_INDICATOR, COLOUR_GIT_NAME, COLOUR_GIT_ORIGIN, COLOUR_GIT_PARENT, RepoInfo
 #include "inetfunc.h" // for GetBaseIPString, IpTransportStruct
@@ -36,12 +36,6 @@ exit
 #define COLOUR_USER			   "\e[38;5;010m"
 #define COLOUR_USER_AT_HOST	   "\e[38;5;007m"
 #define COLOUR_HOST			   "\e[38;5;033m"
-
-typedef enum {
-	IP_MODE_NONE,
-	IP_MODE_LEGACY,
-	IP_MODE_STANDALONE
-} IP_MODE;
 
 #ifdef PROFILING
 bool ALLOW_PROFILING_TESTPATH = false;
@@ -300,13 +294,159 @@ static char* GetSystemPowerState() {
 		}
 		snprintf(powerString + currentLen, powerMaxLen - currentLen, CHARGER_CONNECTED);
 	}
-	//printf("PowerString: <%s> (%i/%i)", powerString, strlen(powerString), strlen_visible(powerString));
+	//printf("PowerString: <%s> (%i/%i)", powerString, strlen(powerString), strlen_visible_width(powerString));
 	//printf("\n");
 	return powerString;
 }
 
+typedef enum {
+	/*the lower the numeric value, the better, so for cases like http/https, the largest number should be used*/
+	PROXY_NONE = 0,
+	PROXY_BOTH_SAME = 1,
+	PROXY_LOWER = 2,
+	PROXY_UPPER = 3,
+	PROXY_BOTH_DIFFERENT = 4,
+} ProxyStatus;
+
+static ProxyStatus CheckLowerVsUpperCaseProxy(const char* lowercase, const char* uppercase) {
+	if (lowercase == NULL && uppercase == NULL) {
+		return PROXY_NONE;
+	} else if (lowercase == NULL) {
+		return PROXY_UPPER;
+	} else if (uppercase == NULL) {
+		return PROXY_LOWER;
+	} else {
+		return Compare(lowercase, uppercase) ? PROXY_BOTH_SAME : PROXY_BOTH_DIFFERENT;
+	}
+}
+
+const char* PROXY_FMT_UPPER = "\e[38;5;202m\e[4m";
+const char* PROXY_FMT_LOWER = "\e[38;5;248m\e[4m";
+const char* PROXY_FMT_SAME = "\e[38;5;2m";
+const char* PROXY_FMT_DIFFERENT = "\e[38;5;9m";
+
+static int snprintproxy(char* dest, int maxlen, char symbol, ProxyStatus s) {
+	int len = 0;
+	if (s == PROXY_NONE) {
+		return 0;
+	}
+	if (s == PROXY_LOWER) {
+		len += snprintf(dest + len, maxlen - len, "%s%c\e[0m", PROXY_FMT_LOWER, symbol);
+	}
+	if (s == PROXY_UPPER) {
+		len += snprintf(dest + len, maxlen - len, "%s%c\e[0m", PROXY_FMT_UPPER, symbol);
+	}
+	if (s == PROXY_BOTH_SAME) {
+		len += snprintf(dest + len, maxlen - len, "%s%c\e[0m", PROXY_FMT_SAME, symbol);
+	}
+	if (s == PROXY_BOTH_DIFFERENT) {
+		len += snprintf(dest + len, maxlen - len, "%s%c\e[0m", PROXY_FMT_DIFFERENT, symbol);
+	}
+	return len;
+}
+
+static char* GetProxyStatus() {
+	ProxyStatus httpStatus = CheckLowerVsUpperCaseProxy(secure_getenv("http_proxy"), secure_getenv("HTTP_PROXY"));
+	ProxyStatus httpsStatus = CheckLowerVsUpperCaseProxy(secure_getenv("https_proxy"), secure_getenv("HTTPS_PROXY"));
+	ProxyStatus noStatus = CheckLowerVsUpperCaseProxy(secure_getenv("no_proxy"), secure_getenv("NO_PROXY"));
+	ProxyStatus ftpStatus = CheckLowerVsUpperCaseProxy(secure_getenv("ftp_proxy"), secure_getenv("FTP_PROXY"));
+	ProxyStatus rsyncStatus = CheckLowerVsUpperCaseProxy(secure_getenv("rsync_proxy"), secure_getenv("RSYNC_PROXY"));
+	ProxyStatus socksStatus = CheckLowerVsUpperCaseProxy(secure_getenv("socks_proxy"), secure_getenv("SOCKS_PROXY"));
+	ProxyStatus allStatus = CheckLowerVsUpperCaseProxy(secure_getenv("all_proxy"), secure_getenv("ALL_PROXY"));
+	ProxyStatus aptStatus = PROXY_NONE;
+	int lineLen = 100;
+	//I only consider the file written by enableProxy/disableProxy.
+	//Reason: I don't really want to parse the entire apt config and expose myself to whatever weirdness may be there
+	FILE* fp = fopen("/etc/apt/apt.conf.d/proxy_shelltools", "r");
+	if (fp != NULL) {
+		char* line = (char*)malloc(sizeof(char) * lineLen);
+		if (line == NULL) ABORT_NO_MEMORY;
+		bool hasProxyContent = false;
+		bool matchesGeneralContent = true;
+		bool generalExists = true;
+		while (fgets(line, lineLen - 1, fp) != NULL) {
+			TerminateStrOn(line, DEFAULT_TERMINATORS);
+			if (StartsWith(line, "Acquire::http::proxy")) {
+				hasProxyContent = true;
+				TerminateStrOn(line + 22, "\"");
+				if (!Compare(line + 22, secure_getenv("http_proxy"))) {
+					matchesGeneralContent = false;
+					if (httpStatus == PROXY_NONE) {
+						generalExists = false;
+					}
+				}
+			} else if (StartsWith(line, "Acquire::https::proxy")) {
+				hasProxyContent = true;
+				TerminateStrOn(line + 23, "\"");
+				if (!Compare(line + 23, secure_getenv("https_proxy"))) {
+					matchesGeneralContent = false;
+					if (httpsStatus == PROXY_NONE) {
+						generalExists = false;
+					}
+				}
+			} else if (StartsWith(line, "Acquire::ftp::proxy")) {
+				hasProxyContent = true;
+				TerminateStrOn(line + 21, "\"");
+				if (!Compare(line + 21, secure_getenv("ftp_proxy"))) {
+					matchesGeneralContent = false;
+					if (ftpStatus == PROXY_NONE) {
+						generalExists = false;
+					}
+				}
+			}
+		}
+		free(line);
+		line = NULL;
+		fclose(fp);
+		//This bit reuses the enum for environment variables and it's formatting for apt, the names don't perfectly match but the concepts are close enough
+		if (hasProxyContent) {
+			if (matchesGeneralContent) {
+				//apt and the env vars are the same
+				aptStatus = PROXY_BOTH_SAME;
+			} else {
+				if (generalExists) {
+					//apt and env vars differ
+					aptStatus = PROXY_BOTH_DIFFERENT;
+				} else {
+					//apt exists but env vars do not
+					aptStatus = PROXY_LOWER;
+				}
+			}
+		}
+	}
+	fp = NULL;
+	int maxLen = 128;
+	char* ret = malloc(sizeof(char) * (maxLen + 1));
+	if (ret == NULL) ABORT_NO_MEMORY;
+	ret[0] = 0x00;
+	ret[maxLen] = 0x00;
+	int clen = 0;
+	clen += snprintf(ret + clen, maxLen - clen, "[");
+	clen += snprintproxy(ret + clen, maxLen - clen, 'A', aptStatus);
+	if (httpsStatus == PROXY_NONE && httpStatus != PROXY_NONE) {
+		clen += snprintf(ret + clen, maxLen - clen, "\e[2m");
+		clen += snprintproxy(ret + clen, maxLen - clen, 'H', httpStatus);
+	} else if (httpsStatus != PROXY_NONE && httpStatus == PROXY_NONE) {
+		clen += snprintf(ret + clen, maxLen - clen, "\e[3m");
+		clen += snprintproxy(ret + clen, maxLen - clen, 'H', httpsStatus);
+	} else {
+		clen += snprintproxy(ret + clen, maxLen - clen, 'H', httpStatus < httpsStatus ? httpStatus : httpsStatus);
+	}
+	clen += snprintproxy(ret + clen, maxLen - clen, 'N', noStatus);
+	clen += snprintproxy(ret + clen, maxLen - clen, 'F', ftpStatus);
+	clen += snprintproxy(ret + clen, maxLen - clen, 'R', rsyncStatus);
+	clen += snprintproxy(ret + clen, maxLen - clen, 'S', socksStatus);
+	clen += snprintproxy(ret + clen, maxLen - clen, '*', allStatus);
+	if (clen <= 1) {
+		//only initial bracket -> write as end of string
+		ret[0] = 0x00;
+	} else {
+		/*clen += */ snprintf(ret + clen, maxLen - clen, "] ");
+	}
+	return ret;
+}
+
 int main(int argc, char** argv) {
-	printf("...\r");
 	fflush(stdout);
 #ifdef PROFILING
 	for (int i = 0; i < PROFILE_COUNT; i++) {
@@ -340,11 +480,11 @@ int main(int argc, char** argv) {
 
 	char* User = ExecuteProcess_alloc("whoami");
 	TerminateStrOn(User, DEFAULT_TERMINATORS);
-	int User_len = strlen_visible(User);
+	int User_len = strlen_visible_width(User);
 
 	char* Host = ExecuteProcess_alloc("hostname");
 	TerminateStrOn(Host, DEFAULT_TERMINATORS);
-	int Host_len = strlen_visible(Host);
+	int Host_len = strlen_visible_width(Host);
 
 	char* Arg_TerminalDevice = NULL;
 	int Arg_TerminalDevice_len = 0;
@@ -382,8 +522,6 @@ int main(int argc, char** argv) {
 	char* Arg_SSHInfo = NULL;
 	int Arg_SSHInfo_len = 0;
 
-	IP_MODE ipMode = IP_MODE_STANDALONE;
-
 	int getopt_currentChar; //the char for getop switch
 	int option_index = 0;
 
@@ -395,7 +533,7 @@ int main(int argc, char** argv) {
 
 	while (1) {
 
-		getopt_currentChar = getopt_long(argc, argv, "i:j:p:r:t:", long_options, &option_index);
+		getopt_currentChar = getopt_long(argc, argv, "j:r:t:", long_options, &option_index);
 		if (getopt_currentChar == -1)
 			break;
 
@@ -423,51 +561,10 @@ int main(int argc, char** argv) {
 				IsLowPrompt = 1;
 				break;
 			}
-			case 'i': {
-				if (ipMode != IP_MODE_STANDALONE) {
-					fprintf(stderr, "WARNING: multiple -I/-i found, only the last -i will be used, everything else will be discarded");
-				}
-				ipMode = IP_MODE_LEGACY;
-				if (Arg_LocalIPs != NULL) {
-					Arg_LocalIPs_len = 0;
-					free(Arg_LocalIPs);
-					Arg_LocalIPs = NULL;
-				}
-				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
-				if (asprintf(&Arg_LocalIPs, "%s", optarg) == -1) ABORT_NO_MEMORY;
-				Arg_LocalIPs_len = strlen_visible(Arg_LocalIPs);
-				if (Arg_LocalIPsAdditional != NULL && Arg_LocalIPsAdditional[0] != 0x00) {
-					free(Arg_LocalIPsAdditional);
-					Arg_LocalIPsAdditional = NULL;
-				}
-				if (Arg_LocalIPsAdditional == NULL) {
-					Arg_LocalIPsAdditional = (char*)malloc(sizeof(char) * 1);
-					if (Arg_LocalIPsAdditional == NULL) ABORT_NO_MEMORY;
-					Arg_LocalIPsAdditional[0] = 0x00;
-					Arg_LocalIPsAdditional_len = 0;
-				}
-				if (Arg_LocalIPsRoutes != NULL && Arg_LocalIPsRoutes[0] != 0x00) {
-					free(Arg_LocalIPsRoutes);
-					Arg_LocalIPsRoutes = NULL;
-				}
-				if (Arg_LocalIPsRoutes == NULL) {
-					Arg_LocalIPsRoutes = (char*)malloc(sizeof(char) * 1);
-					if (Arg_LocalIPsRoutes == NULL) ABORT_NO_MEMORY;
-					Arg_LocalIPsRoutes[0] = 0x00;
-					Arg_LocalIPsRoutes_len = 0;
-				}
-				break;
-			}
 			case 'j': {
 				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
 				Arg_BackgroundJobs = optarg;
-				Arg_BackgroundJobs_len = strlen_visible(Arg_BackgroundJobs);
-				break;
-			}
-			case 'p': {
-				TerminateStrOn(optarg, DEFAULT_TERMINATORS);
-				Arg_ProxyInfo = optarg;
-				Arg_ProxyInfo_len = strlen_visible(Arg_ProxyInfo);
+				Arg_BackgroundJobs_len = strlen_visible_width(Arg_BackgroundJobs);
 				break;
 			}
 			case 'r': {
@@ -513,7 +610,7 @@ int main(int argc, char** argv) {
 	if (IsPrompt) {
 		if (CONFIG_PROMPT_POWER) {
 			Arg_PowerState = GetSystemPowerState();
-			Arg_PowerState_len = strlen_visible(Arg_PowerState);
+			Arg_PowerState_len = strlen_visible_width(Arg_PowerState);
 		} else {
 			Arg_PowerState = malloc(sizeof(char));
 			if (Arg_PowerState == NULL) ABORT_NO_MEMORY;
@@ -523,14 +620,19 @@ int main(int argc, char** argv) {
 		if (CONFIG_PROMPT_TERMINAL_DEVICE) {
 			Arg_TerminalDevice = ExecuteProcess_alloc("/usr/bin/tty");
 			TerminateStrOn(Arg_TerminalDevice, DEFAULT_TERMINATORS);
-			Arg_TerminalDevice_len = strlen_visible(Arg_TerminalDevice) + 1; //NOTE, the +1 is for the : added at print time
+			Arg_TerminalDevice_len = strlen_visible_width(Arg_TerminalDevice) + 1; //NOTE, the +1 is for the : added at print time
 		} else {
 			Arg_TerminalDevice = malloc(sizeof(char));
 			if (Arg_TerminalDevice == NULL) ABORT_NO_MEMORY;
 			Arg_TerminalDevice[0] = 0x00;
 			Arg_TerminalDevice_len = 0;
 		}
-		if (!CONFIG_PROMPT_PROXY && Arg_ProxyInfo != NULL) {
+		if (CONFIG_PROMPT_PROXY) {
+			Arg_ProxyInfo = GetProxyStatus();
+			Arg_ProxyInfo_len = strlen_visible_width(Arg_ProxyInfo);
+		} else {
+			Arg_ProxyInfo = malloc(sizeof(char));
+			if (Arg_ProxyInfo == NULL) ABORT_NO_MEMORY;
 			Arg_ProxyInfo[0] = 0x00;
 			Arg_ProxyInfo_len = 0;
 		}
@@ -618,7 +720,7 @@ int main(int argc, char** argv) {
 		const char* lvl = secure_getenv("SHLVL");
 		if (!Compare("1", lvl)) {
 			if (asprintf(&Arg_SHLVL, " [%s]", lvl) == -1) ABORT_NO_MEMORY;
-			Arg_SHLVL_len = strlen_visible(Arg_SHLVL);
+			Arg_SHLVL_len = strlen_visible_width(Arg_SHLVL);
 		} else {
 			Arg_SHLVL = malloc(sizeof(char));
 			if (Arg_SHLVL == NULL) ABORT_NO_MEMORY;
@@ -696,37 +798,28 @@ int main(int argc, char** argv) {
 
 	if (IsPrompt) //show origin info for command prompt
 	{
-		printf("   \n");
+		printf("\n");
 		//this is intentionally not OR-ed with IsPrompt as IsPrompt is in an exhaustive if/else where if this would evaluate to false I would get an error to the effect of "unknown option PROMPT"
 		if (CONFIG_PROMPT_OVERALL_ENABLE) {
-			if (ipMode == IP_MODE_STANDALONE && CONFIG_PROMPT_NETWORK) {
+			if (CONFIG_PROMPT_NETWORK) {
 				if (Arg_LocalIPs == NULL && Arg_LocalIPs_len == 0) {
 					//at this point ArgLocalIPs should ALWAYS be NULL, but for sanity's sake I'll check again anyway
 					//only do the own lookup if IP hasn't been passed in in the old format.
 					//if this happens the user is just stuck on the old system but it's functional
 					IpTransportStruct temp = GetBaseIPString();
 					Arg_LocalIPs = temp.BasicIPInfo;
-					Arg_LocalIPs_len = strlen_visible(Arg_LocalIPs);
+					Arg_LocalIPs_len = strlen_visible_width(Arg_LocalIPs);
 					Arg_LocalIPsAdditional = temp.AdditionalIPInfo;
-					Arg_LocalIPsAdditional_len = strlen_visible(Arg_LocalIPsAdditional);
+					Arg_LocalIPsAdditional_len = strlen_visible_width(Arg_LocalIPsAdditional);
 					Arg_LocalIPsRoutes = temp.RouteInfo;
-					Arg_LocalIPsRoutes_len = strlen_visible(Arg_LocalIPsRoutes);
+					Arg_LocalIPsRoutes_len = strlen_visible_width(Arg_LocalIPsRoutes);
 				}
-			} else if (ipMode == IP_MODE_LEGACY && !CONFIG_PROMPT_NETWORK) {
-				//if IP is disabled in config but legagy IP has been provided, remove the info
-				if (Arg_LocalIPs != NULL) free(Arg_LocalIPs);
-				Arg_LocalIPs = (char*)malloc(sizeof(char) * 1);
-				if (Arg_LocalIPs == NULL) ABORT_NO_MEMORY;
-				Arg_LocalIPs[0] = 0x00;
-				Arg_LocalIPs_len = 0;
 			}
 #ifdef PROFILING
 			timespec_get(&(profiling_timestamp[PROFILE_MAIN_PROMPT_ARGS_IP]), TIME_UTC);
 #endif
 
 #ifdef DEBUG
-			printf("Arg_NewRemote: >%s< (n/a)\n", Arg_NewRemote);
-			fflush(stdout);
 			printf("User: >%s< (%i)\n", User, User_len);
 			fflush(stdout);
 			printf("Host: >%s< (%i)\n", Host, Host_len);
@@ -776,7 +869,7 @@ int main(int argc, char** argv) {
 			int numBgJobsStr_len;
 			if (numBgJobs != 0) {
 				if (asprintf(&numBgJobsStr, " %i Job%s", numBgJobs, numBgJobs != 1 ? "s" : "") == -1) ABORT_NO_MEMORY;
-				numBgJobsStr_len = strlen_visible(numBgJobsStr);
+				numBgJobsStr_len = strlen_visible_width(numBgJobsStr);
 				//transfer one byte of space over to the always there display, needed to maintain spacing in case the details do not fit.
 				numBgJobsStr_len++;
 				Arg_BackgroundJobs_len--;
@@ -954,12 +1047,12 @@ int main(int argc, char** argv) {
 				gitSegment6_gitStatus[0] = 0x00;
 			}
 
-			gitSegment1_BaseMarkerStart_len = strlen_visible(gitSegment1_BaseMarkerStart);
-			gitSegment2_parentRepoLoc_len = strlen_visible(gitSegment2_parentRepoLoc);
-			gitSegment3_BaseMarkerEnd_len = strlen_visible(gitSegment3_BaseMarkerEnd);
-			gitSegment4_remoteinfo_len = strlen_visible(gitSegment4_remoteinfo);
-			gitSegment5_commitStatus_len = strlen_visible(gitSegment5_commitStatus);
-			gitSegment6_gitStatus_len = strlen_visible(gitSegment6_gitStatus);
+			gitSegment1_BaseMarkerStart_len = strlen_visible_width(gitSegment1_BaseMarkerStart);
+			gitSegment2_parentRepoLoc_len = strlen_visible_width(gitSegment2_parentRepoLoc);
+			gitSegment3_BaseMarkerEnd_len = strlen_visible_width(gitSegment3_BaseMarkerEnd);
+			gitSegment4_remoteinfo_len = strlen_visible_width(gitSegment4_remoteinfo);
+			gitSegment5_commitStatus_len = strlen_visible_width(gitSegment5_commitStatus);
+			gitSegment6_gitStatus_len = strlen_visible_width(gitSegment6_gitStatus);
 
 			int RemainingPromptWidth = Arg_TotalPromptWidth - ((CONFIG_PROMPT_USER ? User_len : 0) +
 															   ((CONFIG_PROMPT_USER && CONFIG_PROMPT_HOST) ? 1 : 0) +
@@ -1171,6 +1264,7 @@ int main(int argc, char** argv) {
 			free(Arg_SSHInfo);
 			free(Arg_PowerState);
 			free(Arg_TerminalDevice);
+			free(Arg_ProxyInfo);
 			free(Time);
 			Time = NULL;
 			free(TimeZone);
@@ -1182,14 +1276,15 @@ int main(int argc, char** argv) {
 		}
 	} else if (IsLowPrompt) {
 		//once again a single unicode char and escape sequence -> mark as escape sequence for ZSH with %{...%} and add %G to signify glitch (the unicode char)
-		printf("%%{%%G%s %%}", CONFIG_LOWPROMPT_START_CHAR);
+		//DO NOTE: I had invisible status chars in front (effectively printf("...\r")) that weren't needed anymore, but zsh still printed and counted them, I removed them, but if it breaks again, check that
+		printf("%%1{%s%%} ", CONFIG_LOWPROMPT_START_CHAR);
 		if (CONFIG_LOWPROMPT_INDICATE_VENV) {
 			const char* venvPrompt = secure_getenv("VIRTUAL_ENV_PROMPT");
 			if (venvPrompt != NULL) {
-				printf("%%{\e[35m%%}%s", venvPrompt);
+				printf("%%{%s%%}%s", CONFIG_LOWPROMPT_VENV_FORMAT, venvPrompt);
 			}
 		}
-		printf("%%{\e[36m\e[1m%%}");
+		printf("%%{\e[0m%s%%}", CONFIG_LOWPROMPT_PATH_FORMAT);
 		if (CONFIG_LOWPROMPT_PATH_LIMIT) {
 			int chars = 0; //With max length preset -1 (half available space) a terminal would need to be less than 512 chars wide. on a very large and wide screen 512 chars is within what I consider realistically possible -> I need more bits -> uint16
 			switch (CONFIG_LOWPROMPT_PATH_MAXLEN) {
@@ -1227,7 +1322,7 @@ int main(int argc, char** argv) {
 			printf("%s", path);
 		}
 		//fprintf(stderr, "(%i %i)%s | %s\n", chars, segments, temp, path);
-		printf("%%{%s %%}", (PromptRetCode == 0 ? "\e[32m" : "\e[31m"));
+		printf("%%{\e[0m%s%%} ", (PromptRetCode == 0 ? CONFIG_LOWPROMPT_RETCODE_OK_FORMAT : CONFIG_LOWPROMPT_RETCODE_ERROR_FORMAT));
 		if (CONFIG_LOWPROMPT_RETCODE || CONFIG_LOWPROMPT_TIMER) {
 			printf("[");
 			if (CONFIG_LOWPROMPT_TIMER) {
@@ -1353,7 +1448,7 @@ int main(int argc, char** argv) {
 			printf("]");
 		}
 		//escape sequence and a singe unicode char -> treat as single char
-		printf("%%{%%G%s%%}%%{\e[0m  %%}", CONFIG_LOWPROMPT_END_CHAR);
+		printf("%%1{%s%%}%%{\e[0m%%}  ", CONFIG_LOWPROMPT_END_CHAR);
 	} else {
 		printf("unknown command %s\n", argv[1]);
 		return -1;

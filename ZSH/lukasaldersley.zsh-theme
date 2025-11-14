@@ -71,83 +71,9 @@ function GetBackgroundTaskInfo (){
 	fi
 }
 
-#adapted from various answers from https://stackoverflow.com/questions/44544385/how-to-find-primary-ip-address-on-my-linux-machine (the double grep)
-#and https://unix.stackexchange.com/questions/14961/how-to-find-out-which-interface-am-i-using-for-connecting-to-the-internet (the bit about ip route ls |grep defult (the sed is my own work))
-#another way would be to cause a dns lookup like so and grep that ip route get 8.8.8.8
-function GetLocalIP (){
-	#since WSL's networking is at best (WSL1) a direct representation of Windows's config or at worst (WSL2)a VM with nonstandard networking I'm just not going to bother with advanced concepts like metrics etc
-	#on bare-metal linux or at least on a non-wsl platform, IP resolution is to be done by shelltoolsmain.c which is also responsible for gathering and parsing everything itself in that case Linkspeed and metric are also used
-	IpAddrList=""
-	for i in $(ip route ls | grep default | sed 's|^.*dev \([a-zA-Z0-9]\+\).*$|\1|') # get the devices forany 'default routes'
-	do
-		#lookup the IP for those devices
-		#the full command for 'ip a s dev <device>' is 'ip addr show dev <device>'
-		isupstate="$(ip a s dev "$i" | tr '\n' ' ' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')"
-		if [ "$isupstate" ]; then
-			IpAddrList="${IpAddrList}$i:$isupstate "
-		fi
-	done
-
-	if [ ! "$IpAddrList" ]; then
-		IpAddrList="NC "
-	fi
-	echo "$IpAddrList"
-}
-
-GetProxyInfo(){
-	local PROXY_STATE_RES
-	if [ -r /etc/apt/apt.conf.d/proxy ]; then
-		local apt_proxy_state_http
-		local apt_proxy_state_https
-		local valthing
-		valthing=$(tr -d '\n' < /etc/apt/apt.conf.d/proxy)
-		apt_proxy_state_http=$(echo "$valthing"  | grep -G 'Acquire.*{.*HTTP::proxy.*;}')
-		apt_proxy_state_https=$(echo "$valthing" | grep -G 'Acquire.*{.*HTTPS::proxy.*;}')
-		if [ "$apt_proxy_state_http" ]; then
-			if [ "$apt_proxy_state_https" ]; then
-				PROXY_STATE_RES="$PROXY_STATE_RES%F{002}A%f" #both %green
-			else
-				PROXY_STATE_RES="$PROXY_STATE_RES%F{001}A%f" #http but not https %red
-			fi
-		else
-			if [ "$apt_proxy_state_https" ]; then
-				PROXY_STATE_RES="$PROXY_STATE_RES%F{202}A%f" #https but not http %orange
-			fi
-		fi
-	fi
-	if [ "$http_proxy" ]; then
-		if [ "$https_proxy" ]; then
-			PROXY_STATE_RES="$PROXY_STATE_RES%F{002}H%f" #both
-		else
-			PROXY_STATE_RES="$PROXY_STATE_RES%F{001}H%f" #http but not https
-		fi
-	else
-		if [ "$https_proxy" ]; then
-			PROXY_STATE_RES="$PROXY_STATE_RES%F{202}H%f" #https but not http
-		fi
-	fi
-	if [ "$no_proxy" ]; then
-		PROXY_STATE_RES="$PROXY_STATE_RES%F{002}N%f"
-	fi
-	if [ "$ftp_proxy" ]; then
-		PROXY_STATE_RES="$PROXY_STATE_RES%F{002}F%f"
-	fi
-
-	if [ "$PROXY_STATE_RES" ]; then
-		echo "[$PROXY_STATE_RES] "
-	else
-		echo ""
-	fi
-}
-
 #the print -P wrappers are to replace ZSH escape sequences with what they actually mean such as replacing %y with the terminal device and also to transform the sequence \a from effectively \\a (0x5c 0x61) into the real \a (0x07)
 function MainPrompt(){
-	if [ "${WSL_VERSION:-0}" -ne 0 ]; then
-		#WSL_VERSION is set and non-zero -> on WSL
-		"$ST_CFG/shelltoolsmain.elf" --prompt -p"$(print -P "$(GetProxyInfo)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" -i"$(GetLocalIP)" "$(pwd)"
-	else
-		"$ST_CFG/shelltoolsmain.elf" --prompt -p"$(print -P "$(GetProxyInfo)\a")" -j"$(print -P "$(GetBackgroundTaskInfo)\a")" "$(pwd)"
-	fi
+	"$ST_CFG/shelltoolsmain.elf" --prompt -j"$(print -P "$(GetBackgroundTaskInfo)\a")" "$(pwd)"
 }
 
 add-zsh-hook precmd MainPrompt

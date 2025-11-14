@@ -10,7 +10,7 @@ exit
 #include <errno.h> // for errno
 #include <regex.h> // for regcomp, regerror, regexec, regfree, REG_EXTENDED, REG_NEWLINE, regex_t, regmatch_t
 #include <stdio.h> // for fprintf, NULL, stderr, printf, asprintf, fclose, fopen, fflush, fgets, FILE, rewind, stdout
-#include <stdlib.h> // for free, malloc, atoi, getenv, exit, strtol
+#include <stdlib.h> // for free, malloc, atoi, secure_getenv, exit, strtol
 #include <string.h> // for strerror, strlen, strncpy, strcat, strcpy
 
 char* NAMES[MaxLocations];
@@ -26,11 +26,17 @@ uint8_t numGitExclusions;
 
 bool CONFIG_GIT_AUTO_RESTORE_EXCLUSION = true;
 
+#define MAX_FMT_LEN 32
+
 bool CONFIG_LOWPROMPT_INDICATE_VENV = true;
+char CONFIG_LOWPROMPT_VENV_FORMAT[MAX_FMT_LEN];
 bool CONFIG_LOWPROMPT_PATH_LIMIT = true;
 int CONFIG_LOWPROMPT_PATH_MAXLEN = -3;
+char CONFIG_LOWPROMPT_PATH_FORMAT[MAX_FMT_LEN];
 bool CONFIG_LOWPROMPT_RETCODE = true;
 bool CONFIG_LOWPROMPT_RETCODE_DECODE = true;
+char CONFIG_LOWPROMPT_RETCODE_OK_FORMAT[MAX_FMT_LEN];
+char CONFIG_LOWPROMPT_RETCODE_ERROR_FORMAT[MAX_FMT_LEN];
 bool CONFIG_LOWPROMPT_TIMER = true;
 char CONFIG_LOWPROMPT_START_CHAR[5];
 char CONFIG_LOWPROMPT_END_CHAR[5];
@@ -113,6 +119,58 @@ bool CONFIG_LSGIT_THOROUGH_GITSTATUS = true;
 bool DIPFALSCHEISSER_WARNINGS = false;
 bool I_HAVE_ANCIENT_GIT = false;
 
+static bool ParseCfgBool(const char* inputbuffer, const char* pattern, bool* resultSetting) {
+	if (StartsWith(inputbuffer, pattern)) {
+		size_t len = strlen(pattern);
+		*resultSetting = Compare(inputbuffer + len, "true");
+#ifdef DEBUG
+		printf("CONFIG:%s : %s -> %i\n", inputbuffer, inputbuffer + len, *resultSetting);
+#endif
+		return true;
+	}
+	return false;
+}
+
+static bool ParseCfgChar(const char* inputbuffer, const char* pattern, char* resultSetting) {
+	if (StartsWith(inputbuffer, pattern)) {
+		size_t len = strlen(pattern);
+		ParseCharOrCodePoint(inputbuffer + len, resultSetting);
+#ifdef DEBUG
+		printf("CONFIG:%s : %s -> '%s'\n", inputbuffer, inputbuffer + len, resultSetting);
+#endif
+		return true;
+	}
+	return false;
+}
+
+static bool ParseCfgInt_(const char* inputbuffer, const char* pattern, int* resultSetting) {
+	if (StartsWith(inputbuffer, pattern)) {
+		size_t len = strlen(pattern);
+		*resultSetting = atoi(inputbuffer + len);
+#ifdef DEBUG
+		printf("CONFIG:%s : %s -> %i\n", inputbuffer, inputbuffer + len, *resultSetting);
+#endif
+		return true;
+	}
+	return false;
+}
+
+/**
+ * ANSI Escape Code parsing
+ */
+static bool ParseCfgANSI(char* inputbuffer, const char* pattern, char* resultSetting) {
+	if (StartsWith(inputbuffer, pattern)) {
+		size_t len = strlen(pattern);
+		TerminateStrOn(inputbuffer + len + 1, "\"");
+		CopyStringNumCharConfig(resultSetting, inputbuffer + len + 1, MAX_FMT_LEN - 1, true);
+#ifdef DEBUG
+		printf("CONFIG:%s : %s -> %sDEMO Formatting\e[0m\n", inputbuffer, inputbuffer + len + 1, resultSetting);
+#endif
+		return true;
+	}
+	return false;
+}
+
 void DoSetup() {
 	//default filler is '-' (U+002D)
 	CONFIG_PROMPT_FILLER_CHAR[0] = '-';
@@ -127,6 +185,12 @@ void DoSetup() {
 	CONFIG_LOWPROMPT_END_CHAR[1] = 0x9E;
 	CONFIG_LOWPROMPT_END_CHAR[2] = 0x9C;
 	CONFIG_LOWPROMPT_END_CHAR[3] = 0x00;
+
+	CopyStringNumChar(CONFIG_LOWPROMPT_VENV_FORMAT, "\e[35m", MAX_FMT_LEN - 1);
+	CopyStringNumChar(CONFIG_LOWPROMPT_PATH_FORMAT, "\e[36m\e[1m", MAX_FMT_LEN - 1);
+	CopyStringNumChar(CONFIG_LOWPROMPT_RETCODE_OK_FORMAT, "\e[32m\e[1m", MAX_FMT_LEN - 1);
+	CopyStringNumChar(CONFIG_LOWPROMPT_RETCODE_ERROR_FORMAT, "\e[31m\e[1m", MAX_FMT_LEN - 1);
+
 	for (int i = 0; i < MaxLocations; i++) {
 		LOCS[i] = NULL;
 		NAMES[i] = NULL;
@@ -143,7 +207,7 @@ void DoSetup() {
 
 	char* configFilePath;
 	const char* fileName = "/config.cfg";
-	const char* pointerIntoEnv = getenv("ST_CFG");
+	const char* pointerIntoEnv = secure_getenv("ST_CFG");
 	configFilePath = (char*)malloc(strlen(pointerIntoEnv) + strlen(fileName) + 1); // to account for NULL terminator
 	if (configFilePath == NULL) ABORT_NO_MEMORY;
 	strcpy(configFilePath, pointerIntoEnv);
@@ -162,7 +226,7 @@ void DoSetup() {
 			fprintf(fp, "###\n###THIS FILE IS *NOT* AUTOMATICALLY UPDATED AFTER INITIAL CREATION\n###CHECK THE TEMPLATE FILE AT $ST_SRC/DEFAULTCONFIG.cfg FOR POSSIBLE NEW OPTIONS\n###\n");
 			//Create (or rather copy) default file
 			const char* defaultConfigFileRelativePath = "/DEFAULTCONFIG.cfg";
-			const char* defaultConfigFileDir = getenv("ST_SRC");
+			const char* defaultConfigFileDir = secure_getenv("ST_SRC");
 			char* defaultConfigFileFullPath;
 			if (asprintf(&defaultConfigFileFullPath, "%s%s", defaultConfigFileDir, defaultConfigFileRelativePath) == -1) ABORT_NO_MEMORY;
 			FILE* dfp = fopen(defaultConfigFileFullPath, "r");
@@ -214,52 +278,49 @@ void DoSetup() {
 	bool UnknownConfig = false;
 	//at this point I know for certain a config file does exist
 	while (fgets(buf, buf_max_len - 1, fp) != NULL) {
-		if (buf[0] == '#') {
+		if (buf[0] == '#' || buf[0] == 0x00) {
 			continue;
 		} else {
-			if (TerminateStrOn(buf, DEFAULT_TERMINATORS) == 0) {
+			if (TerminateThenTrimStrOn(buf, DEFAULT_TERMINATORS "#", " \t") == 0) {
 				continue;
 			}
 
-			ConfigRegexReturnCode = regexec(&ConfigRegex, buf, ConfigRegexGroupCount, ConfigRegexGroups, 0);
-			//man regex (3): regexec() returns zero for a successful match or REG_NOMATCH for failure.
-			if (ConfigRegexReturnCode == 0) {
-				if (numLOCS >= (MaxLocations - 1)) {
-					fprintf(stderr, "WARNING: YOU HAVE CONFIGURED MORE THAN %1$i ORIGIN_ALIAS ENTRIES. ONLY THE FIRST %1$i WILL BE USED\n", MaxLocations);
+			{ //repo origin alias handling
+				ConfigRegexReturnCode = regexec(&ConfigRegex, buf, ConfigRegexGroupCount, ConfigRegexGroups, 0);
+				//man regex (3): regexec() returns zero for a successful match or REG_NOMATCH for failure.
+				if (ConfigRegexReturnCode == 0) {
+					if (numLOCS >= (MaxLocations - 1)) {
+						fprintf(stderr, "WARNING: YOU HAVE CONFIGURED MORE THAN %1$i ORIGIN_ALIAS ENTRIES. ONLY THE FIRST %1$i WILL BE USED\n", MaxLocations);
+						continue;
+					}
+					int len = ConfigRegexGroups[ConfigRegexURL].rm_eo - ConfigRegexGroups[ConfigRegexURL].rm_so;
+					if (len > 0) {
+						//run fiximplicitProtocol and warn if there's differences. (do it after everything in config has been read to facilitate disabling via config)
+						LOCS[numLOCS] = malloc(sizeof(char) * (len + 1));
+						if (LOCS[numLOCS] == NULL) ABORT_NO_MEMORY;
+						strncpy(LOCS[numLOCS], buf + ConfigRegexGroups[ConfigRegexURL].rm_so, len);
+						LOCS[numLOCS][len] = 0x00;
+					}
+					len = ConfigRegexGroups[ConfigRegexNAME].rm_eo - ConfigRegexGroups[ConfigRegexNAME].rm_so;
+					if (len > 0) {
+						NAMES[numLOCS] = malloc(sizeof(char) * (len + 1));
+						if (NAMES[numLOCS] == NULL) ABORT_NO_MEMORY;
+						strncpy(NAMES[numLOCS], buf + ConfigRegexGroups[ConfigRegexNAME].rm_so, len);
+						NAMES[numLOCS][len] = 0x00;
+					}
+					len = ConfigRegexGroups[ConfigRegexGROUP].rm_eo - ConfigRegexGroups[ConfigRegexGROUP].rm_so;
+					if (len > 0) {
+						GROUPS[numLOCS] = strtol(buf + ConfigRegexGroups[ConfigRegexGROUP].rm_so, NULL, 10);
+					}
+#ifdef DEBUG
+					printf("CONFIG:origin>%s|%s|%i<\n", NAMES[numLOCS], LOCS[numLOCS], GROUPS[numLOCS]);
+#endif
+					numLOCS++;
 					continue;
 				}
-				int len = ConfigRegexGroups[ConfigRegexURL].rm_eo - ConfigRegexGroups[ConfigRegexURL].rm_so;
-				if (len > 0) {
-					//run fiximplicitProtocol and warn if there's differences. (do it after everything in config has been read to facilitate disabling via config)
-					LOCS[numLOCS] = malloc(sizeof(char) * (len + 1));
-					if (LOCS[numLOCS] == NULL) ABORT_NO_MEMORY;
-					strncpy(LOCS[numLOCS], buf + ConfigRegexGroups[ConfigRegexURL].rm_so, len);
-					LOCS[numLOCS][len] = 0x00;
-				}
-				len = ConfigRegexGroups[ConfigRegexNAME].rm_eo - ConfigRegexGroups[ConfigRegexNAME].rm_so;
-				if (len > 0) {
-					NAMES[numLOCS] = malloc(sizeof(char) * (len + 1));
-					if (NAMES[numLOCS] == NULL) ABORT_NO_MEMORY;
-					strncpy(NAMES[numLOCS], buf + ConfigRegexGroups[ConfigRegexNAME].rm_so, len);
-					NAMES[numLOCS][len] = 0x00;
-				}
-				len = ConfigRegexGroups[ConfigRegexGROUP].rm_eo - ConfigRegexGroups[ConfigRegexGROUP].rm_so;
-				if (len > 0) {
-					GROUPS[numLOCS] = strtol(buf + ConfigRegexGroups[ConfigRegexGROUP].rm_so, NULL, 10);
-				}
-#ifdef DEBUG
-				printf("origin>%s|%s|%i<\n", NAMES[numLOCS], LOCS[numLOCS], GROUPS[numLOCS]);
-#endif
-				numLOCS++;
-
 			}
 
-			else if (StartsWith(buf, "DISABLE_ORIGIN_ALIAS_ERROR_CHECKING:	")) {
-				CONFIG_DISABLE_LOCS_CHECKING = Compare("true", buf + 37);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_DISABLE_LOCS_CHECKING);
-#endif
-			} else if (StartsWith(buf, "GITHUB_HOST:	")) {
+			if (StartsWith(buf, "GITHUB_HOST:	")) {
 				if (numGitHubs >= (MaxLocations - 1)) {
 					fprintf(stderr, "WARNING: YOU HAVE CONFIGURED MORE THAN %1$i GITHUB_HOST ENTRIES. ONLY THE FIRST %1$i WILL BE USED\n", MaxLocations);
 					continue;
@@ -270,12 +331,15 @@ void DoSetup() {
 					continue;
 				} else {
 #ifdef DEBUG
-					printf("host>%s<\n", GitHubs[numGitHubs]);
+					printf("CONFIG:host>%s<\n", GitHubs[numGitHubs]);
 #endif
 					numGitHubs++;
+					continue;
 				}
 				//the +13 is the offset to just after "GITHUB_HOST:	"
-			} else if (StartsWith(buf, "GIT_EXCLUSION:	")) {
+			}
+
+			if (StartsWith(buf, "GIT_EXCLUSION:	")) {
 				if (numGitExclusions >= (MaxLocations - 1)) {
 					fprintf(stderr, "WARNING: YOU HAVE CONFIGURED MORE THAN %1$i GIT_EXCLUSION ENTRIES. ONLY THE FIRST %1$i WILL BE USED\n", MaxLocations);
 					continue;
@@ -289,321 +353,89 @@ void DoSetup() {
 					printf("git-exclusions>%s<\n", GIT_EXCLUSIONS[numGitExclusions]);
 #endif
 					numGitExclusions++;
+					continue;
 				}
-			} else if (StartsWith(buf, "SHELLTOOLS.GIT.AUTO_RESTORE_EXCLUSION:	")) {
-				CONFIG_GIT_AUTO_RESTORE_EXCLUSION = Compare("true", buf + 39);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_GIT_AUTO_RESTORE_EXCLUSION);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.MAXBRANCHES:	")) {
-				CONFIG_LSGIT_QUICK_BRANCHLIMIT = atoi(buf + 36);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_LSGIT_QUICK_BRANCHLIMIT);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.MAXBRANCHES:	")) {
-				CONFIG_LSGIT_THOROUGH_BRANCHLIMIT = atoi(buf + 39);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_LSGIT_THOROUGH_BRANCHLIMIT);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.WARN_BRANCH_LIMIT:	")) {
-				CONFIG_LSGIT_WARN_BRANCHLIMIT = Compare("true", buf + 36);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 36, CONFIG_LSGIT_WARN_BRANCHLIMIT);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.VENV.ENABLE:	")) {
-				CONFIG_LOWPROMPT_INDICATE_VENV = Compare("true", buf + 34);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_LOWPROMPT_INDICATE_VENV);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.PATH.LIMIT_DISPLAY_LENGTH.ENABLE:	")) {
-				CONFIG_LOWPROMPT_PATH_LIMIT = Compare("true", buf + 55);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 55, CONFIG_LOWPROMPT_PATH_LIMIT);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.PATH.LIMIT_DISPLAY_LENGTH.TARGET:	")) {
-				CONFIG_LOWPROMPT_PATH_MAXLEN = atoi(buf + 55);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 55, CONFIG_LOWPROMPT_PATH_MAXLEN);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.RETURNCODE.ENABLE:	")) {
-				CONFIG_LOWPROMPT_RETCODE = Compare("true", buf + 40);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LOWPROMPT_RETCODE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.RETURNCODE.DECODE.ENABLE:	")) {
-				CONFIG_LOWPROMPT_RETCODE_DECODE = Compare("true", buf + 47);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 47, CONFIG_LOWPROMPT_RETCODE_DECODE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.COMMAND_TIMER.ENABLE:	")) {
-				CONFIG_LOWPROMPT_TIMER = Compare("true", buf + 43);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_LOWPROMPT_TIMER);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.START_CHAR:	")) {
-				ParseCharOrCodePoint(buf + 33, CONFIG_LOWPROMPT_START_CHAR);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 33, CONFIG_LOWPROMPT_START_CHAR);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LOWPROMPT.END_CHAR:	")) {
-				ParseCharOrCodePoint(buf + 31, CONFIG_LOWPROMPT_END_CHAR);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 31, CONFIG_LOWPROMPT_END_CHAR);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.SSHINFO.ENABLE:	")) {
-				CONFIG_PROMPT_SSH = Compare("true", buf + 34);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_PROMPT_SSH);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.TERMINALDEVICE.ENABLE:	")) {
-				CONFIG_PROMPT_TERMINAL_DEVICE = Compare("true", buf + 41);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_PROMPT_TERMINAL_DEVICE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.TIME.ENABLE:	")) {
-				CONFIG_PROMPT_TIME = Compare("true", buf + 31);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 31, CONFIG_PROMPT_TIME);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.TIMEZONE.ENABLE:	")) {
-				CONFIG_PROMPT_TIMEZONE = Compare("true", buf + 35);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 35, CONFIG_PROMPT_TIMEZONE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.DATE.ENABLE:	")) {
-				CONFIG_PROMPT_DATE = Compare("true", buf + 31);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 31, CONFIG_PROMPT_DATE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.CALENDARWEEK.ENABLE:	")) {
-				CONFIG_PROMPT_CALENDARWEEK = Compare("true", buf + 39);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_PROMPT_CALENDARWEEK);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.PROXYSTATUS.ENABLE:	")) {
-				CONFIG_PROMPT_PROXY = Compare("true", buf + 38);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_PROMPT_PROXY);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.NETWORK.ENABLE:	")) {
-				CONFIG_PROMPT_NETWORK = Compare("true", buf + 34);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 34, CONFIG_PROMPT_NETWORK);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.BACKGROUNDJOBS.ENABLE:	")) {
-				CONFIG_PROMPT_JOBS = Compare("true", buf + 41);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_PROMPT_JOBS);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.BACKGROUNDJOBS.DETAILS.ENABLE:	")) {
-				CONFIG_PROMPT_JOB_DETAILS = Compare("true", buf + 49);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 49, CONFIG_PROMPT_JOB_DETAILS);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.POWER.ENABLE:	")) {
-				CONFIG_PROMPT_POWER = Compare("true", buf + 32);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 32, CONFIG_PROMPT_POWER);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.ENABLE:	")) {
-				CONFIG_PROMPT_OVERALL_ENABLE = Compare("true", buf + 26);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 26, CONFIG_PROMPT_OVERALL_ENABLE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.ENABLE:	")) {
-				CONFIG_PROMPT_GIT = Compare("true", buf + 30);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 30, CONFIG_PROMPT_GIT);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.NETWORK.INTERFACES.DEFAULT.ENABLE:	")) {
-				CONFIG_PROMPT_NET_IFACE = Compare("true", buf + 53);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 53, CONFIG_PROMPT_NET_IFACE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.NETWORK.INTERFACES.NONDEFAULT.ENABLE:	")) {
-				CONFIG_PROMPT_NET_ADDITIONAL = Compare("true", buf + 56);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 56, CONFIG_PROMPT_NET_ADDITIONAL);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.NETWORK.ROUTINGINFO.ENABLE:	")) {
-				CONFIG_PROMPT_NET_ROUTE = Compare("true", buf + 46);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_PROMPT_NET_ROUTE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.NETWORK.LINKSPEED.ENABLE:	")) {
-				CONFIG_PROMPT_NET_LINKSPEED = Compare("true", buf + 44);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 44, CONFIG_PROMPT_NET_LINKSPEED);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.REPOTYPE.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_REPOTYPE = Compare("true", buf + 39);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_PROMPT_GIT_REPOTYPE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.REPOTYPE.PARENT_REPO.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_REPOTYPE_PARENT = Compare("true", buf + 51);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 51, CONFIG_PROMPT_GIT_REPOTYPE_PARENT);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.COMMIT_OVERVIEW.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_COMMITS = Compare("true", buf + 46);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_PROMPT_GIT_COMMITS);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.REPOTYPE.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_REPOTYPE = Compare("true", buf + 40);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LSGIT_QUICK_REPOTYPE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.REPOTYPE.PARENT_REPO.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_REPOTYPE_PARENT = Compare("true", buf + 52);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 52, CONFIG_LSGIT_QUICK_REPOTYPE_PARENT);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.REPONAME.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_REPONAME = Compare("true", buf + 40);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 40, CONFIG_LSGIT_QUICK_REPONAME);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.BRANCH.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_BRANCHNAME = Compare("true", buf + 38);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_LSGIT_QUICK_BRANCHNAME);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.BRANCH.OVERVIEW.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_BRANCHINFO = Compare("true", buf + 47);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 47, CONFIG_LSGIT_QUICK_BRANCHINFO);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.REMOTE.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_REMOTE = Compare("true", buf + 38);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 38, CONFIG_LSGIT_QUICK_REMOTE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.COMMIT_OVERVIEW.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_COMMITS = Compare("true", buf + 47);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 47, CONFIG_LSGIT_QUICK_COMMITS);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.LOCALCHANGES.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_GITSTATUS = Compare("true", buf + 44);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 44, CONFIG_LSGIT_QUICK_GITSTATUS);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.REPOTYPE.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_REPOTYPE = Compare("true", buf + 43);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_LSGIT_THOROUGH_REPOTYPE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.REPOTYPE.PARENT_REPO.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT = Compare("true", buf + 55);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 55, CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.REPONAME.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_REPONAME = Compare("true", buf + 43);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_LSGIT_THOROUGH_REPONAME);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.BRANCH.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_BRANCHNAME = Compare("true", buf + 41);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_LSGIT_THOROUGH_BRANCHNAME);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.BRANCH.OVERVIEW.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_BRANCHINFO = Compare("true", buf + 50);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 50, CONFIG_LSGIT_THOROUGH_BRANCHINFO);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.REMOTE.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_REMOTE = Compare("true", buf + 41);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_LSGIT_THOROUGH_REMOTE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.COMMIT_OVERVIEW.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_COMMITS = Compare("true", buf + 50);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 50, CONFIG_LSGIT_THOROUGH_COMMITS);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.LOCALCHANGES.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_GITSTATUS = Compare("true", buf + 47);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 47, CONFIG_LSGIT_THOROUGH_GITSTATUS);
-#endif
 			}
 
-			else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.REMOTE.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_REMOTE = Compare("true", buf + 37);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_PROMPT_GIT_REMOTE);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.BRANCH.OVERVIEW.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_BRANCHINFO = Compare("true", buf + 46);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 46, CONFIG_PROMPT_GIT_BRANCHINFO);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.BRANCHSTATUS.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_BRANCHSTATUS = Compare("true", buf + 43);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_PROMPT_GIT_BRANCHSTATUS);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.QUICK.BRANCHSTATUS.ENABLE:	")) {
-				CONFIG_LSGIT_QUICK_BRANCHSTATUS = Compare("true", buf + 44);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 44, CONFIG_LSGIT_QUICK_BRANCHSTATUS);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.LSGIT.THOROUGH.BRANCHSTATUS.ENABLE:	")) {
-				CONFIG_LSGIT_THOROUGH_BRANCHSTATUS = Compare("true", buf + 47);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 47, CONFIG_LSGIT_THOROUGH_BRANCHSTATUS);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.BRANCH.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_BRANCHNAME = Compare("true", buf + 37);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 37, CONFIG_PROMPT_GIT_BRANCHNAME);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.REPONAME.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_REPONAME = Compare("true", buf + 39);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 39, CONFIG_PROMPT_GIT_REPONAME);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.LOCALCHANGES.ENABLE:	")) {
-				CONFIG_PROMPT_GIT_GITSTATUS = Compare("true", buf + 43);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 43, CONFIG_PROMPT_GIT_GITSTATUS);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.MAXBRANCHES:	")) {
-				CONFIG_PROMPT_GIT_BRANCHLIMIT = atoi(buf + 35);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 35, CONFIG_PROMPT_GIT_BRANCHLIMIT);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.GIT.WARN_BRANCH_LIMIT:	")) {
-				CONFIG_PROMPT_GIT_WARN_BRANCHLIMIT = Compare("true", buf + 41);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 41, CONFIG_PROMPT_GIT_WARN_BRANCHLIMIT);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.USER.ENABLE:	")) {
-				CONFIG_PROMPT_USER = Compare("true", buf + 31);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 31, CONFIG_PROMPT_USER);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.HOST.ENABLE:	")) {
-				CONFIG_PROMPT_HOST = Compare("true", buf + 31);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> %i\n", buf, buf + 31, CONFIG_PROMPT_HOST);
-#endif
-			} else if (StartsWith(buf, "SHELLTOOLS.PROMPT.FILLER_CHAR:	")) {
-				//CONFIG_PROMPT_FILLER_CHAR = buf[31];
-				ParseCharOrCodePoint(buf + 31, CONFIG_PROMPT_FILLER_CHAR);
-#ifdef DEBUG
-				printf("CONFIG:%s : %s -> '%s'\n", buf, buf + 31, CONFIG_PROMPT_FILLER_CHAR);
-#endif
-			} else if (Compare(buf, "TEMP_OVERRIDE_OLD_GIT_VERSION")) {
+			if (Compare(buf, "TEMP_OVERRIDE_OLD_GIT_VERSION")) {
 				I_HAVE_ANCIENT_GIT = true;
-			} else {
-				fprintf(stderr, "Warning: unknown entry in config file: >%s<\n", buf);
-				UnknownConfig = true;
+				continue;
 			}
+
+			if (ParseCfgBool(buf, "DISABLE_ORIGIN_ALIAS_ERROR_CHECKING:	", &CONFIG_DISABLE_LOCS_CHECKING)) continue;
+
+			if (ParseCfgBool(buf, "SHELLTOOLS.GIT.AUTO_RESTORE_EXCLUSION:	", &CONFIG_GIT_AUTO_RESTORE_EXCLUSION)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LOWPROMPT.VENV.ENABLE:	", &CONFIG_LOWPROMPT_INDICATE_VENV)) continue;
+			if (ParseCfgANSI(buf, "SHELLTOOLS.LOWPROMPT.VENV.FORMATTING:	", &(CONFIG_LOWPROMPT_VENV_FORMAT[0]))) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LOWPROMPT.PATH.LIMIT_DISPLAY_LENGTH.ENABLE:	", &CONFIG_LOWPROMPT_PATH_LIMIT)) continue;
+			if (ParseCfgInt_(buf, "SHELLTOOLS.LOWPROMPT.PATH.LIMIT_DISPLAY_LENGTH.TARGET:	", &CONFIG_LOWPROMPT_PATH_MAXLEN)) continue;
+			if (ParseCfgANSI(buf, "SHELLTOOLS.LOWPROMPT.PATH.FORMATTING:	", &(CONFIG_LOWPROMPT_PATH_FORMAT[0]))) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LOWPROMPT.RETURNCODE.ENABLE:	", &CONFIG_LOWPROMPT_RETCODE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LOWPROMPT.RETURNCODE.DECODE.ENABLE:	", &CONFIG_LOWPROMPT_RETCODE_DECODE)) continue;
+			if (ParseCfgANSI(buf, "SHELLTOOLS.LOWPROMPT.RETURNCODE.OK.FORMATTING:	", &(CONFIG_LOWPROMPT_RETCODE_OK_FORMAT[0]))) continue;
+			if (ParseCfgANSI(buf, "SHELLTOOLS.LOWPROMPT.RETURNCODE.ERROR.FORMATTING:	", &(CONFIG_LOWPROMPT_RETCODE_ERROR_FORMAT[0]))) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LOWPROMPT.COMMAND_TIMER.ENABLE:	", &CONFIG_LOWPROMPT_TIMER)) continue;
+			if (ParseCfgChar(buf, "SHELLTOOLS.LOWPROMPT.START_CHAR:	", CONFIG_LOWPROMPT_START_CHAR)) continue;
+			if (ParseCfgChar(buf, "SHELLTOOLS.LOWPROMPT.END_CHAR:	", CONFIG_LOWPROMPT_END_CHAR)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.SSHINFO.ENABLE:	", &CONFIG_PROMPT_SSH)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.TERMINALDEVICE.ENABLE:	", &CONFIG_PROMPT_TERMINAL_DEVICE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.TIME.ENABLE:	", &CONFIG_PROMPT_TIME)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.TIMEZONE.ENABLE:	", &CONFIG_PROMPT_TIMEZONE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.DATE.ENABLE:	", &CONFIG_PROMPT_DATE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.CALENDARWEEK.ENABLE:	", &CONFIG_PROMPT_CALENDARWEEK)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.PROXYSTATUS.ENABLE:	", &CONFIG_PROMPT_PROXY)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.NETWORK.ENABLE:	", &CONFIG_PROMPT_NETWORK)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.GIT.REMOTE.ENABLE:	", &CONFIG_PROMPT_GIT_REMOTE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.GIT.BRANCH.OVERVIEW.ENABLE:	", &CONFIG_PROMPT_GIT_BRANCHSTATUS)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.GIT.BRANCHSTATUS.ENABLE:	", &CONFIG_PROMPT_GIT_BRANCHSTATUS)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.GIT.BRANCH.ENABLE:	", &CONFIG_PROMPT_GIT_BRANCHNAME)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.GIT.REPONAME.ENABLE:	", &CONFIG_PROMPT_GIT_REPONAME)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.GIT.LOCALCHANGES.ENABLE:	", &CONFIG_PROMPT_GIT_GITSTATUS)) continue;
+			if (ParseCfgInt_(buf, "SHELLTOOLS.PROMPT.GIT.MAXBRANCHES:	", &CONFIG_PROMPT_GIT_BRANCHLIMIT)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.GIT.WARN_BRANCH_LIMIT:	", &CONFIG_PROMPT_GIT_WARN_BRANCHLIMIT)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.USER.ENABLE:	", &CONFIG_PROMPT_USER)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.HOST.ENABLE:	", &CONFIG_PROMPT_HOST)) continue;
+			if (ParseCfgChar(buf, "SHELLTOOLS.PROMPT.FILLER_CHAR:	", CONFIG_PROMPT_FILLER_CHAR)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.BACKGROUNDJOBS.ENABLE:	", &CONFIG_PROMPT_JOBS)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.BACKGROUNDJOBS.DETAILS.ENABLE:	", &CONFIG_PROMPT_JOB_DETAILS)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.POWER.ENABLE:	", &CONFIG_PROMPT_POWER)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.ENABLE:	", &CONFIG_PROMPT_OVERALL_ENABLE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.GIT.ENABLE:	", &CONFIG_PROMPT_GIT)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.NETWORK.INTERFACES.DEFAULT.ENABLE:	", &CONFIG_PROMPT_NET_IFACE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.NETWORK.INTERFACES.NONDEFAULT.ENABLE:	", &CONFIG_PROMPT_NET_ADDITIONAL)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.NETWORK.ROUTINGINFO.ENABLE:	", &CONFIG_PROMPT_NET_ROUTE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.NETWORK.LINKSPEED.ENABLE:	", &CONFIG_PROMPT_NET_LINKSPEED)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.GIT.REPOTYPE.ENABLE:	", &CONFIG_PROMPT_GIT_REPOTYPE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.GIT.REPOTYPE.PARENT_REPO.ENABLE:	", &CONFIG_PROMPT_GIT_REPOTYPE_PARENT)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.PROMPT.GIT.COMMIT_OVERVIEW.ENABLE:	", &CONFIG_PROMPT_GIT_COMMITS)) continue;
+
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.WARN_BRANCH_LIMIT:	", &CONFIG_LSGIT_WARN_BRANCHLIMIT)) continue;
+
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.QUICK.REPOTYPE.ENABLE:	", &CONFIG_LSGIT_QUICK_REPOTYPE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.QUICK.REPOTYPE.PARENT_REPO.ENABLE:	", &CONFIG_LSGIT_QUICK_REPOTYPE_PARENT)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.QUICK.REPONAME.ENABLE:	", &CONFIG_LSGIT_QUICK_REPONAME)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.QUICK.BRANCH.ENABLE:	", &CONFIG_LSGIT_QUICK_BRANCHNAME)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.QUICK.BRANCH.OVERVIEW.ENABLE:	", &CONFIG_LSGIT_QUICK_REMOTE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.QUICK.REMOTE.ENABLE:	", &CONFIG_LSGIT_QUICK_REMOTE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.QUICK.COMMIT_OVERVIEW.ENABLE:	", &CONFIG_LSGIT_QUICK_COMMITS)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.QUICK.LOCALCHANGES.ENABLE:	", &CONFIG_LSGIT_QUICK_GITSTATUS)) continue;
+			if (ParseCfgInt_(buf, "SHELLTOOLS.LSGIT.QUICK.MAXBRANCHES:	", &CONFIG_LSGIT_QUICK_BRANCHLIMIT)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.QUICK.BRANCHSTATUS.ENABLE:	", &CONFIG_LSGIT_QUICK_BRANCHSTATUS)) continue;
+
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.THOROUGH.REPOTYPE.ENABLE:	", &CONFIG_LSGIT_THOROUGH_REPOTYPE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.THOROUGH.REPOTYPE.PARENT_REPO.ENABLE:	", &CONFIG_LSGIT_THOROUGH_REPOTYPE_PARENT)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.THOROUGH.REPONAME.ENABLE:	", &CONFIG_LSGIT_THOROUGH_REPONAME)) continue;
+			if (ParseCfgInt_(buf, "SHELLTOOLS.LSGIT.THOROUGH.MAXBRANCHES:	", &CONFIG_LSGIT_THOROUGH_BRANCHLIMIT)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.THOROUGH.BRANCH.ENABLE:	", &CONFIG_LSGIT_THOROUGH_BRANCHNAME)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.THOROUGH.BRANCH.OVERVIEW.ENABLE:	", &CONFIG_LSGIT_THOROUGH_BRANCHINFO)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.THOROUGH.REMOTE.ENABLE:	", &CONFIG_LSGIT_THOROUGH_REMOTE)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.THOROUGH.COMMIT_OVERVIEW.ENABLE:	", &CONFIG_LSGIT_THOROUGH_COMMITS)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.THOROUGH.LOCALCHANGES.ENABLE:	", &CONFIG_LSGIT_THOROUGH_GITSTATUS)) continue;
+			if (ParseCfgBool(buf, "SHELLTOOLS.LSGIT.THOROUGH.BRANCHSTATUS.ENABLE:	", &CONFIG_LSGIT_THOROUGH_BRANCHSTATUS)) continue;
+
+			//if I reach this point I didn't hit 'continue;' in any case handled above -> print warning
+			fprintf(stderr, "Warning: unknown entry in config file: >%s<\n", buf);
+			UnknownConfig = true;
 		}
 	}
 	fclose(fp);
@@ -618,7 +450,7 @@ void DoSetup() {
 		}
 	}
 	if (UnknownConfig) {
-		fprintf(stderr, "WARNING: You have unknown entires in your config file (%s/config.cfg).\n\tPlease check the template at %s/DEFAULTCONFIG.cfg for a list of all understood options and correct your own config file\n", getenv("ST_CFG"), getenv("ST_SRC"));
+		fprintf(stderr, "WARNING: You have unknown entires in your config file (%s/config.cfg).\n\tPlease check the template at %s/DEFAULTCONFIG.cfg for a list of all understood options and correct your own config file\n", secure_getenv("ST_CFG"), secure_getenv("ST_SRC"));
 	}
 	regfree(&ConfigRegex);
 }

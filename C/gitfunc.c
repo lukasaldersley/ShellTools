@@ -3,7 +3,7 @@ echo "$0 is library file -> skip"
 exit
 */
 
-#include "commons.h" // for ABORT_NO_MEMORY, Compare, TerminateStrOn, cpyString, ExecuteProcess_alloc, COLOUR_CLEAR, DEFAULT_TERMINATORS, StartsWith, COLOUR_GREYOUT, AbbreviatePath, ContainsString, CompareStrings, NextIndexOf, ALPHA_AFTER
+#include "commons.h" // for ABORT_NO_MEMORY, Compare, TerminateStrOn, CopyStringNumChar, ExecuteProcess_alloc, COLOUR_CLEAR, DEFAULT_TERMINATORS, StartsWith, COLOUR_GREYOUT, AbbreviatePath, ContainsString, CompareStringsCaseInsensitive, NextIndexOf, ALPHA_AFTER
 #include "config.h" // for GROUPS, CONFIG_GIT_MAXBRANCHES, CONFIG_GIT_REMOTE, CONFIG_GIT_BRANCH_OVERVIEW, CONFIG_GIT_COMMIT_OVERVIEW, CONFIG_GIT_LOCALCHANGES, CONFIG_GIT_REPONAME, NAMES, CONFIG_GIT_BRANCHNAME, CONFIG_GIT_BRANCHSTATUS, LOCS, CONFIG_GI...
 #include "gitfunc.h"
 
@@ -234,7 +234,7 @@ static BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char
 			if (asprintf(&(head->branchinfo.CommitHashLocal), "%s", hash) == -1) ABORT_NO_MEMORY;
 		}
 		return head;
-	} else if (CompareStrings(head->branchinfo.BranchName, branchname) == ALPHA_AFTER) {
+	} else if (CompareStringsCaseInsensitive(head->branchinfo.BranchName, branchname) == ALPHA_AFTER) {
 		//The new Element is Alphabetically befory myself -> insert new element before myself
 		BranchListSorted* n = InitBranchListSortedElement();
 		n->next = head;
@@ -1110,16 +1110,16 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 					ri->RepositoryDisplayedOrigin = (char*)malloc(sizeof(char) * OriginLen + 1);
 					if (ri->RepositoryDisplayedOrigin == NULL) ABORT_NO_MEMORY;
 					int currlen = 0;
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PROTOCOL], OriginLen - currlen); //proto
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen); //:
+					currlen += CopyStringNumChar(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PROTOCOL], OriginLen - currlen); //proto
+					currlen += CopyStringNumChar(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen); //:
 					if (!Compare(ptrs[REPO_ORIGIN_GROUP_USER], "git") && Compare(ptrs[REPO_ORIGIN_GROUP_PROTOCOL], "ssh")) { //if name is NOT git then print it but only print if it was ssh
-						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_USER], OriginLen - currlen); //username
-						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, "@", OriginLen - currlen); //@
+						currlen += CopyStringNumChar(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_USER], OriginLen - currlen); //username
+						currlen += CopyStringNumChar(ri->RepositoryDisplayedOrigin + currlen, "@", OriginLen - currlen); //@
 					}
-					currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_Host], OriginLen - currlen); //host
+					currlen += CopyStringNumChar(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_Host], OriginLen - currlen); //host
 					if (*ptrs[3] != 0x00) { //if port is given print it
-						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen); //:
-						currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PORT], OriginLen - currlen); //username
+						currlen += CopyStringNumChar(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen); //:
+						currlen += CopyStringNumChar(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_PORT], OriginLen - currlen); //username
 					}
 					if (*ptrs[4] != 0x00) { //host is github or gitlab and I can parse a github username also add it
 						bool knownServer = false;
@@ -1129,8 +1129,8 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 							i++;
 						}
 						if (knownServer) {
-							currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen); //:
-							currlen += cpyString(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], OriginLen - currlen); //service username
+							currlen += CopyStringNumChar(ri->RepositoryDisplayedOrigin + currlen, ":", OriginLen - currlen); //:
+							currlen += CopyStringNumChar(ri->RepositoryDisplayedOrigin + currlen, ptrs[REPO_ORIGIN_GROUP_GitHubUser], OriginLen - currlen); //service username
 						}
 					}
 					*(ri->RepositoryDisplayedOrigin + (currlen < OriginLen ? currlen : OriginLen)) = 0x00; //ensure nullbyte

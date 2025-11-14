@@ -197,6 +197,7 @@ alias lsGit=lsRepo
 alias lsgit=lsrepo
 alias gitls=lsrepo
 alias lsorigin='$ST_CFG/repotree.elf --list'
+alias gco='git checkout'
 
 #legacy alias definitions for old names, or old functionality
 alias UpdateZSH=UpdateShellTools
@@ -286,15 +287,15 @@ compare(){
 
 SetUpAptProxyConfigFile(){
 	if [ "$PROXY_NOAPT" -eq 0 ]; then
-		if [ ! -w /etc/apt/apt.conf.d/proxy ]; then
+		if [ ! -w /etc/apt/apt.conf.d/proxy_shelltools ]; then
 			echo "apt proxy config file had no write permissions -> changing that"
-			if [ ! -e /etc/apt/apt.conf.d/proxy ]; then
+			if [ ! -e /etc/apt/apt.conf.d/proxy_shelltools ]; then
 				echo "apt proxy config file didn't even exist -> creating now"
-				sudo touch /etc/apt/apt.conf.d/proxy
+				sudo touch /etc/apt/apt.conf.d/proxy_shelltools
 			fi
-			sudo chmod 664 /etc/apt/apt.conf.d/proxy
-			sudo chgrp sudo /etc/apt/apt.conf.d/proxy
-			ls -lash /etc/apt/apt.conf.d/proxy
+			sudo chmod 664 /etc/apt/apt.conf.d/proxy_shelltools
+			sudo chgrp sudo /etc/apt/apt.conf.d/proxy_shelltools
+			ls -lash /etc/apt/apt.conf.d/proxy_shelltools
 		fi
 	fi
 }
@@ -325,7 +326,7 @@ enableProxy(){
 			export {http,https,ftp}_proxy="$PROXY_STRING"
 			export {HTTP,HTTPS,FTP}_PROXY="$PROXY_STRING"
 			if [ "$PROXY_NOAPT" -eq 0 ]; then
-				printf 'Acquire {\n  HTTP::proxy "%s";\n  HTTPS::proxy "%s";\n}\n' "$PROXY_STRING" "$PROXY_STRING" > /etc/apt/apt.conf.d/proxy
+				printf 'Acquire::http::proxy "%s";\nAcquire::https::proxy "%s";\nAcquire::ftp::proxy "%s";\n' "$PROXY_STRING" "$PROXY_STRING" "$PROXY_STRING" > /etc/apt/apt.conf.d/proxy_shelltools
 			fi
 			unset PROXY_STRING
 		else
@@ -349,7 +350,7 @@ enableProxy(){
 			export {HTTP,HTTPS,FTP}_PROXY="$PROXY_STRING"
 			echo -e "\n<$HTTP_PROXY>"
 			if [ "$PROXY_NOAPT" -eq 0 ]; then
-				printf 'Acquire {\n  HTTP::proxy "%s";\n  HTTPS::proxy "%s";\n}\n' "$PROXY_STRING" "$PROXY_STRING" > /etc/apt/apt.conf.d/proxy
+				printf 'Acquire::http::proxy "%s";\nAcquire::https::proxy "%s";\nAcquire::ftp::proxy "%s";\n' "$PROXY_STRING" "$PROXY_STRING" "$PROXY_STRING" > /etc/apt/apt.conf.d/proxy_shelltools
 			fi
 			unset PROXY_STRING
 			PROXY_PW=""
@@ -400,8 +401,9 @@ wat(){
 
 disableProxy(){
 	unset {http,https,ftp,no}_proxy
+	unset {HTTP,HTTPS,FTP,NO}_PROXY
 	if [ "$PROXY_NOAPT" -eq 0 ]; then
-		echo "">/etc/apt/apt.conf.d/proxy
+		echo "">/etc/apt/apt.conf.d/proxy_shelltools
 	fi
 	echo "disabled proxy"
 }

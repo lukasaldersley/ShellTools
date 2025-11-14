@@ -133,13 +133,13 @@ unset ___apt_tempvar01___
 #when a package reaches 100% staged update it's rolled out globally until then based on machine ID and package name I may or may not get it yet
 
 #according to https://serverfault.com/questions/20747/find-last-time-update-was-performed-with-apt-get /var/lib/apt/lists/partial/ is the one I want to go with to check when the last update was
-#
-# shellcheck disable=SC2010 #reason for shellcheck disable is: this is one of the cases where ls's sorting (-t, sort by time) is important and that's fine according to shellcheck.net
-t2=$(stat -c %Y "/var/lib/apt/lists/$(ls -lt /var/lib/apt/lists --hide "lock" |grep "^-" -m1|awk '{print $NF}')")
-timestamp="$(stat -c %Y /var/lib/apt/lists/partial/)"
+# the find command gets me all FILES in /var/lib/apt/lists excluding any lock files, but only prints the modification time, sort|head then takes the newest one.
+# NOTE: the partials (as the check when the last fetch was) are intentionally not included in the result (through tpye f)
+timestampPublish=$(find /var/lib/apt/lists -maxdepth 1 -type f ! -name lock -printf '%Ts\n' | sort -nr | head -n1)
+timestampFetch="$(stat -c %Y /var/lib/apt/lists/partial/)"
 now=$(date +%s)
-diff=$((now-timestamp))
-d2=$((now-t2))
+diff=$((now-timestampFetch))
+d2=$((now-timestampPublish))
 
 if [ "$(tput cols)" -lt 140 ]; then
 	printf "\n"

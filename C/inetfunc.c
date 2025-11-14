@@ -27,10 +27,7 @@ static NetList* InitNetListElement() {
 	return a;
 }
 
-static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* ipv4, int metric, bool isDefault, int IPV4cidr, const char* linkspeed, const char* routedNet) {
-	if (head != NULL && head->dev.isDefault == false && isDefault == true) {
-		abortMessage("assumption on the order of routes incorrect (assume default routes are listed first)");
-	}
+static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const char* ipv4, int metric, bool isDefault, int IPV4cidr, const char* routedNet) {
 	if (head == NULL) {
 		//Create Initial Element (List didn't exist previously)
 		NetList* n = InitNetListElement();
@@ -47,10 +44,6 @@ static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
 		if (IPV4cidr != 0) n->dev.IPV4cidr = IPV4cidr;
-		if (linkspeed != NULL) {
-			if (n->dev.linkspeed != NULL) free(n->dev.linkspeed);
-			if (asprintf(&(n->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
-		}
 		if (routedNet != NULL) {
 			if (n->dev.routedNet != NULL) free(n->dev.routedNet);
 			if (asprintf(&(n->dev.routedNet), "%s", routedNet) == -1) ABORT_NO_MEMORY;
@@ -62,10 +55,6 @@ static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const
 		head->dev.metric = metric;
 		if (IPV4cidr != 0) head->dev.IPV4cidr = IPV4cidr;
 		head->dev.isDefault = head->dev.isDefault || isDefault;
-		if (linkspeed != NULL) {
-			if (head->dev.linkspeed != NULL) free(head->dev.linkspeed);
-			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
-		}
 		if (routedNet != NULL) {
 			if (head->dev.routedNet != NULL) free(head->dev.routedNet);
 			if (asprintf(&(head->dev.routedNet), "%s", routedNet) == -1) ABORT_NO_MEMORY;
@@ -93,10 +82,6 @@ static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
 		if (IPV4cidr != 0) n->dev.IPV4cidr = IPV4cidr;
-		if (linkspeed != NULL) {
-			if (n->dev.linkspeed != NULL) free(n->dev.linkspeed);
-			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
-		}
 		if (routedNet != NULL) {
 			if (n->dev.routedNet != NULL) free(n->dev.routedNet);
 			if (asprintf(&(n->dev.routedNet), "%s", routedNet) == -1) ABORT_NO_MEMORY;
@@ -121,10 +106,6 @@ static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const
 		n->dev.metric = metric;
 		n->dev.isDefault = isDefault;
 		if (IPV4cidr != 0) n->dev.IPV4cidr = IPV4cidr;
-		if (linkspeed != NULL) {
-			if (n->dev.linkspeed != NULL) free(n->dev.linkspeed);
-			if (asprintf(&(head->dev.linkspeed), "%s", linkspeed) == -1) ABORT_NO_MEMORY;
-		}
 		if (routedNet != NULL) {
 			if (n->dev.routedNet != NULL) free(n->dev.routedNet);
 			if (asprintf(&(n->dev.routedNet), "%s", routedNet) == -1) ABORT_NO_MEMORY;
@@ -134,7 +115,7 @@ static NetList* InsertIntoNetListSorted(NetList* head, const char* device, const
 	} else {
 		//The New Element is NOT Equal to myself and is NOT alphabetically before myself (as per the earlier checks)
 		//This time there IS another element after myself -> defer to it.
-		head->next = InsertIntoNetListSorted(head->next, device, ipv4, metric, isDefault, IPV4cidr, linkspeed, routedNet);
+		head->next = InsertIntoNetListSorted(head->next, device, ipv4, metric, isDefault, IPV4cidr, routedNet);
 		return head;
 	}
 }
@@ -173,9 +154,6 @@ typedef enum {
 
 static char* GetIfaceSpeed_int(const char* iface, LinkspeedMode BackupLevel) {
 	char* ret = NULL;
-	int size = 32;
-	char* result = (char*)malloc(sizeof(char) * size);
-	if (result == NULL) ABORT_NO_MEMORY;
 	char* command;
 	FILE* fp;
 	if (BackupLevel == NET_SPEED_MODE_SYSCLASS) {
@@ -190,8 +168,14 @@ static char* GetIfaceSpeed_int(const char* iface, LinkspeedMode BackupLevel) {
 		fp = popen(command, "r");
 	}
 	if (fp == NULL) {
-		fprintf(stderr, "failed running process/opening file %s\n", command);
+		if (BackupLevel != NET_SPEED_MODE_SYSCLASS) {
+			//don't warn if I can't open the file /sys/class/net/*/speed, it will fail on WSL, so don't try
+			fprintf(stderr, "failed running process/opening file %s\n", command);
+		}
 	} else {
+		int size = 32;
+		char* result = (char*)malloc(sizeof(char) * size);
+		if (result == NULL) ABORT_NO_MEMORY;
 		while (fgets(result, size - 1, fp) != NULL) {
 			if (BackupLevel == NET_SPEED_MODE_SYSCLASS) {
 				//all modes read as 1000M or something like that, sysclass reads as a blank number
@@ -206,6 +190,8 @@ static char* GetIfaceSpeed_int(const char* iface, LinkspeedMode BackupLevel) {
 				break;
 			}
 		}
+		free(result);
+		result = NULL;
 		if (BackupLevel == NET_SPEED_MODE_SYSCLASS) {
 			fclose(fp);
 		} else {
@@ -215,8 +201,6 @@ static char* GetIfaceSpeed_int(const char* iface, LinkspeedMode BackupLevel) {
 	}
 	free(command);
 	command = NULL;
-	free(result);
-	result = NULL;
 	return ret;
 }
 
@@ -249,24 +233,24 @@ IpTransportStruct GetBaseIPString() {
 		ret.RouteInfo[0] = 0x00;
 		return ret;
 	}
-	uint8_t RouteRegexGroupCount = 16;
+	uint8_t RouteRegexGroupCount = 17;
 	regmatch_t RouteRegexGroups[RouteRegexGroupCount];
 	regex_t RouteRegex;
-	const char* RouteRegexString = "^(((default) via ([0-9.]+))|(([0-9.]+)/([0-9]+))) dev ([^ ]+)( proto [^ ]+)?( scope link)?( src ([0-9.]+))?( metric ([0-9]+))?( linkdown)? *$";
+	const char* RouteRegexString = "^(none )?(((default) via ([0-9.]+))|(([0-9.]+)/([0-9]+))) dev ([^ ]+)( proto [^ ]+)?( scope link)?( src ([0-9.]+))?( metric ([0-9]+))?( linkdown)? *$";
 	//the following was the originally used regex. it doesn't work for some network configurations (such as linode/akamai VPS).
 	//const char* RouteRegexString="^(((default) via ([0-9.]+))|(([0-9.]+)/([0-9]+))).*?dev ([^ ]+).*?src ([0-9.]+)( metric ([0-9]+))?( linkdown)?.*$";
 	//root cause is problems with lazy matching, which C's regex engine can't do.
 	//I had copilot help in creating a "fixed" regex. the output was this:
 	//^((default[[:space:]]+via[[:space:]]+([0-9.]+))|(([0-9.]+)/([0-9]+)))[[:space:]]+dev[[:space:]]+([^[:space:]]+)(?:[[:space:]]+proto[[:space:]]+[^[:space:]]+)?(?:[[:space:]]+scope[[:space:]]+link)?(?:[[:space:]]+src[[:space:]]+([0-9.]+))?(?:[[:space:]]+metric[[:space:]]+([0-9]+))?(?:[[:space:]]+linkdown)?[[:space:]]*$
 	//I have then refined it into a much smaller and more easily readable version which is in use currently
-#define RouteIsDefaultIndex 3
-#define RouteNextHopIndex	4
-#define RouteRoutedNetIndex 6
-#define RouteCidrIndex		7
-#define RouteDeviceIndex	8
-#define RouteIpIndex		12
-#define RouteMetricIndex	14
-#define RouteLinkDownIndex	15
+#define RouteIsDefaultIndex 4
+#define RouteNextHopIndex	5
+#define RouteRoutedNetIndex 7
+#define RouteCidrIndex		8
+#define RouteDeviceIndex	9
+#define RouteIpIndex		13
+#define RouteMetricIndex	15
+#define RouteLinkDownIndex	16
 	int IpRegexReturnCode;
 	IpRegexReturnCode = regcomp(&RouteRegex, RouteRegexString, REG_EXTENDED | REG_NEWLINE);
 	if (IpRegexReturnCode) {
@@ -304,9 +288,21 @@ IpTransportStruct GetBaseIPString() {
 				uint32_t metric = UINT32_MAX;
 				bool isDefault = false;
 				int IPV4cidr = 0;
-				char* linkspeed = NULL;
 				char* routednet = NULL;
 				int len;
+				//if the routed net is multicast -> skip everything else, it'd just mess up the other data
+				len = RouteRegexGroups[RouteRoutedNetIndex].rm_eo - RouteRegexGroups[RouteRoutedNetIndex].rm_so;
+				if (len > 0) {
+					if (StartsWith(result + RouteRegexGroups[RouteRoutedNetIndex].rm_so, "224.0.0.0/4")) {
+						//224.0.0.0/4 is a multicast address which is intentionally not unique to any device
+						//These entries are only really an issue on WSL where they are just dumped at the bottom of the route list without any distinguishing marks -> discard them for my purposes
+						continue;
+					}
+					routednet = malloc(sizeof(char) * (len + 1));
+					if (routednet == NULL) ABORT_NO_MEMORY;
+					strncpy(routednet, result + RouteRegexGroups[RouteRoutedNetIndex].rm_so, len);
+					routednet[len] = 0x00;
+				}
 				len = RouteRegexGroups[RouteDeviceIndex].rm_eo - RouteRegexGroups[RouteDeviceIndex].rm_so;
 				if (len > 0) {
 					device = malloc(sizeof(char) * (len + 1));
@@ -316,8 +312,6 @@ IpTransportStruct GetBaseIPString() {
 				}
 				if (RouteRegexGroups[RouteIsDefaultIndex].rm_eo - RouteRegexGroups[RouteIsDefaultIndex].rm_so != 0) {
 					isDefault = true;
-				} else if (CONFIG_PROMPT_NET_LINKSPEED) {
-					linkspeed = GetIfaceSpeed(device);
 				}
 				len = RouteRegexGroups[RouteIpIndex].rm_eo - RouteRegexGroups[RouteIpIndex].rm_so;
 				if (len > 0) {
@@ -346,20 +340,12 @@ IpTransportStruct GetBaseIPString() {
 					free(temp);
 					temp = NULL;
 				}
-				len = RouteRegexGroups[RouteRoutedNetIndex].rm_eo - RouteRegexGroups[RouteRoutedNetIndex].rm_so;
-				if (len > 0) {
-					routednet = malloc(sizeof(char) * (len + 1));
-					if (routednet == NULL) ABORT_NO_MEMORY;
-					strncpy(routednet, result + RouteRegexGroups[RouteRoutedNetIndex].rm_so, len);
-					routednet[len] = 0x00;
-				}
-				head = InsertIntoNetListSorted(head, device, ipv4, metric, isDefault, IPV4cidr, linkspeed, routednet);
+				head = InsertIntoNetListSorted(head, device, ipv4, metric, isDefault, IPV4cidr, routednet);
 				if (device != NULL) free(device);
 				if (ipv4 != NULL) free(ipv4);
-				if (linkspeed != NULL) free(linkspeed);
 				if (routednet != NULL) free(routednet);
 			} else if (DIPFALSCHEISSER_WARNINGS) {
-				printf("ERROR: IP regex match returned %i -> IP info is likely incomplete\n", IpRegexReturnCode);
+				printf("ERROR: IP regex match for %s returned %i -> IP info is likely incomplete (or ist's WSL)\n", result, IpRegexReturnCode);
 				fflush(stdout);
 			}
 		}
@@ -375,14 +361,64 @@ IpTransportStruct GetBaseIPString() {
 	int numDefaultRoutes = 0;
 	int numNonDefaultRoutes = 0;
 	uint32_t lowestMetric = UINT32_MAX;
+	uint32_t highestMetric = 0;
 	while (current != NULL) {
+		if (current->dev.ipv4 == NULL) {
+			//device is still missing an IP after all routes are parsed -> probably will only happen on WSL
+			//attempt to get an IP directly
+			char* cmd;
+			if (asprintf(&cmd, "ip a s dev '%s' | tr '\n' ' ' | grep -v 'LOOPBACK' | grep -Eo '.*<.*UP.*>.*inet (addr:)?([0-9]*\\.){3}[0-9]*' | grep -Eo '([0-9]*\\.){3}[0-9]*'", current->dev.device) == -1) ABORT_NO_MEMORY;
+			current->dev.ipv4 = ExecuteProcess_alloc(cmd);
+			TerminateStrOn(current->dev.ipv4, DEFAULT_TERMINATORS);
+			//printf("Explicit fetch (basically WSL-only) %s: <%s>\n", current->dev.device, res);
+			if (current->dev.ipv4[0] == 0x00) {
+				free(current->dev.ipv4);
+				if (current->dev.device != NULL) {
+					free(current->dev.device);
+				}
+				if (current->dev.linkspeed != NULL) {
+					free(current->dev.linkspeed);
+				}
+				if (current->dev.routedNet != NULL) {
+					free(current->dev.routedNet);
+				}
+				//current device has no IP, even after explicit attempt -> discard it from the list
+				if (current->prev == NULL) {
+					//no previous -> update the HEAD reference
+					head = current->next;
+				} else {
+					(current->prev)->next = current->next;
+				}
+				if (current->next != NULL) {
+					//update the predecessor for the next element along, but only if there even is a next element
+					(current->next)->prev = current->prev;
+				}
+				NetList* oldcurrent = current;
+				current = current->next;
+				free(oldcurrent);
+				continue; //deleted an element -> skip processing for this element and start anew with the next
+			}
+			free(cmd);
+			//WSL -> look up the ip via something like ip a s dev %device
+			//only add the device if the tags do contain <*UP*> but do not contain <*LOOPBACK*>
+			//if still missing -> discard
+		}
 		if (current->dev.isDefault) {
 			numDefaultRoutes++;
+			if (numNonDefaultRoutes > 0) {
+				abortMessage("ERROR: assumption on the order of routes incorrect (assume default routes are listed first)");
+			}
 		} else {
 			numNonDefaultRoutes++;
 		}
 		if (current->dev.metric < lowestMetric) {
 			lowestMetric = current->dev.metric;
+		}
+		if (current->dev.metric > highestMetric) {
+			highestMetric = current->dev.metric;
+		}
+		if (CONFIG_PROMPT_NET_LINKSPEED) {
+			current->dev.linkspeed = GetIfaceSpeed(current->dev.device);
 		}
 		//fprintf(stderr, "%s:%s/%i@%i %i for %s\n", current->dev.device, current->dev.ipv4, current->dev.IPV4cidr, current->dev.metric, current->dev.isDefault, current->dev.routedNet);
 		current = current->next;
@@ -405,20 +441,21 @@ IpTransportStruct GetBaseIPString() {
 
 	current = head;
 	if (CONFIG_PROMPT_NET_IFACE && numDefaultRoutes == 0) {
-		baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), " \e[4mNC\e[0m");
+		baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[4mNC\e[0m ");
 	}
 	for (int i = 0; i < numDefaultRoutes; i++) {
 		if (CONFIG_PROMPT_NET_IFACE) {
-			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), " %s%s\e[0m:%s", (current->dev.metric == lowestMetric && numDefaultRoutes > 1 ? "\e[4m" : ""), current->dev.device, current->dev.ipv4);
+			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "%s%s\e[0m:%s", (current->dev.metric == lowestMetric && numDefaultRoutes > 1 ? "\e[4m" : ""), current->dev.device, current->dev.ipv4);
 			if (current->dev.IPV4cidr > 0) {
 				baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;244m/%i\e[0m", current->dev.IPV4cidr);
 			}
-			if (numDefaultRoutes > 1) {
+			if (numDefaultRoutes > 1 && lowestMetric != highestMetric) {
 				baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;240m\e[2m\e[3m~%u\e[0m", current->dev.metric);
 			}
 			if (current->dev.linkspeed != NULL) {
 				baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), "\e[38;5;238m\e[2m@%s\e[0m", current->dev.linkspeed);
 			}
+			baseIPlenUsed += snprintf(ret.BasicIPInfo + baseIPlenUsed, basicIPStringLen - (baseIPlenUsed + 1), " ");
 		}
 		current = current->next;
 	}
@@ -426,17 +463,18 @@ IpTransportStruct GetBaseIPString() {
 	//I intentionally didn't reset current
 	if (numNonDefaultRoutes > 0 && CONFIG_PROMPT_NET_ADDITIONAL) {
 		for (int i = 0; i < numNonDefaultRoutes; i++) {
-			nondefaultLenUsed += snprintf(ret.AdditionalIPInfo + nondefaultLenUsed, nondefaultIpStringLen - (nondefaultLenUsed + 1), " \e[38;5;244m\e[3m%s:%s\e[0m", current->dev.device, current->dev.ipv4);
+			nondefaultLenUsed += snprintf(ret.AdditionalIPInfo + nondefaultLenUsed, nondefaultIpStringLen - (nondefaultLenUsed + 1), "\e[38;5;244m\e[3m%s:%s\e[0m", current->dev.device, current->dev.ipv4);
 			if (current->dev.IPV4cidr > 0) {
 				nondefaultLenUsed += snprintf(ret.AdditionalIPInfo + nondefaultLenUsed, nondefaultIpStringLen - (nondefaultLenUsed + 1), "\e[38;5;240m\e[2m\e[3m/%i\e[0m", current->dev.IPV4cidr);
 			}
+			baseIPlenUsed += snprintf(ret.AdditionalIPInfo + nondefaultLenUsed, nondefaultIpStringLen - (nondefaultLenUsed + 1), " ");
 			current = current->next;
 		}
 	}
 
 	if (numNonDefaultRoutes > 0 && CONFIG_PROMPT_NET_ROUTE) {
 		current = head;
-		routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), " \e[38;5;244m\e[2m*->");
+		routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), "\e[38;5;244m\e[2m*->");
 		if (numDefaultRoutes > 1) {
 			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), "{");
 		}
@@ -450,9 +488,9 @@ IpTransportStruct GetBaseIPString() {
 			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), "}");
 		}
 		if (numNonDefaultRoutes > 1) {
-			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), "  %i additional routes\e[0m", numNonDefaultRoutes);
+			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), "  %i additional routes\e[0m ", numNonDefaultRoutes);
 		} else {
-			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), " %s/%i->%s\e[0m", current->dev.routedNet, current->dev.IPV4cidr, current->dev.device);
+			routeinfoLenUsed += snprintf(ret.RouteInfo + routeinfoLenUsed, rounteinfoLen - (routeinfoLenUsed + 1), " %s/%i->%s\e[0m ", current->dev.routedNet, current->dev.IPV4cidr, current->dev.device);
 		}
 	}
 	assert(baseIPlenUsed < basicIPStringLen);
