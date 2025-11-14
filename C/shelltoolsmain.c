@@ -175,7 +175,7 @@ static uint8_t ParsePowerSupplyEntry(const char* directory, const char* dir, Pow
 				} else if (Compare(buf, "Unknown")) {
 					state = UNKNOWN;
 				} else {
-					printf("unknown status '%s' for %s/%s. Please report to ShellTools delevoper\n", buf, directory, dir);
+					printf("unknown status '%s' for %s/%s. Please report to ShellTools developer\n", buf, directory, dir);
 				}
 			}
 			fclose(fp);
@@ -875,7 +875,7 @@ int main(int argc, char** argv) {
 				Arg_BackgroundJobs_len--;
 
 				if (!CONFIG_PROMPT_JOB_DETAILS) {
-					//if details are not desired, blank them out, but do keep the space resevation transfer (still needed for prompt spacing)
+					//if details are not desired, blank them out, but do keep the space reservation transfer (still needed for prompt spacing)
 					Arg_BackgroundJobs[0] = 0x00;
 					Arg_BackgroundJobs_len = 0;
 				}
@@ -1094,7 +1094,7 @@ int main(int argc, char** argv) {
 #define AdditionalElementPriorityTerminalDevice		 5
 #define AdditionalElementPriorityParentRepoLocation	 6
 #define AdditionalElementPriorityBackgroundJobDetail 7
-#define AdditinoalElementPriorityNonDefaultNetworks	 8
+#define AdditionalElementPriorityNonDefaultNetworks	 8
 #define AdditionalElementPriorityRoutingInfo		 9
 #define AdditionalElementPrioritySSHInfo			 10
 
@@ -1201,7 +1201,7 @@ int main(int argc, char** argv) {
 				}
 
 				//Arg_LocalIPsRoutes and Arg_LocalIPsAdditional can AND WILL be NULL if the old IP-system is used (for example on WSL)
-				if ((AdditionalElementAvailabilityPackedBool & (1 << AdditinoalElementPriorityNonDefaultNetworks))) {
+				if ((AdditionalElementAvailabilityPackedBool & (1 << AdditionalElementPriorityNonDefaultNetworks))) {
 					printf("%s", Arg_LocalIPsAdditional);
 				}
 

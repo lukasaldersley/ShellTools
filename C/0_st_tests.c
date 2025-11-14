@@ -91,7 +91,7 @@ fi
 
 //Assumption prior to calling this following variables exist in the local scope:
 //bool TestsPass = true; int TestNo = 0; StrlenStruct s;
-#define TestStrlenWithExpectation(expectedReturnCode, expectedHeight, expectedLength, function, arguments...) TestNo++; s = (StrlenStruct) {.len = 0, .height = 0}; if (!(function(&s, arguments) == (expectedReturnCode) && expectedHeight == s.height && expectedLength == s.len)) { TestPass = false; /*NOTE: I have doubled up the #function parameter, since cppckec completely looses it's little mind with positional arguments*/printf("\nTest of %s Number %i (%s:%i) [%s(&s, %s) == "#expectedReturnCode"] with additional constraint expect{%i, %i} == have{%i, %i} failed", #function, TestNo, __FILE__, __LINE__, #function, #arguments, expectedLength, expectedHeight, s.len, s.height); };
+#define TestStrlenWithExpectation(expectedReturnCode, expectedHeight, expectedLength, function, arguments...) TestNo++; s = (StrlenStruct) {.len = 0, .height = 0}; if (!(function(&s, arguments) == (expectedReturnCode) && expectedHeight == s.height && expectedLength == s.len)) { TestPass = false; /*NOTE: I have doubled up the #function parameter, since cppcheck completely looses it's little mind with positional arguments*/printf("\nTest of %s Number %i (%s:%i) [%s(&s, %s) == "#expectedReturnCode"] with additional constraint expect{%i, %i} == have{%i, %i} failed", #function, TestNo, __FILE__, __LINE__, #function, #arguments, expectedLength, expectedHeight, s.len, s.height); };
 
 #ifdef MANUAL
 static void TestManual() {

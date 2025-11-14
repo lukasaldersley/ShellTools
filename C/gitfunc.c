@@ -94,7 +94,7 @@ static bool IsMerged(const char* repopath, const char* commithash) {
 			//printf("%s is%s a merge commit\n", result, imc ? "" : " NOT");
 			RES = RES || imc;
 			if (RES) {
-				//if I have aleady found a merge commit why, the fuck would I continue to check everything else?
+				//if I have already found a merge commit why, the fuck would I continue to check everything else?
 				break;
 			}
 		}
@@ -235,7 +235,7 @@ static BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char
 		}
 		return head;
 	} else if (CompareStringsCaseInsensitive(head->branchinfo.BranchName, branchname) == ALPHA_AFTER) {
-		//The new Element is Alphabetically befory myself -> insert new element before myself
+		//The new Element is Alphabetically before myself -> insert new element before myself
 		BranchListSorted* n = InitBranchListSortedElement();
 		n->next = head;
 		n->prev = head->prev;
@@ -263,7 +263,7 @@ static BranchListSorted* InsertIntoBranchListSorted(BranchListSorted* head, char
 		}
 		return head;
 	} else {
-		//The New Element is NOT Equal to myslef and is NOT alphabetically before myself (as per the earlier checks)
+		//The New Element is NOT Equal to myself and is NOT alphabetically before myself (as per the earlier checks)
 		//This time there IS another element after myself -> defer to it.
 		head->next = InsertIntoBranchListSorted(head->next, branchname, hash, remote);
 		return head;
@@ -420,7 +420,7 @@ char* ConstructGitBranchInfoString(const RepoInfo* ri) {
 	char* rb = (char*)malloc(sizeof(char) * MALEN);
 	if (rb == NULL) ABORT_NO_MEMORY;
 	rb[0] = 0x00;
-	if (ri->HasRemote) { //if the repo doesn't have a remote, it doesn't make sense to count the branch differences betwen remote and local since ther is no remote
+	if (ri->HasRemote) { //if the repo doesn't have a remote, it doesn't make sense to count the branch differences between remote and local since ther is no remote
 		if (ri->CountRemoteOnlyBranches > 0 || ri->CountLocalOnlyBranches > 0 || ri->CountUnequalBranches > 0) {
 			int temp = snprintf(rb + rbLen, MALEN - rbLen, " ⟨");
 			if (temp < MALEN && temp > 0) {
@@ -489,7 +489,7 @@ char* ConstructCommitStatusString(const RepoInfo* ri) {
 
 		//////{
 		//////	int numCommitsOnBranch = 0;
-		//////	bool CheckFurter = false;
+		//////	bool CheckFurther = false;
 		//////	char current[64] = "HEAD";
 		//////	do {
 		//////		numCommitsOnBranch++;
@@ -526,9 +526,9 @@ char* ConstructCommitStatusString(const RepoInfo* ri) {
 		//////		pclose(fp);
 		//////		free(cmd);
 		//////		if (parentcount != 1) {
-		//////			CheckFurter = false;
+		//////			CheckFurther = false;
 		//////		}
-		//////	} while (CheckFurter);
+		//////	} while (CheckFurther);
 		//////	printf("%s/%s has %i new commits\n", ri->RepositoryName, ri->branch, numCommitsOnBranch);
 		//////}
 		temp = snprintf(rb + rbLen, GIT_SEG_5_MAX_LEN - rbLen, " {" COLOUR_GIT_COMMITS "NEW BRANCH" COLOUR_CLEAR "}");
@@ -744,7 +744,7 @@ static bool CheckBranching(RepoInfo* ri) {
 	} else {
 		int branchcount = 0;
 		while (fgets(result, size - 1, fp) != NULL) {
-			//iterating over list of branches (remote and local seperatly)
+			//iterating over list of branches (remote and local separately)
 			TerminateStrOn(result, DEFAULT_TERMINATORS);
 			branchcount++;
 			if (CONFIG_GIT_MAXBRANCHES != -1 && branchcount > CONFIG_GIT_MAXBRANCHES) {
@@ -1046,7 +1046,7 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 			//10->Non-Capturing(.git)
 			//DO NOT CHANGE THIS REGEX WITHOUT UPDATING THE Regex101 VARIANT, THE GROUP DEFINITIONS AND THE DESCRIPTION
 			if (asprintf(&sedCmd, "echo \"%s\" | sed -nE 's~^([-a-zA-Z0-9_]+)://(([-a-zA-Z0-9_]+)@){0,1}([-0-9a-zA-Z_\\.]+)(:([0-9]+)){0,1}([:/]([-0-9a-zA-Z_]+)){0,1}.*/([-0-9a-zA-Z_]+)(\\.git/{0,1}){0,1}$~\\1|\\3|\\4|\\6|\\8|\\9~p'", FixedProtoOrigin) == -1) ABORT_NO_MEMORY;
-			//I take the capturing groups and paste them into a | seperated sting. There's 6 words (5 |), so I'll need 6 pointers into this memory area to resolve the six words
+			//I take the capturing groups and paste them into a | separated sting. There's 6 words (5 |), so I'll need 6 pointers into this memory area to resolve the six words
 			const int REPO_ORIGIN_WORDS_IN_STRING = 6;
 			const int REPO_ORIGIN_GROUP_PROTOCOL = 0;
 			const int REPO_ORIGIN_GROUP_USER = 1;
@@ -1087,9 +1087,9 @@ bool TestPathForRepoAndParseIfExists(RepoInfo* ri, int desiredorigin, bool DoPro
 				int NextWordPointer = 0;
 				while (*workingPointer != 0x00 && NextWordPointer < (REPO_ORIGIN_WORDS_IN_STRING - 1)) { //since I set NextWordPointer+1^I need to stop at WORDS-2=== 'x < (Words-1)'
 					if (*workingPointer == '|') {
-						//I found a seperator -> set string terminator for current string
+						//I found a separator -> set string terminator for current string
 						*workingPointer = 0x00;
-						//if there's anything after the seperator, set the start point for the next string
+						//if there's anything after the separator, set the start point for the next string
 						if (*(workingPointer + 1) != 0x00) {
 							NextWordPointer++;
 							ptrs[NextWordPointer] = (workingPointer + 1);

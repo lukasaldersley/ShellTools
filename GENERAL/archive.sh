@@ -66,7 +66,7 @@ if ! [ $p -ne $u ] && { [ $p -ne 0 ] || [ $u -ne 0 ]; }; then
 	exit 1
 fi
 
-#count of arguments must be exactly one after the switched are removed
+#count of arguments must be exactly one after the switches are removed
 if [ $# -ne 1 ]; then
 	echo "A single input file or folder is required."
 	exit 2
@@ -75,7 +75,7 @@ fi
 #input file may not be in a different directory
 #I am aware modern shells have here-strings which would eliminate the echo and pipe, but I want to keep this as broadly compatible as possible, hence I am limiting myself to sh as far as possible
 if [ "$(echo "$1" | grep -c '/')" -ne 0 ]; then
-	printf "error: for clarity on what's about to happen, you may not provide files/folders not in your current working directory\nbasically the input (%s) may not contain the character /\n" "$1"
+	printf "ERROR: you may not provide files/folders not in your current working directory\nThis check is done as a precautionary measure to limit the consequences of accidental misuse\nbasically the input (%s) may not contain the character /\n" "$1" >&2
 	exit 2
 fi
 

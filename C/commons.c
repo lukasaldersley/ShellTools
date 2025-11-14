@@ -72,7 +72,7 @@ static StringRelations CompareStringsInternal(const char* a, const char* b, Stri
 				ca = ToLowerCase(a[idx]);
 				cb = ToLowerCase(b[idx]);
 #ifndef DISABLE_EXPECTED_WARNING_FOR_INTERNAL_TESTS
-				fprintf(stderr, "CompareModeLexicographical is NOT implementd, falling back to CompareModeCaseInsensitive\n");
+				fprintf(stderr, "CompareModeLexicographical is NOT implemented, falling back to CompareModeCaseInsensitive\n");
 				//Note: the header for CompareStringsLexicographical is commented out since it's not really implemented
 #endif
 			} break;
@@ -167,7 +167,7 @@ bool ContainsString(const char* str, const char* test) {
 	while (str[sIdx] != 0x00) {
 		uint32_t tIdx = 0;
 		while (test[tIdx] != 0x00 && test[tIdx] == str[sIdx + tIdx]) {
-			//TODO optimize this to be a faster text search instead of a dumb exhaustive searhc, if possible skip sIdx forward at the same time as tIdx
+			//TODO optimize this to be a faster text search instead of a dumb exhaustive search, if possible skip sIdx forward at the same time as tIdx
 			tIdx++;
 		}
 		if (test[tIdx] == 0x00) {
@@ -538,7 +538,7 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 	if (Workpath == NULL) ABORT_NO_MEMORY;
 	Workpath[len] = 0x00;
 	if (path == NULL) {
-		//in all other paths workpath is just an internal variable that is free'd before the function exits since it's contents are asprintf'd into ret, here I just push the pointer over and never alocate a second memory region
+		//in all other paths workpath is just an internal variable that is free'd before the function exits since it's contents are asprintf'd into ret, here I just push the pointer over and never allocate a second memory region
 		*ret = Workpath;
 		return 1;
 	}
@@ -556,7 +556,7 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 		}
 	}
 	Workpath[newLen] = 0x00;
-	//if the text ends with / but that same /isnt't the first and only char, remove the trailing /
+	//if the text ends with / but that same /isn't the first and only char, remove the trailing /
 	if (newLen > 1 && Workpath[newLen - 1] == '/') {
 		Workpath[newLen - 1] = 0x00;
 		newLen--;
@@ -575,7 +575,7 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 				(*ret)[i] = '!';
 			}
 		} else {
-			//the entire text doesn't fit in the specified size (checked earlier) and there is at least enought space for the truncation marker
+			//the entire text doesn't fit in the specified size (checked earlier) and there is at least enough space for the truncation marker
 			//print the truncation marker and as many chars from the end of the string as will fit
 			(*ret)[0] = '[';
 			(*ret)[1] = '.';
@@ -621,7 +621,7 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 		if ((uint32_t)FromBack - (uint32_t)FromFront <= 6) {
 #endif
 			//the text would become longer by inserting the ..., so just keep the original text
-			//this would happen with something like AbbreviatePath(/mnt/c/WS/CODE/BAT_VBS,20,3) where WS would be abbreiviated, but the abreviation ... is longer than the original name -> it doesn't make sense
+			//this would happen with something like AbbreviatePath(/mnt/c/WS/CODE/BAT_VBS,20,3) where WS would be abbreviated, but the abbreviation ... is longer than the original name -> it doesn't make sense
 			if (asprintf(ret, "%s", Workpath) == -1) ABORT_NO_MEMORY;
 		}
 #ifdef PATH_ABBREV_TREAT_SINGLE_ELEMENT_AS_RELATIVE_PATH
@@ -634,7 +634,7 @@ int AbbreviatePath(char** ret, const char* path, uint16_t KeepAllIfShorterThan, 
 #else
 		else if (frontLen == 0 && DesiredKeepElementsFront > 0) {
 #endif
-			//if the front segment doesn't exist, only print the back segment WITHOUT clobbering a seperator in front
+			//if the front segment doesn't exist, only print the back segment WITHOUT clobbering a separator in front
 			if (asprintf(ret, "%s", FromBack + 1) == -1) ABORT_NO_MEMORY;
 		} else {
 			//truncate the work text to only contain the front segment
@@ -673,7 +673,7 @@ uint32_t determinePossibleCombinations(int* availableLength, int NumElements, ..
 	va_list ELEMENTS;
 	va_start(ELEMENTS, NumElements); //start variadic function param handling, NumElements is the Identifier of the LAST NON-VARIADIC parameter passed to this function
 	for (int i = 0; i < NumElements; i++) {
-		//va_arg returns the next of the variadic emlements, assuming it's type is compatible with the provided one (here int)
+		//va_arg returns the next of the variadic elements, assuming it's type is compatible with the provided one (here int)
 		//if it's not compatible, it's undefined behaviour
 		int nextElem = va_arg(ELEMENTS, int);
 		//if the next element fits, select it and reduce the available space

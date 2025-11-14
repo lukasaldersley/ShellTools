@@ -81,7 +81,7 @@ static int assemble(char* targetBuffer, int targetBufferLength, int alreadyFixed
 			   startOffset + testIndexOffset < targetBufferLength &&
 			   testIndexOffset < newSegmentBufferLength &&
 			   checkEquality(*(targetBuffer + startOffset + testIndexOffset), *(newSegmentBuffer + testIndexOffset), caseIndependant, equalityLists, numEqualityLists)) {
-			//while I havn't overrun any array- or sense-boundaries, advance the test index as long as the two strings still match
+			//while I haven't overrun any array- or sense-boundaries, advance the test index as long as the two strings still match
 			testIndexOffset++;
 		}
 		//the new string is contained in the already present text, just not at the end, advance the base offset and try again
